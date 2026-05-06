@@ -145,13 +145,25 @@ Then point Claude Desktop at the built file:
 
 ## Read-only mode
 
-Set `CAPSULE_MCP_READONLY=1` (or `true`/`yes`) to disable every write, update, and delete tool. The server will only register the read tools (`search_*`, `get_*`, `list_*`). Any attempt to mutate via the underlying client also throws `CapsuleReadOnlyError` as a defence-in-depth backstop.
+You have two ways to lock this MCP server to reads only. They are complementary — pick whichever fits your situation, or use both.
 
-Useful when:
+### Option A: Generate a read-only Capsule token (recommended)
 
-- You want to give Claude access to your CRM data without any risk of mutation
-- You're letting a less-trusted person/agent connect to your tenant
-- You're exploring or experimenting and don't want to nudge real records
+When generating a Personal Access Token in Capsule (**My Preferences → API Authentication Tokens**), Capsule lets you choose the token's scope. Pick the **Read** scope and the token cannot mutate anything, no matter what tool tries to use it. Capsule rejects writes server-side with a 403.
+
+This is the strongest guarantee: even if a bug, a custom script, or a different MCP client uses the same token, it still can't write.
+
+Use this when you want a hard ceiling on what the token itself can do.
+
+### Option B: `CAPSULE_MCP_READONLY` env var
+
+Set `CAPSULE_MCP_READONLY=1` (or `true`/`yes`) to disable every write, update, and delete tool *in this MCP server* without changing the token. The server registers only the read tools (`search_*`, `get_*`, `list_*`). The underlying client also refuses non-GET HTTP as a defence-in-depth backstop.
+
+Use this when:
+
+- You already have a read-write token in use elsewhere and don't want to generate a second one
+- You want the LLM to never see write tools in its tool list (avoids confused attempts)
+- You want to flip the same install between modes by editing one config field
 
 Add it to the `env` block of your Claude Desktop config:
 
@@ -171,6 +183,10 @@ Add it to the `env` block of your Claude Desktop config:
 ```
 
 When read-only mode is active, the server prints `[capsule-mcp] read-only mode: write/delete tools are not registered` to stderr on startup.
+
+### Both at once?
+
+Yes — they stack. A read-scoped token + `CAPSULE_MCP_READONLY=1` gives you the cleanest tool list (no write tools registered) AND a server-side guarantee. Belt and braces.
 
 ## Delete safety
 
