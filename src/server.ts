@@ -35,7 +35,14 @@ import {
   deleteTaskSchema, deleteTask,
 } from "./tools/tasks.js";
 
-import { addNoteSchema, addNote, deleteEntrySchema, deleteEntry } from "./tools/entries.js";
+import {
+  listPartyEntriesSchema, listPartyEntries,
+  listOpportunityEntriesSchema, listOpportunityEntries,
+  listProjectEntriesSchema, listProjectEntries,
+  getEntrySchema, getEntry,
+  addNoteSchema, addNote,
+  deleteEntrySchema, deleteEntry,
+} from "./tools/entries.js";
 import { listPipelinesSchema, listPipelines, listMilestonesSchema, listMilestones } from "./tools/pipelines.js";
 import { listTagsSchema, listTags } from "./tools/tags.js";
 import { listUsersSchema, listUsers } from "./tools/users.js";
@@ -293,7 +300,47 @@ export function createCapsuleMcpServer(): McpServer {
     );
   }
 
-  // ── Entries ───────────────────────────────────────────────────────────────
+  // ── Entries (notes, captured emails, completed-task records) ──────────────
+
+  server.tool(
+    "list_party_entries",
+    "List timeline entries (notes, captured emails, completed-task records) for a party. Use this to read the conversation history with a contact or organisation.",
+    listPartyEntriesSchema.shape,
+    async (input) => {
+      const result = await listPartyEntries(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    "list_opportunity_entries",
+    "List timeline entries (notes, captured emails, completed-task records) for an opportunity.",
+    listOpportunityEntriesSchema.shape,
+    async (input) => {
+      const result = await listOpportunityEntries(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    "list_project_entries",
+    "List timeline entries (notes, captured emails, completed-task records) for a project (case).",
+    listProjectEntriesSchema.shape,
+    async (input) => {
+      const result = await listProjectEntries(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    "get_entry",
+    "Fetch a single timeline entry by its numeric ID. Returns full content (note body, email subject + body, etc.).",
+    getEntrySchema.shape,
+    async (input) => {
+      const result = await getEntry(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
 
   if (!readOnly) {
     server.tool(

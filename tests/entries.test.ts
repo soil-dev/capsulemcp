@@ -16,6 +16,57 @@ function mockFetch(status: number, body: unknown) {
 beforeEach(() => { process.env["CAPSULE_API_TOKEN"] = "test-token"; });
 afterEach(() => { vi.clearAllMocks(); delete process.env["CAPSULE_API_TOKEN"]; });
 
+describe("listPartyEntries", () => {
+  it("hits /parties/:id/entries with pagination params", async () => {
+    mockFetch(200, { entries: [{ id: 1, type: "note" }, { id: 2, type: "email" }] });
+
+    const { listPartyEntries } = await import("../src/tools/entries.js");
+    const result = await listPartyEntries({ partyId: 7, page: 1, perPage: 25 });
+
+    const [url] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toContain("/parties/7/entries");
+    expect(url).toContain("perPage=25");
+    expect(result.entries).toHaveLength(2);
+  });
+});
+
+describe("listOpportunityEntries", () => {
+  it("hits /opportunities/:id/entries", async () => {
+    mockFetch(200, { entries: [] });
+
+    const { listOpportunityEntries } = await import("../src/tools/entries.js");
+    await listOpportunityEntries({ opportunityId: 11, page: 1, perPage: 25 });
+
+    const [url] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toContain("/opportunities/11/entries");
+  });
+});
+
+describe("listProjectEntries", () => {
+  it("hits /kases/:id/entries", async () => {
+    mockFetch(200, { entries: [] });
+
+    const { listProjectEntries } = await import("../src/tools/entries.js");
+    await listProjectEntries({ projectId: 22, page: 1, perPage: 25 });
+
+    const [url] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toContain("/kases/22/entries");
+  });
+});
+
+describe("getEntry", () => {
+  it("hits /entries/:id and returns the entry", async () => {
+    mockFetch(200, { entry: { id: 99, type: "email", subject: "Re: deal", content: "body..." } });
+
+    const { getEntry } = await import("../src/tools/entries.js");
+    const result = await getEntry({ id: 99 });
+
+    const [url] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toContain("/entries/99");
+    expect((result as { entry: { subject: string } }).entry.subject).toBe("Re: deal");
+  });
+});
+
 describe("addNote", () => {
   it("posts a note linked to a party", async () => {
     mockFetch(201, { entry: { id: 1, type: "note", content: "Spoke to client" } });

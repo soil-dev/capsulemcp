@@ -127,6 +127,10 @@ Want to deploy this once and have your whole organisation use it from a shared C
 
 | Tool | Description |
 |---|---|
+| `list_party_entries` | List timeline entries (notes, captured emails, completed tasks) for a party |
+| `list_opportunity_entries` | Same, for an opportunity |
+| `list_project_entries` | Same, for a project |
+| `get_entry` | Fetch a single entry by ID (full note body / email subject + body) |
 | `add_note` | Add a note to a party, opportunity, or project |
 | `delete_entry` | **Destructive.** Permanently delete a note (or other entry). Requires `confirm: true` |
 

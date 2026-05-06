@@ -1,5 +1,73 @@
 import { z } from "zod";
-import { capsuleDelete, capsulePost } from "../capsule/client.js";
+import { capsuleDelete, capsuleGet, capsulePost } from "../capsule/client.js";
+
+// ── Read ────────────────────────────────────────────────────────────────────
+
+const listEntriesPagination = {
+  page: z.number().int().positive().optional().default(1),
+  perPage: z.number().int().min(1).max(100).optional().default(25),
+  embed: z
+    .string()
+    .optional()
+    .describe("Comma-separated embeds, e.g. 'attachments,participants'"),
+};
+
+export const listPartyEntriesSchema = z.object({
+  partyId: z.number().int().positive(),
+  ...listEntriesPagination,
+});
+
+export async function listPartyEntries(input: z.infer<typeof listPartyEntriesSchema>) {
+  const { data, nextPage } = await capsuleGet<{ entries: unknown[] }>(
+    `/parties/${input.partyId}/entries`,
+    { embed: input.embed, page: input.page, perPage: input.perPage },
+  );
+  return { ...data, nextPage };
+}
+
+export const listOpportunityEntriesSchema = z.object({
+  opportunityId: z.number().int().positive(),
+  ...listEntriesPagination,
+});
+
+export async function listOpportunityEntries(
+  input: z.infer<typeof listOpportunityEntriesSchema>,
+) {
+  const { data, nextPage } = await capsuleGet<{ entries: unknown[] }>(
+    `/opportunities/${input.opportunityId}/entries`,
+    { embed: input.embed, page: input.page, perPage: input.perPage },
+  );
+  return { ...data, nextPage };
+}
+
+export const listProjectEntriesSchema = z.object({
+  projectId: z.number().int().positive(),
+  ...listEntriesPagination,
+});
+
+export async function listProjectEntries(
+  input: z.infer<typeof listProjectEntriesSchema>,
+) {
+  const { data, nextPage } = await capsuleGet<{ entries: unknown[] }>(
+    `/kases/${input.projectId}/entries`,
+    { embed: input.embed, page: input.page, perPage: input.perPage },
+  );
+  return { ...data, nextPage };
+}
+
+export const getEntrySchema = z.object({
+  id: z.number().int().positive(),
+  embed: z.string().optional().describe("Comma-separated embeds, e.g. 'attachments,participants'"),
+});
+
+export async function getEntry(input: z.infer<typeof getEntrySchema>) {
+  const { data } = await capsuleGet<{ entry: unknown }>(`/entries/${input.id}`, {
+    embed: input.embed,
+  });
+  return data;
+}
+
+// ── Write ───────────────────────────────────────────────────────────────────
 
 // MCP SDK needs a plain ZodObject shape; enforce the exactly-one constraint in the handler.
 export const addNoteSchema = z.object({
