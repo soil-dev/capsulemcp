@@ -8,6 +8,7 @@ import {
   listPartyProjectsSchema, listPartyProjects,
   createPartySchema, createParty,
   updatePartySchema, updateParty,
+  deletePartySchema, deleteParty,
 } from "./tools/parties.js";
 
 import {
@@ -15,6 +16,7 @@ import {
   getOpportunitySchema, getOpportunity,
   createOpportunitySchema, createOpportunity,
   updateOpportunitySchema, updateOpportunity,
+  deleteOpportunitySchema, deleteOpportunity,
 } from "./tools/opportunities.js";
 
 import {
@@ -22,6 +24,7 @@ import {
   getProjectSchema, getProject,
   createProjectSchema, createProject,
   updateProjectSchema, updateProject,
+  deleteProjectSchema, deleteProject,
 } from "./tools/projects.js";
 
 import {
@@ -29,9 +32,10 @@ import {
   createTaskSchema, createTask,
   updateTaskSchema, updateTask,
   completeTaskSchema, completeTask,
+  deleteTaskSchema, deleteTask,
 } from "./tools/tasks.js";
 
-import { addNoteSchema, addNote } from "./tools/entries.js";
+import { addNoteSchema, addNote, deleteEntrySchema, deleteEntry } from "./tools/entries.js";
 import { listPipelinesSchema, listPipelines, listMilestonesSchema, listMilestones } from "./tools/pipelines.js";
 import { listTagsSchema, listTags } from "./tools/tags.js";
 import { listUsersSchema, listUsers } from "./tools/users.js";
@@ -103,6 +107,16 @@ server.tool(
   },
 );
 
+server.tool(
+  "delete_party",
+  "DESTRUCTIVE & IRREVERSIBLE: permanently delete a party (person or organisation). This also removes all linked notes, tasks, and opportunities. Requires confirm=true. Always read the party first with get_party and confirm with the user before calling.",
+  deletePartySchema.shape,
+  async (input) => {
+    const result = await deleteParty(input);
+    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+  },
+);
+
 // ── Opportunities ───────────────────────────────────────────────────────────
 
 server.tool(
@@ -141,6 +155,16 @@ server.tool(
   updateOpportunitySchema.shape,
   async (input) => {
     const result = await updateOpportunity(input);
+    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+  },
+);
+
+server.tool(
+  "delete_opportunity",
+  "DESTRUCTIVE & IRREVERSIBLE: permanently delete an opportunity. Requires confirm=true. Always read the opportunity first with get_opportunity and confirm with the user before calling.",
+  deleteOpportunitySchema.shape,
+  async (input) => {
+    const result = await deleteOpportunity(input);
     return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
   },
 );
@@ -187,6 +211,16 @@ server.tool(
   },
 );
 
+server.tool(
+  "delete_project",
+  "DESTRUCTIVE & IRREVERSIBLE: permanently delete a project (case). Prefer update_project with status='CLOSED' to close a project while preserving history. Requires confirm=true. Always read the project first with get_project and confirm with the user before calling.",
+  deleteProjectSchema.shape,
+  async (input) => {
+    const result = await deleteProject(input);
+    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+  },
+);
+
 // ── Tasks ────────────────────────────────────────────────────────────────────
 
 server.tool(
@@ -229,6 +263,16 @@ server.tool(
   },
 );
 
+server.tool(
+  "delete_task",
+  "DESTRUCTIVE & IRREVERSIBLE: permanently delete a task. Prefer complete_task to mark a task done while keeping it in history. Requires confirm=true.",
+  deleteTaskSchema.shape,
+  async (input) => {
+    const result = await deleteTask(input);
+    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+  },
+);
+
 // ── Entries ──────────────────────────────────────────────────────────────────
 
 server.tool(
@@ -237,6 +281,16 @@ server.tool(
   addNoteSchema.shape,
   async (input) => {
     const result = await addNote(input);
+    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+  },
+);
+
+server.tool(
+  "delete_entry",
+  "DESTRUCTIVE & IRREVERSIBLE: permanently delete a note (or other entry) by its ID. Requires confirm=true.",
+  deleteEntrySchema.shape,
+  async (input) => {
+    const result = await deleteEntry(input);
     return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
   },
 );
