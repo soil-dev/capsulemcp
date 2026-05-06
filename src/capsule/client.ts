@@ -75,10 +75,33 @@ function parseRetryAfter(value: string | null): number {
   return DEFAULT_MS;
 }
 
+interface CapsuleErrorBody {
+  message?: string;
+  errors?: Array<{ resource?: string; field?: string; message?: string }>;
+}
+
+/**
+ * Capsule returns errors in two shapes:
+ *   { "message": "..." }                                         (auth, server errors)
+ *   { "errors": [{ "resource": "Party", "field": "name", ...}] } (validation errors)
+ * Format both into a single human-readable string.
+ */
 async function parseErrorBody(res: Response): Promise<string> {
   try {
-    const json = (await res.json()) as { message?: string };
-    return json.message ?? res.statusText;
+    const body = (await res.json()) as CapsuleErrorBody;
+
+    if (body.errors && body.errors.length > 0) {
+      return body.errors
+        .map((e) => {
+          const parts = [e.resource, e.field].filter(Boolean).join(".");
+          return parts ? `${parts}: ${e.message ?? "invalid"}` : (e.message ?? "invalid");
+        })
+        .join("; ");
+    }
+
+    if (body.message) return body.message;
+
+    return res.statusText;
   } catch {
     return res.statusText;
   }

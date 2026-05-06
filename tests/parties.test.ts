@@ -107,6 +107,29 @@ describe("updateParty", () => {
   });
 });
 
+describe("error body parsing", () => {
+  it("formats Capsule's validation { errors: [...] } shape", async () => {
+    mockFetch(400, {
+      errors: [
+        { resource: "Party", field: "name", message: "can't be blank" },
+        { resource: "Party", field: "type", message: "must be person or organisation" },
+      ],
+    });
+
+    const { createParty } = await import("../src/tools/parties.js");
+    await expect(
+      createParty({ type: "person" }),
+    ).rejects.toThrow(/Party\.name: can't be blank.*Party\.type: must be person/);
+  });
+
+  it("falls back to flat { message } shape", async () => {
+    mockFetch(500, { message: "Internal server error" });
+
+    const { getParty } = await import("../src/tools/parties.js");
+    await expect(getParty({ id: 1 })).rejects.toThrow(/Internal server error/);
+  });
+});
+
 describe("auth errors", () => {
   it("throws CapsuleAuthError on 401", async () => {
     mockFetch(401, { message: "Unauthorized" });
