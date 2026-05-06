@@ -48,6 +48,33 @@ describe("createTask", () => {
   });
 });
 
+describe("updateTask", () => {
+  it("puts only the provided fields to /tasks/:id", async () => {
+    mockFetch(200, { task: { id: 5, description: "Updated" } });
+
+    const { updateTask } = await import("../src/tools/tasks.js");
+    await updateTask({ id: 5, description: "Updated", dueOn: "2025-12-15" });
+
+    const [url, options] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toContain("/tasks/5");
+    expect((options as RequestInit).method).toBe("PUT");
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.task).toEqual({ description: "Updated", dueOn: "2025-12-15" });
+  });
+
+  it("maps ownerId to nested owner object", async () => {
+    mockFetch(200, { task: { id: 5 } });
+
+    const { updateTask } = await import("../src/tools/tasks.js");
+    await updateTask({ id: 5, ownerId: 9 });
+
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.task.owner).toEqual({ id: 9 });
+    expect(body.task.ownerId).toBeUndefined();
+  });
+});
+
 describe("completeTask", () => {
   it("puts status COMPLETED to /tasks/:id", async () => {
     mockFetch(200, { task: { id: 5, status: "COMPLETED" } });

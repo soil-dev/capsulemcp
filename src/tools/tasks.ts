@@ -54,6 +54,30 @@ export async function createTask(input: z.infer<typeof createTaskSchema>) {
 
 // ───────────────────────────────────────────────────────────────────────────
 
+export const updateTaskSchema = z.object({
+  id: z.number().int().positive(),
+  description: z.string().min(1).optional(),
+  dueOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("YYYY-MM-DD"),
+  dueTime: z.string().regex(/^\d{2}:\d{2}$/).optional().describe("HH:MM in user's timezone"),
+  detail: z.string().optional(),
+  status: z.enum(["OPEN", "COMPLETED", "PENDING"]).optional(),
+  ownerId: z.number().int().positive().optional(),
+});
+
+export async function updateTask(input: z.infer<typeof updateTaskSchema>) {
+  const { id, ownerId, ...rest } = input;
+
+  const body: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(rest)) {
+    if (v !== undefined) body[k] = v;
+  }
+  if (ownerId) body["owner"] = { id: ownerId };
+
+  return capsulePut<{ task: unknown }>(`/tasks/${id}`, { task: body });
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+
 export const completeTaskSchema = z.object({
   id: z.number().int().positive(),
 });

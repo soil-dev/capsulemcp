@@ -27,6 +27,7 @@ import {
 import {
   listTasksSchema, listTasks,
   createTaskSchema, createTask,
+  updateTaskSchema, updateTask,
   completeTaskSchema, completeTask,
 } from "./tools/tasks.js";
 
@@ -204,6 +205,16 @@ server.tool(
   createTaskSchema.shape,
   async (input) => {
     const result = await createTask(input);
+    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+  },
+);
+
+server.tool(
+  "update_task",
+  "Update fields on an existing task. Only the fields you provide are changed. To mark a task done prefer complete_task.",
+  updateTaskSchema.shape,
+  async (input) => {
+    const result = await updateTask(input);
     return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
   },
 );
