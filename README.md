@@ -101,6 +101,7 @@ export CAPSULE_API_TOKEN=<your token>
 | `list_projects` | List projects, optionally filtered by `OPEN`/`CLOSED` |
 | `get_project` | Fetch a single project by ID |
 | `create_project` | Create a project linked to a party |
+| `update_project` | Update fields on a project (incl. closing it via `status`) |
 
 ### Tasks
 
@@ -108,6 +109,7 @@ export CAPSULE_API_TOKEN=<your token>
 |---|---|
 | `list_tasks` | List tasks, filterable by status, assignee, or due date |
 | `create_task` | Create a task, optionally linked to a party, opportunity, or project |
+| `update_task` | Update fields on a task |
 | `complete_task` | Mark a task as completed |
 
 ### Notes
