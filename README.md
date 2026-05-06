@@ -84,6 +84,7 @@ export CAPSULE_API_TOKEN=<your token>
 | `list_party_projects` | All projects linked to a party |
 | `create_party` | Create a person or organisation |
 | `update_party` | Update fields on an existing party (partial update) |
+| `delete_party` | **Destructive.** Permanently delete a party and all linked records. Requires `confirm: true` |
 
 ### Opportunities
 
@@ -93,6 +94,7 @@ export CAPSULE_API_TOKEN=<your token>
 | `get_opportunity` | Fetch a single opportunity by ID |
 | `create_opportunity` | Create an opportunity linked to a party and milestone |
 | `update_opportunity` | Update fields on an existing opportunity |
+| `delete_opportunity` | **Destructive.** Permanently delete an opportunity. Requires `confirm: true` |
 
 ### Projects
 
@@ -102,6 +104,7 @@ export CAPSULE_API_TOKEN=<your token>
 | `get_project` | Fetch a single project by ID |
 | `create_project` | Create a project linked to a party |
 | `update_project` | Update fields on a project (incl. closing it via `status`) |
+| `delete_project` | **Destructive.** Permanently delete a project. Prefer closing via `update_project status='CLOSED'`. Requires `confirm: true` |
 
 ### Tasks
 
@@ -111,12 +114,14 @@ export CAPSULE_API_TOKEN=<your token>
 | `create_task` | Create a task, optionally linked to a party, opportunity, or project |
 | `update_task` | Update fields on a task |
 | `complete_task` | Mark a task as completed |
+| `delete_task` | **Destructive.** Permanently delete a task. Prefer `complete_task` to keep history. Requires `confirm: true` |
 
 ### Notes
 
 | Tool | Description |
 |---|---|
 | `add_note` | Add a note to a party, opportunity, or project |
+| `delete_entry` | **Destructive.** Permanently delete a note (or other entry). Requires `confirm: true` |
 
 ### Pipelines & milestones
 
@@ -136,6 +141,12 @@ export CAPSULE_API_TOKEN=<your token>
 | Tool | Description |
 |---|---|
 | `list_users` | List all users in the account |
+
+## Delete safety
+
+Every `delete_*` tool requires an explicit `confirm: true` argument. The Zod schema rejects the call before any HTTP request is made if `confirm` is missing or `false`. The tool descriptions also tell the LLM to read the entity first (e.g. `get_party`) and confirm with the user before invoking — but the schema gate is the hard backstop.
+
+There is no `delete_pipeline`, `delete_milestone`, `delete_user`, or `delete_tag` tool — those are configuration objects whose deletion can break existing records, and are intentionally out of scope.
 
 ## Pagination
 
