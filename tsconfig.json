@@ -8,7 +8,6 @@
     "rootDir": "src",
     "strict": true,
     "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
     "noImplicitOverride": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
