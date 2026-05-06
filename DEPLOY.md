@@ -16,6 +16,40 @@ A hosted server lets you:
 - A container host that terminates HTTPS publicly. This guide uses **Google Cloud Run**, but anything that runs the bundled `Dockerfile` and exposes it on HTTPS works (Cloudflare Workers via container support, Render, Fly.io, AWS App Runner, a VPS with a reverse proxy, etc.)
 - A **read-scoped** Capsule Personal Access Token (My Preferences → API Authentication Tokens → pick the Read scope)
 
+### Cloud Run / Google Workspace prerequisites
+
+If your GCP project lives under a Google Workspace organisation (the common case), there are two things to check up front. Both are GWS-org-default policies that silently break Cloud Run deploys until handled.
+
+**1. Grant Cloud Build permissions to the default Compute service account.** As of mid-2024, Google removed the auto-grant. New projects need this once:
+
+```bash
+PROJECT=<your-gcp-project>
+PROJECT_NUMBER=$(gcloud projects describe $PROJECT --format='value(projectNumber)')
+
+gcloud projects add-iam-policy-binding $PROJECT \
+  --member=serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com \
+  --role=roles/cloudbuild.builds.builder \
+  --condition=None
+```
+
+Without this, `gcloud run deploy --source` fails with `PERMISSION_DENIED: Build failed because the default service account is missing required IAM permissions`.
+
+**2. Override `iam.allowedPolicyMemberDomains` at project level so the service can be made public.** Custom Connectors call your endpoint without GCP IAM, so the URL must accept anonymous traffic. GWS org default blocks `allUsers` IAM bindings; without the override, `--allow-unauthenticated` is silently rejected and your URL returns Google's HTML 401/404 pages instead of reaching your container.
+
+This requires `roles/orgpolicy.policyAdmin` (an org-admin role, not a project-owner role). If you don't have it, ask your GWS admin to:
+
+```bash
+cat <<EOF > policy.yaml
+constraint: constraints/iam.allowedPolicyMemberDomains
+listPolicy:
+  allValues: ALLOW
+EOF
+
+gcloud resource-manager org-policies set-policy policy.yaml --project=$PROJECT
+```
+
+The override is project-scoped — other projects in the org keep the default constraint. Reverse with `gcloud resource-manager org-policies delete iam.allowedPolicyMemberDomains --project=$PROJECT`.
+
 ## Environment variables
 
 | Variable | Required | Default | Notes |
@@ -78,7 +112,11 @@ gcloud artifacts repositories create $SERVICE \
 gcloud auth configure-docker $REGION-docker.pkg.dev
 
 # 3. build, tag, push
-podman build -t $REPO/$SERVICE:$TAG .
+# IMPORTANT: --platform linux/amd64 if you're on Apple Silicon (M1/M2/M3) or any
+# ARM dev machine. Cloud Run runs amd64; without this flag your container won't
+# start on Cloud Run and the deploy fails with a "container failed to start
+# and listen on the port" error.
+podman build --platform linux/amd64 -t $REPO/$SERVICE:$TAG .
 podman push $REPO/$SERVICE:$TAG
 
 # 4. deploy that exact image
@@ -113,6 +151,8 @@ A non-exhaustive list of equivalents:
 The application doesn't depend on anything Cloud Run-specific. Cloud Run is just where the example commands go.
 
 ## Sanity check after deploy
+
+The canonical service URL format is `https://${SERVICE}-${PROJECT_NUMBER}.${REGION}.run.app`. The legacy `${SERVICE}-${HASH}-${REGION_SHORT}.a.run.app` format that `gcloud run services describe` sometimes shows may not route on newer services — prefer the project-number format.
 
 ```bash
 URL=https://<your-service-url>
@@ -199,7 +239,11 @@ For a few dozen internal users, expect this to fall within Cloud Run's free tier
 
 | Symptom | Likely cause |
 |---|---|
-| `/healthz` works but `/mcp` returns 401 | `MCP_SHARED_SECRET` mismatch between the deployment env var and the Custom Connector config |
+| Deploy fails with `PERMISSION_DENIED: Build failed because the default service account...` | Grant `roles/cloudbuild.builds.builder` to the default Compute SA — see Prerequisites |
+| URL returns Google HTML 404 / "Your client does not have permission" | `iam.allowedPolicyMemberDomains` constraint is blocking `allUsers`. Override at project level — see Prerequisites |
+| `gcloud run deploy --image` succeeds but Cloud Run reports "container failed to start and listen on the port" | Image was built for the wrong architecture. Rebuild with `--platform linux/amd64` |
+| URL from `gcloud run services describe` returns 404 but the deploy command's "Service URL" works | Use the canonical `https://${SERVICE}-${PROJECT_NUMBER}.${REGION}.run.app` format |
+| `/healthz` works but `/mcp` returns 401 (JSON, from your app) | `MCP_SHARED_SECRET` mismatch between the deployment env var and the Custom Connector config |
 | `/mcp` returns 500 with "401 Unauthorized" in logs | The deployed `CAPSULE_API_TOKEN` is invalid or expired |
 | `tools/list` returns no `create_*`/`update_*` tools | Working as intended — `CAPSULE_MCP_READONLY=1` is set, or your Capsule token has Read scope |
 | Tool calls return empty results | Verify the Capsule token's user has access to that data; tokens inherit the user's record-level visibility |
