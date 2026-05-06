@@ -75,6 +75,83 @@ Then point Claude Desktop at the built file:
 }
 ```
 
+## Org-wide deployment via Claude Custom Connectors (Cloud Run)
+
+The setups above install capsulemcp on each user's machine over stdio. For an organisation-wide install where colleagues just open a shared Claude Project and the MCP is already there — no per-user setup — you deploy capsulemcp as an HTTP server and register it as a Custom Connector in Claude.
+
+This requires:
+- Claude **Teams** or **Enterprise** plan with admin access (Custom Connectors aren't available on Free/Pro)
+- A place to host an HTTPS endpoint (Google Cloud Run, Cloudflare Workers, Render, Fly, or any container host)
+
+The bundled `Dockerfile` builds an image that runs the HTTP server (`dist/http.js`) on `$PORT` (default 8080).
+
+### One-time deploy to Google Cloud Run
+
+```bash
+# Set up: pick a project and region
+PROJECT=<your-gcp-project>
+REGION=europe-west1   # or whatever's near your users
+SERVICE=capsulemcp
+
+# Generate a shared secret to gate inbound requests
+SHARED_SECRET=$(openssl rand -hex 32)
+echo "SHARED_SECRET=$SHARED_SECRET   # save this — Claude will need it"
+
+# Deploy. --source builds the container with Cloud Build, no local Docker needed.
+gcloud run deploy $SERVICE \
+  --project=$PROJECT \
+  --region=$REGION \
+  --source=. \
+  --allow-unauthenticated \
+  --set-env-vars=CAPSULE_MCP_READONLY=1,MCP_SHARED_SECRET=$SHARED_SECRET \
+  --set-env-vars=^|^CAPSULE_API_TOKEN=<your read-scoped capsule token>
+```
+
+`--allow-unauthenticated` makes the service reachable from Claude's servers; auth is enforced at the application layer via `MCP_SHARED_SECRET`. After a minute or two, gcloud prints the service URL — something like `https://capsulemcp-abc123-ew.a.run.app`.
+
+Verify it works:
+
+```bash
+curl https://<your-url>/healthz
+# {"ok":true,"readOnly":true}
+```
+
+### Required and optional environment variables
+
+| Variable | Required | Default | Notes |
+|---|---|---|---|
+| `CAPSULE_API_TOKEN` | yes | — | Use a read-scoped token for org deployments |
+| `MCP_SHARED_SECRET` | strongly recommended | (none) | Without it, anyone who finds the URL can use your Capsule token |
+| `CAPSULE_MCP_READONLY` | no | unset | Set to `1` to belt-and-brace your read-scoped token |
+| `PORT` | no | `8080` | Cloud Run sets this automatically |
+
+### Register as a Custom Connector
+
+1. In Claude.ai, open **Settings → Connectors → Custom Connectors** (admin only)
+2. **Add custom connector**
+3. **Name**: `Capsule CRM`, **Description**: whatever fits your org
+4. **Server URL**: `https://<your-cloud-run-url>/mcp`
+5. **Authentication**: Bearer token, value = your `MCP_SHARED_SECRET`
+6. Save
+
+Anthropic's UI may evolve; check their connector docs if a field looks different.
+
+### Wire up a shared Project
+
+1. Create a Claude Project at the org level (admin)
+2. Add Project instructions describing your Capsule structure — naming conventions, custom fields, tagging system, pipelines, anything that helps Claude reason about your data
+3. Attach the Capsule connector to the Project
+4. Share the Project with the org
+
+Now anyone in the org opens that Project, starts a chat, and the Capsule tools + your instructions are there automatically. Nothing to install on their machine.
+
+### Cost and operations notes
+
+- Cloud Run charges per request; for an internal MCP serving a few dozen people the cost is negligible (likely free tier on most months).
+- `--min-instances=0` (the default) means cold starts of a few seconds on the first request after idle. For a snappier experience set `--min-instances=1` (you'll pay for one instance running 24/7).
+- The service is stateless. Deploys are atomic; rolling back is one `gcloud run services update-traffic --to-revisions=PREV=100`.
+- Rotate `CAPSULE_API_TOKEN` and `MCP_SHARED_SECRET` periodically with `gcloud run services update --update-env-vars=...`.
+
 ## Available tools
 
 ### Parties (people & organisations)
