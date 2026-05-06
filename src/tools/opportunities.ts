@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
+import { capsuleDelete, capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
 
 const OpportunityValueSchema = z.object({
   amount: z.number().nonnegative(),
@@ -98,4 +98,21 @@ export async function updateOpportunity(
   return capsulePut<{ opportunity: unknown }>(`/opportunities/${id}`, {
     opportunity: body,
   });
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+
+export const deleteOpportunitySchema = z.object({
+  id: z.number().int().positive(),
+  confirm: z
+    .literal(true)
+    .describe("Must be set to true. Permanently deletes the opportunity. Irreversible."),
+});
+
+export async function deleteOpportunity(input: z.infer<typeof deleteOpportunitySchema>) {
+  if (input.confirm !== true) {
+    throw new Error("delete_opportunity requires confirm: true");
+  }
+  await capsuleDelete(`/opportunities/${input.id}`);
+  return { deleted: true, id: input.id };
 }

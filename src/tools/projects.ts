@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
+import { capsuleDelete, capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
 
 // ── Read ────────────────────────────────────────────────────────────────────
 
@@ -77,4 +77,21 @@ export async function updateProject(input: z.infer<typeof updateProjectSchema>) 
   if (ownerId) body["owner"] = { id: ownerId };
 
   return capsulePut<{ kase: unknown }>(`/kases/${id}`, { kase: body });
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+
+export const deleteProjectSchema = z.object({
+  id: z.number().int().positive(),
+  confirm: z
+    .literal(true)
+    .describe("Must be set to true. Permanently deletes the project (case). Consider update_project status='CLOSED' instead. Irreversible."),
+});
+
+export async function deleteProject(input: z.infer<typeof deleteProjectSchema>) {
+  if (input.confirm !== true) {
+    throw new Error("delete_project requires confirm: true");
+  }
+  await capsuleDelete(`/kases/${input.id}`);
+  return { deleted: true, id: input.id };
 }

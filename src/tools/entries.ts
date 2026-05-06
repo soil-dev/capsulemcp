@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { capsulePost } from "../capsule/client.js";
+import { capsuleDelete, capsulePost } from "../capsule/client.js";
 
 // MCP SDK needs a plain ZodObject shape; enforce the exactly-one constraint in the handler.
 export const addNoteSchema = z.object({
@@ -23,4 +23,21 @@ export async function addNote(input: z.infer<typeof addNoteSchema>) {
   if (projectId) body["kase"] = { id: projectId };
 
   return capsulePost<{ entry: unknown }>("/entries", { entry: body });
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+
+export const deleteEntrySchema = z.object({
+  id: z.number().int().positive().describe("Entry (note/email/task-record) ID"),
+  confirm: z
+    .literal(true)
+    .describe("Must be set to true. Permanently deletes the entry — use this to remove a note from a party/opportunity/project. Irreversible."),
+});
+
+export async function deleteEntry(input: z.infer<typeof deleteEntrySchema>) {
+  if (input.confirm !== true) {
+    throw new Error("delete_entry requires confirm: true");
+  }
+  await capsuleDelete(`/entries/${input.id}`);
+  return { deleted: true, id: input.id };
 }

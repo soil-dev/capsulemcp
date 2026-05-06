@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
+import { capsuleDelete, capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
 
 // ── Read ────────────────────────────────────────────────────────────────────
 
@@ -88,4 +88,21 @@ export async function completeTask(input: z.infer<typeof completeTaskSchema>) {
   return capsulePut<{ task: unknown }>(`/tasks/${input.id}`, {
     task: { status: "COMPLETED" },
   });
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+
+export const deleteTaskSchema = z.object({
+  id: z.number().int().positive(),
+  confirm: z
+    .literal(true)
+    .describe("Must be set to true. Permanently deletes the task. To mark done without losing history use complete_task. Irreversible."),
+});
+
+export async function deleteTask(input: z.infer<typeof deleteTaskSchema>) {
+  if (input.confirm !== true) {
+    throw new Error("delete_task requires confirm: true");
+  }
+  await capsuleDelete(`/tasks/${input.id}`);
+  return { deleted: true, id: input.id };
 }
