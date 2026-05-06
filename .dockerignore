@@ -1,0 +1,12 @@
+node_modules
+dist
+.git
+.github
+.claude
+.env
+*.log
+tests
+scripts
+PLAN.md
+README.md
+LICENSE
