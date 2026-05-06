@@ -25,6 +25,18 @@ describe("listTasks", () => {
 
     expect(result.tasks).toHaveLength(1);
   });
+
+  it("maps ownerId to the bare 'owner' query param", async () => {
+    mockFetch(200, { tasks: [] });
+
+    const { listTasks } = await import("../src/tools/tasks.js");
+    await listTasks({ ownerId: 643698, page: 1, perPage: 25 });
+
+    const [url] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toContain("owner=643698");
+    expect(url).not.toContain("ownerId=");
+    expect(url).not.toContain("assignedToUserId=");
+  });
 });
 
 describe("createTask", () => {
