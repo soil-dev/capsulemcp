@@ -143,6 +143,35 @@ Then point Claude Desktop at the built file:
 |---|---|
 | `list_users` | List all users in the account |
 
+## Read-only mode
+
+Set `CAPSULE_MCP_READONLY=1` (or `true`/`yes`) to disable every write, update, and delete tool. The server will only register the read tools (`search_*`, `get_*`, `list_*`). Any attempt to mutate via the underlying client also throws `CapsuleReadOnlyError` as a defence-in-depth backstop.
+
+Useful when:
+
+- You want to give Claude access to your CRM data without any risk of mutation
+- You're letting a less-trusted person/agent connect to your tenant
+- You're exploring or experimenting and don't want to nudge real records
+
+Add it to the `env` block of your Claude Desktop config:
+
+```json
+{
+  "mcpServers": {
+    "capsule": {
+      "command": "npx",
+      "args": ["-y", "github:arapov/capsulemcp"],
+      "env": {
+        "CAPSULE_API_TOKEN": "<your token>",
+        "CAPSULE_MCP_READONLY": "1"
+      }
+    }
+  }
+}
+```
+
+When read-only mode is active, the server prints `[capsule-mcp] read-only mode: write/delete tools are not registered` to stderr on startup.
+
 ## Delete safety
 
 Every `delete_*` tool requires an explicit `confirm: true` argument. The Zod schema rejects the call before any HTTP request is made if `confirm` is missing or `false`. The tool descriptions also tell the LLM to read the entity first (e.g. `get_party`) and confirm with the user before invoking — but the schema gate is the hard backstop.
