@@ -1,5 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { isReadOnly } from "./capsule/client.js";
+
+const READ_ONLY = isReadOnly();
 
 import {
   searchPartiesSchema, searchParties,
@@ -87,35 +90,37 @@ server.tool(
   },
 );
 
-server.tool(
-  "create_party",
-  "Create a new person or organisation in Capsule CRM.",
-  createPartySchema.shape,
-  async (input) => {
-    const result = await createParty(input);
-    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-  },
-);
+if (!READ_ONLY) {
+  server.tool(
+    "create_party",
+    "Create a new person or organisation in Capsule CRM.",
+    createPartySchema.shape,
+    async (input) => {
+      const result = await createParty(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
 
-server.tool(
-  "update_party",
-  "Update fields on an existing party. Only the fields you provide are changed.",
-  updatePartySchema.shape,
-  async (input) => {
-    const result = await updateParty(input);
-    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-  },
-);
+  server.tool(
+    "update_party",
+    "Update fields on an existing party. Only the fields you provide are changed.",
+    updatePartySchema.shape,
+    async (input) => {
+      const result = await updateParty(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
 
-server.tool(
-  "delete_party",
-  "DESTRUCTIVE & IRREVERSIBLE: permanently delete a party (person or organisation). This also removes all linked notes, tasks, and opportunities. Requires confirm=true. Always read the party first with get_party and confirm with the user before calling.",
-  deletePartySchema.shape,
-  async (input) => {
-    const result = await deleteParty(input);
-    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-  },
-);
+  server.tool(
+    "delete_party",
+    "DESTRUCTIVE & IRREVERSIBLE: permanently delete a party (person or organisation). This also removes all linked notes, tasks, and opportunities. Requires confirm=true. Always read the party first with get_party and confirm with the user before calling.",
+    deletePartySchema.shape,
+    async (input) => {
+      const result = await deleteParty(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+}
 
 // ── Opportunities ───────────────────────────────────────────────────────────
 
@@ -139,35 +144,37 @@ server.tool(
   },
 );
 
-server.tool(
-  "create_opportunity",
-  "Create a new opportunity linked to a party and a pipeline milestone.",
-  createOpportunitySchema.shape,
-  async (input) => {
-    const result = await createOpportunity(input);
-    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-  },
-);
+if (!READ_ONLY) {
+  server.tool(
+    "create_opportunity",
+    "Create a new opportunity linked to a party and a pipeline milestone.",
+    createOpportunitySchema.shape,
+    async (input) => {
+      const result = await createOpportunity(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
 
-server.tool(
-  "update_opportunity",
-  "Update fields on an existing opportunity. Only the fields you provide are changed.",
-  updateOpportunitySchema.shape,
-  async (input) => {
-    const result = await updateOpportunity(input);
-    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-  },
-);
+  server.tool(
+    "update_opportunity",
+    "Update fields on an existing opportunity. Only the fields you provide are changed.",
+    updateOpportunitySchema.shape,
+    async (input) => {
+      const result = await updateOpportunity(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
 
-server.tool(
-  "delete_opportunity",
-  "DESTRUCTIVE & IRREVERSIBLE: permanently delete an opportunity. Requires confirm=true. Always read the opportunity first with get_opportunity and confirm with the user before calling.",
-  deleteOpportunitySchema.shape,
-  async (input) => {
-    const result = await deleteOpportunity(input);
-    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-  },
-);
+  server.tool(
+    "delete_opportunity",
+    "DESTRUCTIVE & IRREVERSIBLE: permanently delete an opportunity. Requires confirm=true. Always read the opportunity first with get_opportunity and confirm with the user before calling.",
+    deleteOpportunitySchema.shape,
+    async (input) => {
+      const result = await deleteOpportunity(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+}
 
 // ── Projects ─────────────────────────────────────────────────────────────────
 
@@ -191,35 +198,37 @@ server.tool(
   },
 );
 
-server.tool(
-  "create_project",
-  "Create a new project (case) in Capsule CRM linked to a party.",
-  createProjectSchema.shape,
-  async (input) => {
-    const result = await createProject(input);
-    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-  },
-);
+if (!READ_ONLY) {
+  server.tool(
+    "create_project",
+    "Create a new project (case) in Capsule CRM linked to a party.",
+    createProjectSchema.shape,
+    async (input) => {
+      const result = await createProject(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
 
-server.tool(
-  "update_project",
-  "Update fields on an existing project. Only the fields you provide are changed. Use status='CLOSED' to close a project.",
-  updateProjectSchema.shape,
-  async (input) => {
-    const result = await updateProject(input);
-    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-  },
-);
+  server.tool(
+    "update_project",
+    "Update fields on an existing project. Only the fields you provide are changed. Use status='CLOSED' to close a project.",
+    updateProjectSchema.shape,
+    async (input) => {
+      const result = await updateProject(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
 
-server.tool(
-  "delete_project",
-  "DESTRUCTIVE & IRREVERSIBLE: permanently delete a project (case). Prefer update_project with status='CLOSED' to close a project while preserving history. Requires confirm=true. Always read the project first with get_project and confirm with the user before calling.",
-  deleteProjectSchema.shape,
-  async (input) => {
-    const result = await deleteProject(input);
-    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-  },
-);
+  server.tool(
+    "delete_project",
+    "DESTRUCTIVE & IRREVERSIBLE: permanently delete a project (case). Prefer update_project with status='CLOSED' to close a project while preserving history. Requires confirm=true. Always read the project first with get_project and confirm with the user before calling.",
+    deleteProjectSchema.shape,
+    async (input) => {
+      const result = await deleteProject(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+}
 
 // ── Tasks ────────────────────────────────────────────────────────────────────
 
@@ -233,67 +242,71 @@ server.tool(
   },
 );
 
-server.tool(
-  "create_task",
-  "Create a new task, optionally linked to a party, opportunity, or project.",
-  createTaskSchema.shape,
-  async (input) => {
-    const result = await createTask(input);
-    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-  },
-);
+if (!READ_ONLY) {
+  server.tool(
+    "create_task",
+    "Create a new task, optionally linked to a party, opportunity, or project.",
+    createTaskSchema.shape,
+    async (input) => {
+      const result = await createTask(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
 
-server.tool(
-  "update_task",
-  "Update fields on an existing task. Only the fields you provide are changed. To mark a task done prefer complete_task.",
-  updateTaskSchema.shape,
-  async (input) => {
-    const result = await updateTask(input);
-    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-  },
-);
+  server.tool(
+    "update_task",
+    "Update fields on an existing task. Only the fields you provide are changed. To mark a task done prefer complete_task.",
+    updateTaskSchema.shape,
+    async (input) => {
+      const result = await updateTask(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
 
-server.tool(
-  "complete_task",
-  "Mark a task as completed.",
-  completeTaskSchema.shape,
-  async (input) => {
-    const result = await completeTask(input);
-    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-  },
-);
+  server.tool(
+    "complete_task",
+    "Mark a task as completed.",
+    completeTaskSchema.shape,
+    async (input) => {
+      const result = await completeTask(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
 
-server.tool(
-  "delete_task",
-  "DESTRUCTIVE & IRREVERSIBLE: permanently delete a task. Prefer complete_task to mark a task done while keeping it in history. Requires confirm=true.",
-  deleteTaskSchema.shape,
-  async (input) => {
-    const result = await deleteTask(input);
-    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-  },
-);
+  server.tool(
+    "delete_task",
+    "DESTRUCTIVE & IRREVERSIBLE: permanently delete a task. Prefer complete_task to mark a task done while keeping it in history. Requires confirm=true.",
+    deleteTaskSchema.shape,
+    async (input) => {
+      const result = await deleteTask(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+}
 
 // ── Entries ──────────────────────────────────────────────────────────────────
 
-server.tool(
-  "add_note",
-  "Add a note to a party, opportunity, or project. Provide exactly one of partyId, opportunityId, or projectId.",
-  addNoteSchema.shape,
-  async (input) => {
-    const result = await addNote(input);
-    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-  },
-);
+if (!READ_ONLY) {
+  server.tool(
+    "add_note",
+    "Add a note to a party, opportunity, or project. Provide exactly one of partyId, opportunityId, or projectId.",
+    addNoteSchema.shape,
+    async (input) => {
+      const result = await addNote(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
 
-server.tool(
-  "delete_entry",
-  "DESTRUCTIVE & IRREVERSIBLE: permanently delete a note (or other entry) by its ID. Requires confirm=true.",
-  deleteEntrySchema.shape,
-  async (input) => {
-    const result = await deleteEntry(input);
-    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-  },
-);
+  server.tool(
+    "delete_entry",
+    "DESTRUCTIVE & IRREVERSIBLE: permanently delete a note (or other entry) by its ID. Requires confirm=true.",
+    deleteEntrySchema.shape,
+    async (input) => {
+      const result = await deleteEntry(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+}
 
 // ── Pipelines & milestones ───────────────────────────────────────────────────
 
@@ -344,6 +357,11 @@ server.tool(
 // ── Start ────────────────────────────────────────────────────────────────────
 
 const transport = new StdioServerTransport();
+
+if (READ_ONLY) {
+  // Stdout is reserved for MCP protocol traffic — log boot info to stderr.
+  console.error("[capsule-mcp] read-only mode: write/delete tools are not registered");
+}
 
 try {
   await server.connect(transport);
