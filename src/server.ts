@@ -61,7 +61,7 @@ export function createCapsuleMcpServer(): McpServer {
   const readOnly = isReadOnly();
   const server = new McpServer({
     name: "capsulemcp",
-    version: "0.2.0",
+    version: "0.0.0-dev",
   });
 
   // ── Parties ───────────────────────────────────────────────────────────────

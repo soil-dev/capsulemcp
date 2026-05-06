@@ -77,7 +77,7 @@ Then point Claude Desktop at the built file:
 
 After editing code, run `npm run build` and restart Claude Desktop — it re-spawns the MCP server on each app start, so the updated `dist/` is picked up. For tighter iteration, leave `npm run dev` (tsup watch mode) running and just restart Claude Desktop sessions when you want to test.
 
-The `npx -y github:arapov/capsulemcp` install above caches per-spec and **does not** auto-update from main. Pin to a tag (`#v0.2.0`) or a commit SHA when you want a fresh build.
+The `npx -y github:arapov/capsulemcp` install above caches per-spec and **does not** auto-update from main. Pin to a commit SHA (`#abc1234`) when you want a fresh build, or clear the cache with `rm -rf ~/.npm/_npx`.
 
 ## Org-wide deployment
 
