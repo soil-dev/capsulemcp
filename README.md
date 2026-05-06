@@ -2,14 +2,10 @@
 
 An MCP (Model Context Protocol) server for [Capsule CRM](https://capsulecrm.com), exposing read and write operations as tools you can use directly from Claude Desktop or Claude Code.
 
-## Install
+## Requirements
 
-```bash
-git clone <this-repo>
-cd capsule-mcp
-npm install
-npm run build
-```
+- [Node.js 20 or newer](https://nodejs.org/)
+- A Capsule Personal Access Token (see below)
 
 ## Generating a Capsule Personal Access Token
 
@@ -17,31 +13,51 @@ npm run build
 2. Go to **API Authentication Tokens**.
 3. Click **Generate new token**, give it a name, and copy the value — it won't be shown again.
 
-## Environment setup
+## Quick install — Claude Desktop
 
-```bash
-cp .env.example .env
-# edit .env and set CAPSULE_API_TOKEN=<your token>
+Open `claude_desktop_config.json` (on macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`; on Windows: `%APPDATA%\Claude\claude_desktop_config.json`) and add:
+
+```json
+{
+  "mcpServers": {
+    "capsule": {
+      "command": "npx",
+      "args": ["-y", "github:anton-arapov/capsule-mcp"],
+      "env": {
+        "CAPSULE_API_TOKEN": "<your token>"
+      }
+    }
+  }
+}
 ```
 
-The server reads `CAPSULE_API_TOKEN` from the environment at startup and fails fast with a clear message if it's missing or returns 401.
+Restart Claude Desktop. The Capsule tools will appear in the tool picker.
 
-## Running locally
+> **First launch is slow.** `npx` will clone the repo, install dependencies, and build the server on the first run (~30 seconds). Subsequent launches are fast — npx caches the built binary.
 
-```bash
-# after build
-CAPSULE_API_TOKEN=<token> node dist/index.js
-```
-
-Or via npx from the project root:
+## Quick install — Claude Code
 
 ```bash
-CAPSULE_API_TOKEN=<token> npx capsule-mcp
+claude mcp add capsule -- npx -y github:anton-arapov/capsule-mcp
 ```
 
-## Claude Desktop configuration
+Then export the token in your shell profile:
 
-Add the following to your `claude_desktop_config.json` (usually at `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+```bash
+export CAPSULE_API_TOKEN=<your token>
+```
+
+## Manual install (alternative)
+
+If you'd rather not use `npx`, you can clone and build locally:
+
+```bash
+git clone https://github.com/anton-arapov/capsule-mcp.git
+cd capsule-mcp
+npm install        # this also runs the build via the prepare script
+```
+
+Then point Claude Desktop at the built file:
 
 ```json
 {
@@ -55,21 +71,6 @@ Add the following to your `claude_desktop_config.json` (usually at `~/Library/Ap
     }
   }
 }
-```
-
-Restart Claude Desktop after saving the file. The Capsule tools will appear in the tool picker.
-
-## Claude Code configuration
-
-```bash
-claude mcp add capsule -- node /absolute/path/to/capsule-mcp/dist/index.js
-```
-
-Then set the token:
-
-```bash
-# add to your shell profile or pass inline
-export CAPSULE_API_TOKEN=<your token>
 ```
 
 ## Available tools
