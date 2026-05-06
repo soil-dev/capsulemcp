@@ -268,4 +268,12 @@ server.tool(
 // ── Start ────────────────────────────────────────────────────────────────────
 
 const transport = new StdioServerTransport();
-await server.connect(transport);
+
+try {
+  await server.connect(transport);
+} catch (err) {
+  const message = err instanceof Error ? err.message : String(err);
+  // Write to stderr — stdout is reserved for MCP protocol traffic.
+  console.error(`[capsule-mcp] Failed to start: ${message}`);
+  process.exit(1);
+}
