@@ -14,14 +14,21 @@ import {
   updateParty,
   searchParties,
   getParty,
+  deleteParty,
 } from "../src/tools/parties.js";
 import {
   createOpportunity,
   updateOpportunity,
+  deleteOpportunity,
 } from "../src/tools/opportunities.js";
 import { listPipelines, listMilestones } from "../src/tools/pipelines.js";
-import { createTask, completeTask, listTasks } from "../src/tools/tasks.js";
-import { addNote } from "../src/tools/entries.js";
+import {
+  createTask,
+  completeTask,
+  listTasks,
+  deleteTask,
+} from "../src/tools/tasks.js";
+import { addNote, deleteEntry } from "../src/tools/entries.js";
 import { fetch } from "undici";
 
 const TAG = `[mcp-smoke-${Date.now()}]`;
@@ -30,6 +37,8 @@ const log = (label: string, val: unknown) =>
 
 let createdPartyId: number | undefined;
 let createdOppId: number | undefined;
+let createdTaskId: number | undefined;
+let createdNoteId: number | undefined;
 
 async function rawDelete(path: string) {
   const res = await fetch(`https://api.capsulecrm.com/api/v2${path}`, {
@@ -69,7 +78,11 @@ async function main() {
   });
 
   // 5. add note
-  const note = await addNote({ partyId: createdPartyId!, content: `${TAG} live smoke note` });
+  const note = (await addNote({
+    partyId: createdPartyId!,
+    content: `${TAG} live smoke note`,
+  })) as { entry: { id: number } };
+  createdNoteId = note.entry.id;
   log("addNote →", note);
 
   // 6. pipelines + milestones
@@ -105,19 +118,51 @@ async function main() {
     dueOn: "2099-12-31",
     partyId: createdPartyId!,
   })) as { task: { id: number; status: string } };
+  createdTaskId = task.task.id;
   log("createTask →", task);
 
   // 10. complete task
-  const taskDone = await completeTask({ id: task.task.id });
+  const taskDone = await completeTask({ id: createdTaskId });
   log("completeTask →", taskDone);
 
   // 11. list_tasks: check our task shows up under COMPLETED
   const listed = await listTasks({ status: "COMPLETED", perPage: 5, page: 1 });
   log("listTasks(status=COMPLETED) → page count", { count: (listed.tasks as unknown[]).length });
+
+  // 12. delete the note via MCP delete_entry tool
+  const noteDeleted = await deleteEntry({ id: createdNoteId!, confirm: true });
+  createdNoteId = undefined; // marked clean
+  log("deleteEntry →", noteDeleted);
+
+  // 13. delete the task via MCP delete_task tool
+  const taskDeleted = await deleteTask({ id: createdTaskId!, confirm: true });
+  createdTaskId = undefined;
+  log("deleteTask →", taskDeleted);
+
+  // 14. delete the opportunity via MCP delete_opportunity tool
+  const oppDeleted = await deleteOpportunity({ id: createdOppId!, confirm: true });
+  createdOppId = undefined;
+  log("deleteOpportunity →", oppDeleted);
+
+  // 15. delete the party via MCP delete_party tool
+  const partyDeleted = await deleteParty({ id: createdPartyId!, confirm: true });
+  createdPartyId = undefined;
+  log("deleteParty →", partyDeleted);
+
 }
 
 async function cleanup() {
-  console.log("\n── cleanup ──");
+  console.log("\n── cleanup (failure path only) ──");
+  // The happy path deletes via MCP tools above and clears the IDs.
+  // This block is a belt-and-braces fallback if anything threw mid-test.
+  if (createdNoteId !== undefined) {
+    const s = await rawDelete(`/entries/${createdNoteId}`);
+    console.log(`DELETE /entries/${createdNoteId} → ${s}`);
+  }
+  if (createdTaskId !== undefined) {
+    const s = await rawDelete(`/tasks/${createdTaskId}`);
+    console.log(`DELETE /tasks/${createdTaskId} → ${s}`);
+  }
   if (createdOppId !== undefined) {
     const s = await rawDelete(`/opportunities/${createdOppId}`);
     console.log(`DELETE /opportunities/${createdOppId} → ${s}`);
