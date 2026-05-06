@@ -17,7 +17,12 @@
     "start": "node dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepare": "tsup"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anton-arapov/capsule-mcp.git"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
