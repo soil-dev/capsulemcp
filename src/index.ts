@@ -21,6 +21,7 @@ import {
   listProjectsSchema, listProjects,
   getProjectSchema, getProject,
   createProjectSchema, createProject,
+  updateProjectSchema, updateProject,
 } from "./tools/projects.js";
 
 import {
@@ -171,6 +172,16 @@ server.tool(
   createProjectSchema.shape,
   async (input) => {
     const result = await createProject(input);
+    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+  },
+);
+
+server.tool(
+  "update_project",
+  "Update fields on an existing project. Only the fields you provide are changed. Use status='CLOSED' to close a project.",
+  updateProjectSchema.shape,
+  async (input) => {
+    const result = await updateProject(input);
     return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
   },
 );

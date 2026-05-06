@@ -64,3 +64,30 @@ describe("createProject", () => {
     expect(body.kase.party).toEqual({ id: 5 });
   });
 });
+
+describe("updateProject", () => {
+  it("puts only the provided fields to /kases/:id", async () => {
+    mockFetch(200, { kase: { id: 10, status: "CLOSED" } });
+
+    const { updateProject } = await import("../src/tools/projects.js");
+    await updateProject({ id: 10, status: "CLOSED" });
+
+    const [url, options] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toContain("/kases/10");
+    expect((options as RequestInit).method).toBe("PUT");
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.kase).toEqual({ status: "CLOSED" });
+  });
+
+  it("maps ownerId to nested owner object", async () => {
+    mockFetch(200, { kase: { id: 10 } });
+
+    const { updateProject } = await import("../src/tools/projects.js");
+    await updateProject({ id: 10, ownerId: 7 });
+
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.kase.owner).toEqual({ id: 7 });
+    expect(body.kase.ownerId).toBeUndefined();
+  });
+});
