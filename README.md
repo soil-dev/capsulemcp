@@ -38,13 +38,22 @@ Restart Claude Desktop. The Capsule tools will appear in the tool picker.
 ## Quick install — Claude Code
 
 ```bash
-claude mcp add capsule -- npx -y github:arapov/capsulemcp
+claude mcp add capsule --env CAPSULE_API_TOKEN=<your token> -- npx -y github:arapov/capsulemcp
 ```
 
-Then export the token in your shell profile:
+`--env` writes the token into Claude Code's MCP config (`~/.claude.json` by default) scoped to this server only — same model as the `env` block in Claude Desktop's JSON.
+
+If you'd rather not have the token in a config file, you can omit `--env` and instead export `CAPSULE_API_TOKEN` in your shell profile so the spawned MCP server inherits it:
 
 ```bash
 export CAPSULE_API_TOKEN=<your token>
+```
+
+For a more secure setup, store the token in your OS keychain and have the launcher fetch it (macOS example):
+
+```bash
+security add-generic-password -s capsulemcp -a $USER -w '<your token>'
+claude mcp add capsule -- bash -c 'CAPSULE_API_TOKEN=$(security find-generic-password -s capsulemcp -w) exec npx -y github:arapov/capsulemcp'
 ```
 
 ## Manual install (alternative)
