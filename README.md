@@ -22,7 +22,7 @@ Open `claude_desktop_config.json` (on macOS: `~/Library/Application Support/Clau
   "mcpServers": {
     "capsule": {
       "command": "npx",
-      "args": ["-y", "github:anton-arapov/capsule-mcp"],
+      "args": ["-y", "github:arapov/capsulemcp"],
       "env": {
         "CAPSULE_API_TOKEN": "<your token>"
       }
@@ -38,7 +38,7 @@ Restart Claude Desktop. The Capsule tools will appear in the tool picker.
 ## Quick install — Claude Code
 
 ```bash
-claude mcp add capsule -- npx -y github:anton-arapov/capsule-mcp
+claude mcp add capsule -- npx -y github:arapov/capsulemcp
 ```
 
 Then export the token in your shell profile:
@@ -52,7 +52,7 @@ export CAPSULE_API_TOKEN=<your token>
 If you'd rather not use `npx`, you can clone and build locally:
 
 ```bash
-git clone https://github.com/anton-arapov/capsule-mcp.git
+git clone https://github.com/arapov/capsulemcp.git
 cd capsule-mcp
 npm install        # this also runs the build via the prepare script
 ```
