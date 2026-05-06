@@ -189,3 +189,32 @@ export async function capsulePut<T>(path: string, body: unknown): Promise<T> {
   });
   return handleResponse<T>(res);
 }
+
+/**
+ * DELETE /<path>. Capsule returns 204 No Content on success, so there is
+ * no body to parse. We surface auth/API errors via the same helpers as
+ * other verbs and resolve to void on 204.
+ */
+export async function capsuleDelete(path: string): Promise<void> {
+  const token = getToken();
+  const url = buildUrl(path);
+  const res = await doFetch(url, {
+    method: "DELETE",
+    headers: baseHeaders(token),
+  });
+
+  if (res.status === 204) return;
+
+  if (res.status === 401) {
+    const detail = await parseErrorBody(res);
+    throw new CapsuleAuthError(
+      `Capsule API returned 401 Unauthorized: ${detail}. ` +
+        "Check that CAPSULE_API_TOKEN is valid and not expired.",
+    );
+  }
+  if (!res.ok) {
+    const msg = await parseErrorBody(res);
+    throw new CapsuleApiError(res.status, `Capsule API error ${res.status}: ${msg}`);
+  }
+  // Some endpoints may return 200 with a body — drain it.
+}
