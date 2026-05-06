@@ -1,0 +1,99 @@
+import { z } from "zod";
+import { capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
+
+const OpportunityValueSchema = z.object({
+  amount: z.number().nonnegative(),
+  currency: z.string().length(3).optional().describe("ISO 4217 currency code, e.g. 'GBP'"),
+});
+
+// ── Read ────────────────────────────────────────────────────────────────────
+
+export const searchOpportunitiesSchema = z.object({
+  q: z.string().optional().describe("Free-text search query"),
+  embed: z.string().optional().describe("Comma-separated embeds, e.g. 'tags,fields'"),
+  page: z.number().int().positive().optional().default(1),
+  perPage: z.number().int().min(1).max(100).optional().default(25),
+});
+
+export async function searchOpportunities(
+  input: z.infer<typeof searchOpportunitiesSchema>,
+) {
+  const { data, nextPage } = await capsuleGet<{ opportunities: unknown[] }>(
+    "/opportunities",
+    { q: input.q, embed: input.embed, page: input.page, perPage: input.perPage },
+  );
+  return { ...data, nextPage };
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+
+export const getOpportunitySchema = z.object({
+  id: z.number().int().positive(),
+  embed: z.string().optional().describe("Comma-separated embeds, e.g. 'tags,fields'"),
+});
+
+export async function getOpportunity(input: z.infer<typeof getOpportunitySchema>) {
+  const { data } = await capsuleGet<{ opportunity: unknown }>(
+    `/opportunities/${input.id}`,
+    { embed: input.embed },
+  );
+  return data;
+}
+
+// ── Write ───────────────────────────────────────────────────────────────────
+
+export const createOpportunitySchema = z.object({
+  name: z.string().min(1),
+  partyId: z.number().int().positive().describe("ID of the party this opportunity belongs to"),
+  milestoneId: z.number().int().positive().describe("ID of the pipeline milestone"),
+  description: z.string().optional(),
+  value: OpportunityValueSchema.optional(),
+  expectedCloseOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("YYYY-MM-DD"),
+  probability: z.number().int().min(0).max(100).optional(),
+  ownerId: z.number().int().positive().optional(),
+});
+
+export async function createOpportunity(
+  input: z.infer<typeof createOpportunitySchema>,
+) {
+  const { partyId, milestoneId, ownerId, ...rest } = input;
+
+  const body: Record<string, unknown> = {
+    ...rest,
+    party: { id: partyId },
+    milestone: { id: milestoneId },
+  };
+  if (ownerId) body["owner"] = { id: ownerId };
+
+  return capsulePost<{ opportunity: unknown }>("/opportunities", { opportunity: body });
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+
+export const updateOpportunitySchema = z.object({
+  id: z.number().int().positive(),
+  name: z.string().min(1).optional(),
+  milestoneId: z.number().int().positive().optional(),
+  description: z.string().optional(),
+  value: OpportunityValueSchema.optional(),
+  expectedCloseOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  probability: z.number().int().min(0).max(100).optional(),
+  ownerId: z.number().int().positive().optional(),
+});
+
+export async function updateOpportunity(
+  input: z.infer<typeof updateOpportunitySchema>,
+) {
+  const { id, milestoneId, ownerId, ...rest } = input;
+
+  const body: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(rest)) {
+    if (v !== undefined) body[k] = v;
+  }
+  if (milestoneId) body["milestone"] = { id: milestoneId };
+  if (ownerId) body["owner"] = { id: ownerId };
+
+  return capsulePut<{ opportunity: unknown }>(`/opportunities/${id}`, {
+    opportunity: body,
+  });
+}
