@@ -124,6 +124,42 @@ describe("auth errors", () => {
 });
 
 describe("429 retry", () => {
+  it("falls back to a default delay when Retry-After is an HTTP-date (no NaN setTimeout)", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(fetch)
+        .mockResolvedValueOnce({
+          status: 429,
+          ok: false,
+          // HTTP-date in the past — must not produce a NaN delay.
+          headers: new Headers({ "Retry-After": "Wed, 21 Oct 2015 07:28:00 GMT" }),
+          json: async () => ({}),
+          statusText: "Too Many Requests",
+        } as Awaited<ReturnType<typeof fetch>>)
+        .mockResolvedValueOnce({
+          status: 200,
+          ok: true,
+          headers: new Headers(),
+          json: async () => ({ parties: [] }),
+          statusText: "OK",
+        } as Awaited<ReturnType<typeof fetch>>);
+
+      const { searchParties } = await import("../src/tools/parties.js");
+      const promise = searchParties({ page: 1, perPage: 25 });
+
+      // If parseRetryAfter returned NaN, setTimeout would resolve immediately
+      // and the second fetch would be issued before we advance timers. By
+      // advancing exactly the default delay we prove the wait is finite.
+      await vi.advanceTimersByTimeAsync(5_000);
+      const result = await promise;
+
+      expect(result.parties).toEqual([]);
+      expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("retries once on 429 and returns result on second attempt", async () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce({

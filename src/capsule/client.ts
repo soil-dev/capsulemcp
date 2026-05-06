@@ -50,6 +50,31 @@ function parseNextPage(linkHeader: string | null): number | undefined {
   return match ? parseInt(match[1]!, 10) : undefined;
 }
 
+/**
+ * Parse a Retry-After header value into a millisecond delay.
+ * RFC 7231 allows either an integer-seconds value or an HTTP-date.
+ * Falls back to 5 seconds if the value is missing or unparseable.
+ */
+function parseRetryAfter(value: string | null): number {
+  const DEFAULT_MS = 5_000;
+  if (!value) return DEFAULT_MS;
+
+  // Try integer-seconds first.
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.min(seconds * 1000, 60_000);
+  }
+
+  // Fall back to HTTP-date.
+  const dateMs = Date.parse(value);
+  if (Number.isFinite(dateMs)) {
+    const delta = dateMs - Date.now();
+    return delta > 0 ? Math.min(delta, 60_000) : DEFAULT_MS;
+  }
+
+  return DEFAULT_MS;
+}
+
 async function parseErrorBody(res: Response): Promise<string> {
   try {
     const json = (await res.json()) as { message?: string };
@@ -66,8 +91,7 @@ async function doFetch(
   const res = await fetch(url, options);
 
   if (res.status === 429) {
-    const retryAfter = res.headers.get("Retry-After");
-    const delay = retryAfter ? parseFloat(retryAfter) * 1000 : 5_000;
+    const delay = parseRetryAfter(res.headers.get("Retry-After"));
     await new Promise((resolve) => setTimeout(resolve, delay));
 
     const retried = await fetch(url, options);
