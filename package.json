@@ -2,7 +2,7 @@
   "name": "capsule-mcp",
   "version": "0.1.0",
   "description": "MCP server for Capsule CRM",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "type": "module",
   "bin": {
     "capsule-mcp": "./dist/index.js"

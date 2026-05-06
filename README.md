@@ -162,4 +162,4 @@ npm run typecheck  # tsc --noEmit
 
 ## License
 
-MIT
+Apache License 2.0 — Copyright 2026 Anton Arapov. See [LICENSE](LICENSE) for the full text.
