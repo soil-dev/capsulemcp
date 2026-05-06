@@ -69,6 +69,26 @@ describe("createOpportunity", () => {
   });
 });
 
+describe("deleteOpportunity", () => {
+  it("issues DELETE /opportunities/:id when confirm=true", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      status: 204,
+      ok: true,
+      headers: new Headers(),
+      json: async () => ({}),
+      statusText: "No Content",
+    } as Awaited<ReturnType<typeof fetch>>);
+
+    const { deleteOpportunity } = await import("../src/tools/opportunities.js");
+    const result = await deleteOpportunity({ id: 21, confirm: true });
+
+    const [url, options] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toContain("/opportunities/21");
+    expect((options as RequestInit).method).toBe("DELETE");
+    expect(result).toEqual({ deleted: true, id: 21 });
+  });
+});
+
 describe("updateOpportunity", () => {
   it("puts only the provided fields", async () => {
     mockFetch(200, { opportunity: { id: 20, probability: 80 } });

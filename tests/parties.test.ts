@@ -91,6 +91,33 @@ describe("createParty", () => {
   });
 });
 
+describe("deleteParty", () => {
+  it("rejects confirm=false at the schema level", async () => {
+    const { deletePartySchema } = await import("../src/tools/parties.js");
+    expect(deletePartySchema.safeParse({ id: 1, confirm: false }).success).toBe(false);
+    expect(deletePartySchema.safeParse({ id: 1 }).success).toBe(false);
+    expect(deletePartySchema.safeParse({ id: 1, confirm: true }).success).toBe(true);
+  });
+
+  it("issues DELETE /parties/:id when confirm=true", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      status: 204,
+      ok: true,
+      headers: new Headers(),
+      json: async () => ({}),
+      statusText: "No Content",
+    } as Awaited<ReturnType<typeof fetch>>);
+
+    const { deleteParty } = await import("../src/tools/parties.js");
+    const result = await deleteParty({ id: 7, confirm: true });
+
+    const [url, options] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toContain("/parties/7");
+    expect((options as RequestInit).method).toBe("DELETE");
+    expect(result).toEqual({ deleted: true, id: 7 });
+  });
+});
+
 describe("updateParty", () => {
   it("puts to /parties/:id with only provided fields", async () => {
     const updated = { party: { id: 5, type: "person", jobTitle: "CTO" } };

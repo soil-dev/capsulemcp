@@ -65,6 +65,26 @@ describe("createProject", () => {
   });
 });
 
+describe("deleteProject", () => {
+  it("issues DELETE /kases/:id when confirm=true", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      status: 204,
+      ok: true,
+      headers: new Headers(),
+      json: async () => ({}),
+      statusText: "No Content",
+    } as Awaited<ReturnType<typeof fetch>>);
+
+    const { deleteProject } = await import("../src/tools/projects.js");
+    const result = await deleteProject({ id: 11, confirm: true });
+
+    const [url, options] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toContain("/kases/11");
+    expect((options as RequestInit).method).toBe("DELETE");
+    expect(result).toEqual({ deleted: true, id: 11 });
+  });
+});
+
 describe("updateProject", () => {
   it("puts only the provided fields to /kases/:id", async () => {
     mockFetch(200, { kase: { id: 10, status: "CLOSED" } });

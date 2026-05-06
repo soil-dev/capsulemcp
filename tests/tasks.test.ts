@@ -87,6 +87,26 @@ describe("updateTask", () => {
   });
 });
 
+describe("deleteTask", () => {
+  it("issues DELETE /tasks/:id when confirm=true", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      status: 204,
+      ok: true,
+      headers: new Headers(),
+      json: async () => ({}),
+      statusText: "No Content",
+    } as Awaited<ReturnType<typeof fetch>>);
+
+    const { deleteTask } = await import("../src/tools/tasks.js");
+    const result = await deleteTask({ id: 6, confirm: true });
+
+    const [url, options] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toContain("/tasks/6");
+    expect((options as RequestInit).method).toBe("DELETE");
+    expect(result).toEqual({ deleted: true, id: 6 });
+  });
+});
+
 describe("completeTask", () => {
   it("puts status COMPLETED to /tasks/:id", async () => {
     mockFetch(200, { task: { id: 5, status: "COMPLETED" } });
