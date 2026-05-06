@@ -2,6 +2,26 @@ import { fetch, type Response } from "undici";
 
 const BASE_URL = "https://api.capsulecrm.com/api/v2";
 
+/**
+ * Returns true if the server is configured to refuse all writes.
+ * Set CAPSULE_MCP_READONLY to "1", "true", or "yes" (case-insensitive)
+ * to enable. Any other value (including unset) means writes are allowed.
+ */
+export function isReadOnly(): boolean {
+  const v = process.env["CAPSULE_MCP_READONLY"]?.toLowerCase();
+  return v === "1" || v === "true" || v === "yes";
+}
+
+export class CapsuleReadOnlyError extends Error {
+  constructor(method: string) {
+    super(
+      `capsule-mcp is running in read-only mode (CAPSULE_MCP_READONLY is set). ` +
+        `${method} requests are refused. Unset CAPSULE_MCP_READONLY to enable writes.`,
+    );
+    this.name = "CapsuleReadOnlyError";
+  }
+}
+
 export class CapsuleAuthError extends Error {
   constructor(message: string) {
     super(message);
@@ -169,6 +189,7 @@ export async function capsuleGet<T>(
 }
 
 export async function capsulePost<T>(path: string, body: unknown): Promise<T> {
+  if (isReadOnly()) throw new CapsuleReadOnlyError("POST");
   const token = getToken();
   const url = buildUrl(path);
   const res = await doFetch(url, {
@@ -180,6 +201,7 @@ export async function capsulePost<T>(path: string, body: unknown): Promise<T> {
 }
 
 export async function capsulePut<T>(path: string, body: unknown): Promise<T> {
+  if (isReadOnly()) throw new CapsuleReadOnlyError("PUT");
   const token = getToken();
   const url = buildUrl(path);
   const res = await doFetch(url, {
@@ -196,6 +218,7 @@ export async function capsulePut<T>(path: string, body: unknown): Promise<T> {
  * other verbs and resolve to void on 204.
  */
 export async function capsuleDelete(path: string): Promise<void> {
+  if (isReadOnly()) throw new CapsuleReadOnlyError("DELETE");
   const token = getToken();
   const url = buildUrl(path);
   const res = await doFetch(url, {
