@@ -24,23 +24,23 @@ export async function listTasks(input: z.infer<typeof listTasksSchema>) {
 
 // ── Write ───────────────────────────────────────────────────────────────────
 
-export const createTaskSchema = z
-  .object({
-    description: z.string().min(1),
-    dueOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe("YYYY-MM-DD"),
-    dueTime: z.string().regex(/^\d{2}:\d{2}$/).optional().describe("HH:MM in user's timezone"),
-    detail: z.string().optional(),
-    ownerId: z.number().int().positive().optional(),
-    partyId: z.number().int().positive().optional(),
-    opportunityId: z.number().int().positive().optional(),
-    projectId: z.number().int().positive().optional(),
-  })
-  .refine(
-    (d) => [d.partyId, d.opportunityId, d.projectId].filter(Boolean).length <= 1,
-    { message: "Provide at most one of partyId, opportunityId, or projectId" },
-  );
+// MCP SDK needs a plain ZodObject shape; keep refine in the handler.
+export const createTaskSchema = z.object({
+  description: z.string().min(1),
+  dueOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe("YYYY-MM-DD"),
+  dueTime: z.string().regex(/^\d{2}:\d{2}$/).optional().describe("HH:MM in user's timezone"),
+  detail: z.string().optional(),
+  ownerId: z.number().int().positive().optional(),
+  partyId: z.number().int().positive().optional().describe("Link task to a party (mutually exclusive with opportunityId/projectId)"),
+  opportunityId: z.number().int().positive().optional().describe("Link task to an opportunity (mutually exclusive with partyId/projectId)"),
+  projectId: z.number().int().positive().optional().describe("Link task to a project (mutually exclusive with partyId/opportunityId)"),
+});
 
 export async function createTask(input: z.infer<typeof createTaskSchema>) {
+  const linked = [input.partyId, input.opportunityId, input.projectId].filter(Boolean);
+  if (linked.length > 1) {
+    throw new Error("Provide at most one of partyId, opportunityId, or projectId");
+  }
   const { ownerId, partyId, opportunityId, projectId, ...rest } = input;
 
   const body: Record<string, unknown> = { ...rest };
