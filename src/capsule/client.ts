@@ -15,7 +15,7 @@ export function isReadOnly(): boolean {
 export class CapsuleReadOnlyError extends Error {
   constructor(method: string) {
     super(
-      `capsule-mcp is running in read-only mode (CAPSULE_MCP_READONLY is set). ` +
+      `capsulemcp is running in read-only mode (CAPSULE_MCP_READONLY is set). ` +
         `${method} requests are refused. Unset CAPSULE_MCP_READONLY to enable writes.`,
     );
     this.name = "CapsuleReadOnlyError";

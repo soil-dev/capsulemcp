@@ -44,7 +44,7 @@ import { listTagsSchema, listTags } from "./tools/tags.js";
 import { listUsersSchema, listUsers } from "./tools/users.js";
 
 const server = new McpServer({
-  name: "capsule-mcp",
+  name: "capsulemcp",
   version: "0.1.0",
 });
 
@@ -360,7 +360,7 @@ const transport = new StdioServerTransport();
 
 if (READ_ONLY) {
   // Stdout is reserved for MCP protocol traffic — log boot info to stderr.
-  console.error("[capsule-mcp] read-only mode: write/delete tools are not registered");
+  console.error("[capsulemcp] read-only mode: write/delete tools are not registered");
 }
 
 try {
@@ -368,6 +368,6 @@ try {
 } catch (err) {
   const message = err instanceof Error ? err.message : String(err);
   // Write to stderr — stdout is reserved for MCP protocol traffic.
-  console.error(`[capsule-mcp] Failed to start: ${message}`);
+  console.error(`[capsulemcp] Failed to start: ${message}`);
   process.exit(1);
 }

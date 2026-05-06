@@ -1,11 +1,11 @@
 {
-  "name": "capsule-mcp",
+  "name": "capsulemcp",
   "version": "0.1.0",
   "description": "MCP server for Capsule CRM",
   "license": "Apache-2.0",
   "type": "module",
   "bin": {
-    "capsule-mcp": "./dist/index.js"
+    "capsulemcp": "./dist/index.js"
   },
   "main": "./dist/index.js",
   "files": [

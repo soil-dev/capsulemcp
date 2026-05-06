@@ -1,4 +1,4 @@
-# capsule-mcp
+# capsulemcp
 
 An MCP (Model Context Protocol) server for [Capsule CRM](https://capsulecrm.com), exposing read and write operations as tools you can use directly from Claude Desktop or Claude Code.
 
@@ -53,7 +53,7 @@ If you'd rather not use `npx`, you can clone and build locally:
 
 ```bash
 git clone https://github.com/arapov/capsulemcp.git
-cd capsule-mcp
+cd capsulemcp
 npm install        # this also runs the build via the prepare script
 ```
 
@@ -64,7 +64,7 @@ Then point Claude Desktop at the built file:
   "mcpServers": {
     "capsule": {
       "command": "node",
-      "args": ["/absolute/path/to/capsule-mcp/dist/index.js"],
+      "args": ["/absolute/path/to/capsulemcp/dist/index.js"],
       "env": {
         "CAPSULE_API_TOKEN": "<your token>"
       }
@@ -182,7 +182,7 @@ Add it to the `env` block of your Claude Desktop config:
 }
 ```
 
-When read-only mode is active, the server prints `[capsule-mcp] read-only mode: write/delete tools are not registered` to stderr on startup.
+When read-only mode is active, the server prints `[capsulemcp] read-only mode: write/delete tools are not registered` to stderr on startup.
 
 ### Both at once?
 
