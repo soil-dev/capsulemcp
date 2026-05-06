@@ -49,13 +49,6 @@ If you'd rather not have the token in a config file, you can omit `--env` and in
 export CAPSULE_API_TOKEN=<your token>
 ```
 
-For a more secure setup, store the token in your OS keychain and have the launcher fetch it (macOS example):
-
-```bash
-security add-generic-password -s capsulemcp -a $USER -w '<your token>'
-claude mcp add capsule -- bash -c 'CAPSULE_API_TOKEN=$(security find-generic-password -s capsulemcp -w) exec npx -y github:arapov/capsulemcp'
-```
-
 ## Manual install (alternative)
 
 If you'd rather not use `npx`, you can clone and build locally:
