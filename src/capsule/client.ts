@@ -129,8 +129,10 @@ async function doFetch(
 
 async function handleResponse<T>(res: Response): Promise<T> {
   if (res.status === 401) {
+    const detail = await parseErrorBody(res);
     throw new CapsuleAuthError(
-      "Capsule API returned 401 Unauthorized. Check that CAPSULE_API_TOKEN is valid and not expired.",
+      `Capsule API returned 401 Unauthorized: ${detail}. ` +
+        "Check that CAPSULE_API_TOKEN is valid and not expired.",
     );
   }
   if (!res.ok) {

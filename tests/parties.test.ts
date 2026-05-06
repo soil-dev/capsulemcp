@@ -131,11 +131,11 @@ describe("error body parsing", () => {
 });
 
 describe("auth errors", () => {
-  it("throws CapsuleAuthError on 401", async () => {
-    mockFetch(401, { message: "Unauthorized" });
+  it("throws CapsuleAuthError on 401 and includes the body message", async () => {
+    mockFetch(401, { message: "Token expired" });
 
     const { getParty } = await import("../src/tools/parties.js");
-    await expect(getParty({ id: 1 })).rejects.toThrow("401");
+    await expect(getParty({ id: 1 })).rejects.toThrow(/401.*Token expired/);
   });
 
   it("throws if CAPSULE_API_TOKEN is missing", async () => {
