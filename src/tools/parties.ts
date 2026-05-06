@@ -36,7 +36,10 @@ export const searchPartiesSchema = z.object({
 });
 
 export async function searchParties(input: z.infer<typeof searchPartiesSchema>) {
-  const { data, nextPage } = await capsuleGet<{ parties: unknown[] }>("/parties", {
+  // Capsule uses a dedicated /parties/search endpoint when filtering by query.
+  // Plain GET /parties ignores `q` and returns the full list, so we must route.
+  const path = input.q ? "/parties/search" : "/parties";
+  const { data, nextPage } = await capsuleGet<{ parties: unknown[] }>(path, {
     q: input.q,
     embed: input.embed,
     page: input.page,

@@ -28,16 +28,30 @@ afterEach(() => {
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 describe("searchParties", () => {
-  it("returns parties and nextPage from Link header", async () => {
+  it("routes to /parties/search when q is provided", async () => {
     mockFetch(200, { parties: [{ id: 1, type: "person" }] }, {
-      Link: '<https://api.capsulecrm.com/api/v2/parties?page=2&perPage=25>; rel="next"',
+      Link: '<https://api.capsulecrm.com/api/v2/parties/search?page=2&perPage=25>; rel="next"',
     });
 
     const { searchParties } = await import("../src/tools/parties.js");
     const result = await searchParties({ q: "alice", page: 1, perPage: 25 });
 
+    const [url] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toContain("/parties/search");
+    expect(url).toContain("q=alice");
     expect(result.parties).toHaveLength(1);
     expect(result.nextPage).toBe(2);
+  });
+
+  it("routes to /parties (no /search) when q is omitted", async () => {
+    mockFetch(200, { parties: [] });
+
+    const { searchParties } = await import("../src/tools/parties.js");
+    await searchParties({ page: 1, perPage: 25 });
+
+    const [url] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toContain("/parties?");
+    expect(url).not.toContain("/search");
   });
 
   it("returns undefined nextPage when no Link header", async () => {

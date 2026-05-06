@@ -17,15 +17,28 @@ beforeEach(() => { process.env["CAPSULE_API_TOKEN"] = "test-token"; });
 afterEach(() => { vi.clearAllMocks(); delete process.env["CAPSULE_API_TOKEN"]; });
 
 describe("searchOpportunities", () => {
-  it("returns opportunities and nextPage", async () => {
-    mockFetch(200, { opportunities: [{ id: 1, name: "Big Deal" }] }, {
+  it("routes to /opportunities/search when q is provided", async () => {
+    mockFetch(200, { opportunities: [{ id: 1, name: "Big Deal" }] });
+
+    const { searchOpportunities } = await import("../src/tools/opportunities.js");
+    await searchOpportunities({ q: "deal", page: 1, perPage: 25 });
+
+    const [url] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toContain("/opportunities/search");
+    expect(url).toContain("q=deal");
+  });
+
+  it("routes to /opportunities when q is omitted", async () => {
+    mockFetch(200, { opportunities: [] }, {
       Link: '<https://api.capsulecrm.com/api/v2/opportunities?page=2&perPage=25>; rel="next"',
     });
 
     const { searchOpportunities } = await import("../src/tools/opportunities.js");
     const result = await searchOpportunities({ page: 1, perPage: 25 });
 
-    expect(result.opportunities).toHaveLength(1);
+    const [url] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toContain("/opportunities?");
+    expect(url).not.toContain("/search");
     expect(result.nextPage).toBe(2);
   });
 });

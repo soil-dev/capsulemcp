@@ -18,8 +18,10 @@ export const searchOpportunitiesSchema = z.object({
 export async function searchOpportunities(
   input: z.infer<typeof searchOpportunitiesSchema>,
 ) {
+  // GET /opportunities ignores `q`; the search sub-resource is required for filtering.
+  const path = input.q ? "/opportunities/search" : "/opportunities";
   const { data, nextPage } = await capsuleGet<{ opportunities: unknown[] }>(
-    "/opportunities",
+    path,
     { q: input.q, embed: input.embed, page: input.page, perPage: input.perPage },
   );
   return { ...data, nextPage };

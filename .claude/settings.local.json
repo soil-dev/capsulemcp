@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:developer.capsulecrm.com)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(npm install *)",
+      "Bash(npx tsc *)",
+      "Bash(npm test *)"
+    ]
+  }
+}
