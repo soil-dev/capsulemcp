@@ -47,6 +47,11 @@ import {
 import { listPipelinesSchema, listPipelines, listMilestonesSchema, listMilestones } from "./tools/pipelines.js";
 import { listTagsSchema, listTags } from "./tools/tags.js";
 import { listUsersSchema, listUsers } from "./tools/users.js";
+import {
+  filterPartiesSchema, filterParties,
+  filterOpportunitiesSchema, filterOpportunities,
+  filterProjectsSchema, filterProjects,
+} from "./tools/filters.js";
 
 /**
  * Build a fully-configured MCP server with all Capsule tools registered.
@@ -72,10 +77,20 @@ export function createCapsuleMcpServer(): McpServer {
 
   server.tool(
     "search_parties",
-    "Search or list people and organisations in Capsule CRM. Returns a page of matching parties and an optional nextPage cursor.",
+    "Free-text search or list people and organisations in Capsule CRM. Returns results in Capsule's default order (no sort parameter is supported here). For structured queries — 'most recent', 'tagged X', 'added this month' — use filter_parties instead.",
     searchPartiesSchema.shape,
     async (input) => {
       const result = await searchParties(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    "filter_parties",
+    "Filter parties by structured conditions (date ranges, tags, fields). Use this — not search_parties — for questions like 'most recent client', 'parties added this week', 'parties tagged VIP'. Capsule's API does not support ad-hoc sort, but for 'most recent X' you can filter by a date field (e.g. {field: 'addedOn', operator: 'is within last', value: 30}) and pick the highest-id row from the result — Capsule IDs are monotonic, so newest id = newest record.",
+    filterPartiesSchema.shape,
+    async (input) => {
+      const result = await filterParties(input);
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     },
   );
@@ -146,10 +161,20 @@ export function createCapsuleMcpServer(): McpServer {
 
   server.tool(
     "search_opportunities",
-    "Search or list opportunities in Capsule CRM.",
+    "Free-text search or list opportunities in Capsule CRM. Returns results in Capsule's default order (no sort parameter is supported here). For structured queries — 'most recent', 'won this quarter', 'in pipeline X at milestone Y' — use filter_opportunities instead.",
     searchOpportunitiesSchema.shape,
     async (input) => {
       const result = await searchOpportunities(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    "filter_opportunities",
+    "Filter opportunities by structured conditions (milestone, value, close date, tags). Use this — not search_opportunities — for questions like 'last won deal', 'opportunities closed this month', 'pipeline X at milestone Y'. Capsule's API does not support ad-hoc sort, but for 'most recent X' you can filter by a date field (e.g. {field: 'closedOn', operator: 'is within last', value: 90}) and pick the highest-id row — Capsule IDs are monotonic, so newest id = newest record.",
+    filterOpportunitiesSchema.shape,
+    async (input) => {
+      const result = await filterOpportunities(input);
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     },
   );
@@ -200,10 +225,20 @@ export function createCapsuleMcpServer(): McpServer {
 
   server.tool(
     "list_projects",
-    "List projects (cases) in Capsule CRM, optionally filtered by status.",
+    "List projects (cases) in Capsule CRM, optionally filtered by status. Returns results in Capsule's default order (no sort parameter is supported here). For structured queries — 'most recent project', 'projects opened this month', 'projects tagged X' — use filter_projects instead.",
     listProjectsSchema.shape,
     async (input) => {
       const result = await listProjects(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    "filter_projects",
+    "Filter projects (cases) by structured conditions (date ranges, status, tags, owner). Use this — not list_projects — for questions like 'most recent project', 'projects opened this month'. Capsule's API does not support ad-hoc sort, but for 'most recent X' you can filter by a date field and pick the highest-id row — Capsule IDs are monotonic, so newest id = newest record.",
+    filterProjectsSchema.shape,
+    async (input) => {
+      const result = await filterProjects(input);
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     },
   );
