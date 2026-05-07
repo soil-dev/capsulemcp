@@ -43,6 +43,7 @@ import {
   InMemoryClientsStore,
   FixedClientStore,
 } from "./auth/provider.js";
+import { ICON_SVG } from "./icon.js";
 
 const PORT = parseInt(process.env["PORT"] ?? "8080", 10);
 const PUBLIC_BASE_URL = process.env["PUBLIC_BASE_URL"];
@@ -151,6 +152,22 @@ app.use(
     resourceName: "Capsule CRM MCP",
   }),
 );
+
+// ── Icon (cosmetic) ─────────────────────────────────────────────────────────
+//
+// Some connector UIs prefer fetching an icon over a URL rather than reading
+// it from the MCP serverInfo payload. Serve our SVG at both /icon.svg and
+// /favicon.ico (browsers default-fetch the latter). 24h cache — the icon
+// rotates approximately never.
+
+const iconHandler = (_req: express.Request, res: express.Response): void => {
+  res
+    .set("Content-Type", "image/svg+xml")
+    .set("Cache-Control", "public, max-age=86400")
+    .send(ICON_SVG);
+};
+app.get("/icon.svg", iconHandler);
+app.get("/favicon.ico", iconHandler);
 
 // ── MCP endpoint (gated by Bearer token from the OAuth provider) ────────────
 

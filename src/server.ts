@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { isReadOnly } from "./capsule/client.js";
+import { ICONS } from "./icon.js";
 
 import {
   searchPartiesSchema, searchParties,
@@ -62,6 +63,9 @@ export function createCapsuleMcpServer(): McpServer {
   const server = new McpServer({
     name: "capsulemcp",
     version: "0.3.1",
+    description: "Read and (optionally) modify Capsule CRM data — parties, opportunities, projects, tasks, timeline entries, pipelines, tags.",
+    websiteUrl: "https://github.com/arapov/capsulemcp",
+    icons: ICONS,
   });
 
   // ── Parties ───────────────────────────────────────────────────────────────
