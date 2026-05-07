@@ -27,7 +27,7 @@ For most individual users the install is a single JSON snippet pasted into Claud
      "mcpServers": {
        "capsule": {
          "command": "npx",
-         "args": ["-y", "github:arapov/capsulemcp#v0.3.1"],
+         "args": ["-y", "github:arapov/capsulemcp#v0.3.2"],
          "env": {
            "CAPSULE_API_TOKEN": "<paste token here>",
            "CAPSULE_MCP_READONLY": "1"
