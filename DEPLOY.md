@@ -55,11 +55,12 @@ The override is project-scoped — other projects in the org keep the default co
 | Variable | Required | Default | Notes |
 |---|---|---|---|
 | `CAPSULE_API_TOKEN` | yes | — | Use a read-scoped token for org deployments |
-| `MCP_SHARED_SECRET` | strongly recommended | (none) | Bearer token gating inbound `/mcp` requests. Without it, anyone who finds the URL can use your Capsule token |
+| `PUBLIC_BASE_URL` | yes (HTTP entry only) | — | The public origin where this server is reachable, e.g. `https://capsulemcp.example.run.app`. Used to build OAuth metadata URLs and the authorization redirect base |
+| `MCP_OAUTH_SIGNING_KEY` | yes (HTTP entry only) | — | HMAC key used to sign OAuth access tokens. Must be ≥ 16 chars and stable across instances. Treat like a private key. Falls back to `MCP_SHARED_SECRET` for backwards compat |
 | `CAPSULE_MCP_READONLY` | no | unset | Set to `1` to belt-and-brace your read-scoped token (skips registering write tools at the MCP layer) |
 | `PORT` | no | `8080` | Cloud Run sets this automatically |
 
-Generate a strong shared secret with:
+Generate a strong signing key with:
 
 ```bash
 openssl rand -hex 32
@@ -70,62 +71,62 @@ openssl rand -hex 32
 Two distinct credentials handle two distinct trust relationships. Understanding the difference matters before you deploy.
 
 ```
-┌─────────┐   Authorization: Bearer <MCP_SHARED_SECRET>   ┌──────────┐
-│ Claude  │ ────────────────────────────────────────────▶ │ Cloud Run│
-│         │                                                │   /mcp   │
-└─────────┘                                                └──────────┘
-                                                                │
-                              Authorization: Bearer <CAPSULE_API_TOKEN>
-                                                                │
-                                                                ▼
-                                                          ┌──────────┐
-                                                          │  Capsule │
-                                                          │   API    │
-                                                          └──────────┘
+┌─────────┐  OAuth flow → Bearer <signed access token>  ┌──────────┐
+│ Claude  │ ──────────────────────────────────────────▶ │ Cloud Run│
+│         │                                              │   /mcp   │
+└─────────┘                                              └──────────┘
+                                                              │
+                            Authorization: Bearer <CAPSULE_API_TOKEN>
+                                                              │
+                                                              ▼
+                                                        ┌──────────┐
+                                                        │  Capsule │
+                                                        │   API    │
+                                                        └──────────┘
 ```
 
 | Credential | Travels between | Lives in | What it proves |
 |---|---|---|---|
-| `MCP_SHARED_SECRET` | Claude → your Cloud Run | (a) Cloud Run env var, (b) Custom Connector config in Claude admin | "I'm an authorised caller of *this MCP server*" |
+| OAuth access token (HMAC-signed by `MCP_OAUTH_SIGNING_KEY`) | Claude → your Cloud Run | Issued by `/token`, sent in `Authorization: Bearer …` on every `/mcp` request | "I completed the OAuth dance with this server and the signing key still says I'm valid" |
+| `MCP_OAUTH_SIGNING_KEY` | server-only | Cloud Run env var (typically backed by Secret Manager) | The HMAC key. Never sent over the network. Rotating it invalidates every outstanding access + refresh token |
 | `CAPSULE_API_TOKEN` | your Cloud Run → Capsule API | Cloud Run env var only — never seen by Claude or end users | "I'm a registered Capsule user with these scopes" |
 
-### Why two tokens
+### Why this design
 
-If you gave Claude the Capsule API token directly, you'd lose the layered defences:
+Anthropic's Custom Connector machinery requires the MCP HTTP server to speak OAuth 2.1 + RFC 7591 (Dynamic Client Registration). Behind the OAuth surface this server runs an **auto-approve provider**: any caller that completes the flow gets an access token, and all access tokens grant the same effective access (calls to Capsule are made with the single shared `CAPSULE_API_TOKEN`).
 
-- **Different lifecycles**: rotate `MCP_SHARED_SECRET` weekly without touching Capsule. Rotate `CAPSULE_API_TOKEN` only when the scope or owning user changes.
-- **Different blast radius**: a leaked `MCP_SHARED_SECRET` lets an attacker call your MCP using the limited tools you registered, against the read-scoped Capsule token. A leaked `CAPSULE_API_TOKEN` could be used directly against `api.capsulecrm.com`, bypassing your MCP entirely and unlocking whatever the scope allows.
-- **Audit separation**: Cloud Run access logs show Claude's calls in. Capsule's API logs show your service's calls out. Two logs, two stories.
+This is by design for a read-only org connector. Per-user identity in Capsule would require a real OAuth flow against Capsule's own OAuth — much bigger build, only worth it if you need per-user audit in Capsule.
 
 ### What end users (and Claude) never see
 
-The Capsule API token is set as a Cloud Run env var and read by the server at startup. It is never sent in any response to Claude. It is never visible in any tool result. The LLM cannot exfiltrate it.
+The Capsule API token is set as a Cloud Run env var, read by the server at startup, and used to authenticate the server's own outbound calls to `api.capsulecrm.com`. It is never sent in any response to Claude. It is never visible in any tool result. The LLM cannot exfiltrate it.
 
-### The three layers, what they protect, what they don't
+### The layers and what they protect
 
 | Layer | Type | Protects against | Doesn't protect against |
 |---|---|---|---|
-| The URL itself | Obscurity | Random scans, casual snooping | Targeted lookups via Certificate Transparency logs (every Cloud Run cert is published in CT logs and searchable on `crt.sh`) |
-| `MCP_SHARED_SECRET` | Authentication | Anyone without the secret | Anyone *with* the secret |
-| `CAPSULE_API_TOKEN` scope | Authorisation / blast radius | Limits what a compromised secret can do | Reading data the token already has access to |
+| The URL itself | Obscurity | Random scans, casual snooping | Targeted lookups via Certificate Transparency logs (every Cloud Run cert is in CT logs, searchable on `crt.sh`) |
+| OAuth handshake + access token | Authentication | Direct unauthenticated requests to `/mcp` | Any caller willing to complete the auto-approve flow (which is anyone who can reach the URL) |
+| `MCP_OAUTH_SIGNING_KEY` | Token integrity | Forged tokens, replay against a rotated key | Tokens stolen from in-flight HTTPS / a compromised Anthropic side |
+| `CAPSULE_API_TOKEN` scope | Authorisation / blast radius | Limits what tokens at any of the above layers can ultimately do | Reading data the Capsule token's user already has access to |
 
-**Treat the URL as public.** Cloud Run URLs are not secrets — CT logs index every certificate Google issues for `*.run.app`. Your security boundary is `MCP_SHARED_SECRET`, not URL obscurity.
+**Treat the URL as public.** Cloud Run URLs are not secrets — they're indexed in CT logs. Your security boundary is the OAuth signing key + the Capsule token's scope, not URL obscurity.
 
 ### Threat-model summary
 
-In one sentence: **anyone who obtains both the URL AND `MCP_SHARED_SECRET` can read whatever the deployed `CAPSULE_API_TOKEN` can read.** The URL alone is not enough.
+The auto-approve OAuth flow is open in the same sense as the MCP itself: anyone who can reach the URL can complete it and get a valid token. **What ultimately limits an attacker is the Capsule API token's scope.** This is why DEPLOY.md insists on a read-scoped token.
 
-For an internal read-only org connector with a strong randomly-generated secret + a read-scoped token + periodic rotation, this is the right balance for most teams.
+For an internal read-only org connector this is the right balance: simple to operate, no per-user OAuth plumbing, blast radius bounded by the read scope.
 
 ### Optional hardening
 
 | Defence | Effort | What it adds |
 |---|---|---|
-| Cloud Armor IP allowlist for Anthropic's egress IPs | Medium | Only Anthropic can reach `/mcp` (need their published ranges) |
-| Rotate `MCP_SHARED_SECRET` on a schedule | Low | Limits the exploit window of any leak |
+| Cloud Armor IP allowlist for Anthropic's egress IPs | Medium | Only Anthropic can reach `/mcp` and the OAuth endpoints |
+| Rotate `MCP_OAUTH_SIGNING_KEY` on a schedule | Low | Invalidates outstanding tokens; Anthropic re-runs the OAuth dance silently |
 | Cloud Run logs → alerting on anomalous patterns | Low | Visibility into misuse |
-| Rate limiting (Cloud Armor or app-level) | Medium | Caps damage if a secret leaks |
-| Per-user OAuth instead of shared token | High | Per-user audit, individual revocation. Bigger build |
+| Rate limiting (Cloud Armor or app-level) | Medium | Caps damage if a token is leaked or the URL is being probed |
+| Per-user OAuth against Capsule's OAuth (real per-user identity) | High | Per-user audit in Capsule, individual revocation. Significant build |
 
 ## Deploying to Google Cloud Run
 
@@ -137,21 +138,22 @@ Cloud Run builds the container with Cloud Build using the bundled `Dockerfile`. 
 
 ```bash
 PROJECT=<your-gcp-project>
+PROJECT_NUMBER=$(gcloud projects describe $PROJECT --format='value(projectNumber)')
 REGION=europe-west1
 SERVICE=capsulemcp
-SHARED_SECRET=$(openssl rand -hex 32)
-echo "save this: SHARED_SECRET=$SHARED_SECRET"
+SIGNING_KEY=$(openssl rand -hex 32)
+PUBLIC_URL=https://${SERVICE}-${PROJECT_NUMBER}.${REGION}.run.app
 
 gcloud run deploy $SERVICE \
   --project=$PROJECT \
   --region=$REGION \
   --source=. \
   --allow-unauthenticated \
-  --set-env-vars=CAPSULE_MCP_READONLY=1,MCP_SHARED_SECRET=$SHARED_SECRET \
+  --set-env-vars=CAPSULE_MCP_READONLY=1,MCP_OAUTH_SIGNING_KEY=$SIGNING_KEY,PUBLIC_BASE_URL=$PUBLIC_URL \
   --set-env-vars=^|^CAPSULE_API_TOKEN=<your read-scoped capsule token>
 ```
 
-`--allow-unauthenticated` makes the service reachable from Claude's servers; auth is enforced at the application layer via `MCP_SHARED_SECRET`. Cloud Run prints the service URL after a minute or two — something like `https://capsulemcp-abc123-ew.a.run.app`.
+`--allow-unauthenticated` makes the service reachable from Claude's servers; auth is enforced at the application layer via OAuth. Cloud Run prints the service URL after a minute or two — it should match the `PUBLIC_BASE_URL` you computed (`https://${SERVICE}-${PROJECT_NUMBER}.${REGION}.run.app`).
 
 ### Path B — build locally, push to Artifact Registry
 
@@ -182,13 +184,15 @@ podman build --platform linux/amd64 -t $REPO/$SERVICE:$TAG .
 podman push $REPO/$SERVICE:$TAG
 
 # 4. deploy that exact image
-SHARED_SECRET=$(openssl rand -hex 32)
+PROJECT_NUMBER=$(gcloud projects describe $PROJECT --format='value(projectNumber)')
+SIGNING_KEY=$(openssl rand -hex 32)
+PUBLIC_URL=https://${SERVICE}-${PROJECT_NUMBER}.${REGION}.run.app
 gcloud run deploy $SERVICE \
   --project=$PROJECT \
   --region=$REGION \
   --image=$REPO/$SERVICE:$TAG \
   --allow-unauthenticated \
-  --set-env-vars=CAPSULE_MCP_READONLY=1,MCP_SHARED_SECRET=$SHARED_SECRET \
+  --set-env-vars=CAPSULE_MCP_READONLY=1,MCP_OAUTH_SIGNING_KEY=$SIGNING_KEY,PUBLIC_BASE_URL=$PUBLIC_URL \
   --set-env-vars=^|^CAPSULE_API_TOKEN=<your read-scoped capsule token>
 ```
 
@@ -216,40 +220,35 @@ The application doesn't depend on anything Cloud Run-specific. Cloud Run is just
 
 The canonical service URL format is `https://${SERVICE}-${PROJECT_NUMBER}.${REGION}.run.app`. The legacy `${SERVICE}-${HASH}-${REGION_SHORT}.a.run.app` format that `gcloud run services describe` sometimes shows may not route on newer services — prefer the project-number format.
 
+The `/mcp` endpoint is gated by OAuth, so a direct `curl` smoke test requires walking the OAuth dance. The simplest checks:
+
 ```bash
 URL=https://<your-service-url>
 
-# Health (no auth required)
-curl $URL/healthz
-# → {"ok":true,"readOnly":true}
+# 1. Discovery — should return JSON metadata (no auth)
+curl -s "$URL/.well-known/oauth-authorization-server" | python3 -m json.tool | head -10
+curl -s "$URL/.well-known/oauth-protected-resource" | python3 -m json.tool | head -10
 
-# MCP initialize handshake (auth required)
-curl $URL/mcp \
-  -H "Authorization: Bearer $SHARED_SECRET" \
+# 2. /mcp without a token — should be HTTP 401 with WWW-Authenticate header
+curl -i -s -X POST "$URL/mcp" \
   -H "Content-Type: application/json" \
-  -H "Accept: application/json, text/event-stream" \
-  -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"smoke","version":"0"}},"id":1}'
-# → event: message
-#   data: {"result":{"protocolVersion":"2024-11-05","capabilities":{"tools":{...}}, ...}}
-
-# Real tool call
-curl $URL/mcp \
-  -H "Authorization: Bearer $SHARED_SECRET" \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json, text/event-stream" \
-  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"list_users","arguments":{}},"id":2}'
+  -d '{}' | head -5
+# → HTTP/2 401
+#   www-authenticate: Bearer error="invalid_token", ...
 ```
 
-If the third call returns Capsule data, the deployment is good.
+If both pass, the OAuth surfaces are correctly exposed and the connector machinery in Claude will be able to register a client and obtain a token. The full `/mcp` round-trip is best done by registering the connector in Claude and issuing a test prompt — see "Register as a Custom Connector" below.
 
 ## Register as a Custom Connector in Claude
+
+Anthropic's Custom Connector machinery handles the OAuth dance for you. From the connector's point of view this server is just an OAuth-protected MCP endpoint.
 
 1. In Claude.ai, open **Settings → Connectors → Custom Connectors** (admin only)
 2. Click **Add custom connector**
 3. **Name**: `Capsule CRM` (or whatever fits your org)
 4. **Description**: short summary that helps members understand what it does
 5. **Server URL**: `https://<your-service-url>/mcp`
-6. **Authentication**: Bearer token, value = your `MCP_SHARED_SECRET`
+6. **Authentication**: Anthropic will detect from `/.well-known/oauth-protected-resource` that the server requires OAuth and walk through Dynamic Client Registration on its own. There is no static token to paste.
 7. Save
 
 Anthropic's UI evolves; if a field looks different, check Anthropic's current connector docs.
@@ -268,10 +267,13 @@ Anyone in the org now opens that Project, starts a chat, and the Capsule tools +
 ### Rotation
 
 ```bash
-# Rotate the shared secret — also update it in the Custom Connector config in Claude
+# Rotate the OAuth signing key. This invalidates every outstanding access
+# and refresh token; Anthropic's connector silently re-runs the OAuth
+# dance on the next request and gets a fresh token. No user action
+# required.
 gcloud run services update $SERVICE \
   --region=$REGION \
-  --update-env-vars=MCP_SHARED_SECRET=$(openssl rand -hex 32)
+  --update-env-vars=MCP_OAUTH_SIGNING_KEY=$(openssl rand -hex 32)
 
 # Rotate the Capsule token
 gcloud run services update $SERVICE \
@@ -305,7 +307,8 @@ For a few dozen internal users, expect this to fall within Cloud Run's free tier
 | URL returns Google HTML 404 / "Your client does not have permission" | `iam.allowedPolicyMemberDomains` constraint is blocking `allUsers`. Override at project level — see Prerequisites |
 | `gcloud run deploy --image` succeeds but Cloud Run reports "container failed to start and listen on the port" | Image was built for the wrong architecture. Rebuild with `--platform linux/amd64` |
 | URL from `gcloud run services describe` returns 404 but the deploy command's "Service URL" works | Use the canonical `https://${SERVICE}-${PROJECT_NUMBER}.${REGION}.run.app` format |
-| `/healthz` works but `/mcp` returns 401 (JSON, from your app) | `MCP_SHARED_SECRET` mismatch between the deployment env var and the Custom Connector config |
+| `/.well-known/oauth-*` returns 404 | Server didn't start, or `PUBLIC_BASE_URL` env var isn't set. Check logs |
+| Connector adds OK in Anthropic but `tools/list` is empty | Anthropic's OAuth client failed to obtain a token. Check Cloud Run logs around `/authorize` and `/token` requests |
 | `/mcp` returns 500 with "401 Unauthorized" in logs | The deployed `CAPSULE_API_TOKEN` is invalid or expired |
 | `tools/list` returns no `create_*`/`update_*` tools | Working as intended — `CAPSULE_MCP_READONLY=1` is set, or your Capsule token has Read scope |
 | Tool calls return empty results | Verify the Capsule token's user has access to that data; tokens inherit the user's record-level visibility |
