@@ -12,7 +12,7 @@
 
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-export type TokenType = "access" | "refresh" | "code";
+export type TokenType = "access" | "refresh";
 
 export interface SignedTokenClaims {
   type: TokenType;
@@ -20,10 +20,6 @@ export interface SignedTokenClaims {
   scopes: string[];
   /** ms-since-epoch when this token expires. */
   expiresAt: number;
-  /** PKCE code_challenge from the authorize step (only set on type=code). */
-  codeChallenge?: string;
-  /** Redirect URI bound at authorize time (only set on type=code). */
-  redirectUri?: string;
   /** Random nonce so two tokens with otherwise identical claims differ. */
   nonce: string;
 }

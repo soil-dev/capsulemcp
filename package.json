@@ -1,6 +1,6 @@
 {
   "name": "capsulemcp",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "MCP server for Capsule CRM",
   "license": "Apache-2.0",
   "type": "module",

@@ -1,6 +1,15 @@
 import { fetch, type Response } from "undici";
 
-const BASE_URL = "https://api.capsulecrm.com/api/v2";
+const DEFAULT_BASE_URL = "https://api.capsulecrm.com/api/v2";
+
+/**
+ * The Capsule API base URL. Defaults to the production endpoint;
+ * override with `CAPSULE_API_BASE_URL` for testing or self-hosted
+ * instances. Read at call time so tests can stub it.
+ */
+function baseUrl(): string {
+  return process.env["CAPSULE_API_BASE_URL"] ?? DEFAULT_BASE_URL;
+}
 
 /**
  * Returns true if the server is configured to refuse all writes.
@@ -147,7 +156,11 @@ async function doFetch(
   return res;
 }
 
-async function handleResponse<T>(res: Response): Promise<T> {
+/**
+ * Throw a typed error if the response is not 2xx. Does NOT consume the
+ * body on success — the caller decides whether to read it.
+ */
+async function throwForStatus(res: Response): Promise<void> {
   if (res.status === 401) {
     const detail = await parseErrorBody(res);
     throw new CapsuleAuthError(
@@ -159,13 +172,17 @@ async function handleResponse<T>(res: Response): Promise<T> {
     const msg = await parseErrorBody(res);
     throw new CapsuleApiError(res.status, `Capsule API error ${res.status}: ${msg}`);
   }
+}
+
+async function handleResponse<T>(res: Response): Promise<T> {
+  await throwForStatus(res);
   return res.json() as Promise<T>;
 }
 
 export type QueryParams = Record<string, string | number | boolean | undefined>;
 
 function buildUrl(path: string, params?: QueryParams): string {
-  const url = new URL(`${BASE_URL}${path}`);
+  const url = new URL(`${baseUrl()}${path}`);
   if (params) {
     for (const [key, value] of Object.entries(params)) {
       if (value !== undefined) {
@@ -213,9 +230,9 @@ export async function capsulePut<T>(path: string, body: unknown): Promise<T> {
 }
 
 /**
- * DELETE /<path>. Capsule returns 204 No Content on success, so there is
- * no body to parse. We surface auth/API errors via the same helpers as
- * other verbs and resolve to void on 204.
+ * DELETE /<path>. Capsule returns 204 No Content on success — no body
+ * to parse. Errors flow through the same `throwForStatus` helper as
+ * GET/POST/PUT.
  */
 export async function capsuleDelete(path: string): Promise<void> {
   if (isReadOnly()) throw new CapsuleReadOnlyError("DELETE");
@@ -227,17 +244,8 @@ export async function capsuleDelete(path: string): Promise<void> {
   });
 
   if (res.status === 204) return;
+  await throwForStatus(res);
 
-  if (res.status === 401) {
-    const detail = await parseErrorBody(res);
-    throw new CapsuleAuthError(
-      `Capsule API returned 401 Unauthorized: ${detail}. ` +
-        "Check that CAPSULE_API_TOKEN is valid and not expired.",
-    );
-  }
-  if (!res.ok) {
-    const msg = await parseErrorBody(res);
-    throw new CapsuleApiError(res.status, `Capsule API error ${res.status}: ${msg}`);
-  }
-  // Some endpoints may return 200 with a body — drain it.
+  // 2xx-but-not-204: drain the body so the connection can be reused.
+  await res.text();
 }

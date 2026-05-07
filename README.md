@@ -1,225 +1,69 @@
 # capsulemcp
 
-An MCP (Model Context Protocol) server for [Capsule CRM](https://capsulecrm.com), exposing read and write operations as tools you can use directly from Claude Desktop or Claude Code.
+A [Model Context Protocol](https://modelcontextprotocol.io) server for [Capsule CRM](https://capsulecrm.com). Connect Claude (Desktop, Code, or web Projects via Custom Connector) to your CRM and let it read or update parties, opportunities, projects, tasks, and timeline entries with natural-language prompts.
 
-## Requirements
+- **32 tools** across the Capsule resource graph (17 in read-only mode) — full read coverage plus careful, confirm-gated writes
+- **Two transports**: stdio for local installs (Claude Desktop / Code), HTTP+OAuth for hosted Custom Connectors
+- **Read-only mode** as a one-env-var flag; works alongside read-scoped Capsule tokens
+- **Apache 2.0**
 
-- [Node.js 20 or newer](https://nodejs.org/)
-- A Capsule Personal Access Token (see below)
+## Pick your install
 
-## Generating a Capsule Personal Access Token
-
-1. Log into Capsule and open **My Preferences** (top-right avatar menu).
-2. Go to **API Authentication Tokens**.
-3. Click **Generate new token**, give it a name, and copy the value — it won't be shown again.
-
-## Quick install — Claude Desktop
-
-Open `claude_desktop_config.json` (on macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`; on Windows: `%APPDATA%\Claude\claude_desktop_config.json`) and add:
-
-```json
-{
-  "mcpServers": {
-    "capsule": {
-      "command": "npx",
-      "args": ["-y", "github:arapov/capsulemcp"],
-      "env": {
-        "CAPSULE_API_TOKEN": "<your token>"
-      }
-    }
-  }
-}
-```
-
-Restart Claude Desktop. The Capsule tools will appear in the tool picker.
-
-> **First launch is slow.** `npx` will clone the repo, install dependencies, and build the server on the first run (~30 seconds). Subsequent launches are fast — npx caches the built binary.
-
-## Quick install — Claude Code
-
-```bash
-claude mcp add capsule --env CAPSULE_API_TOKEN=<your token> -- npx -y github:arapov/capsulemcp
-```
-
-`--env` writes the token into Claude Code's MCP config (`~/.claude.json` by default) scoped to this server only — same model as the `env` block in Claude Desktop's JSON.
-
-If you'd rather not have the token in a config file, you can omit `--env` and instead export `CAPSULE_API_TOKEN` in your shell profile so the spawned MCP server inherits it:
-
-```bash
-export CAPSULE_API_TOKEN=<your token>
-```
-
-## Manual install (alternative)
-
-If you'd rather not use `npx`, you can clone and build locally:
-
-```bash
-git clone https://github.com/arapov/capsulemcp.git
-cd capsulemcp
-npm install        # this also runs the build via the prepare script
-```
-
-Then point Claude Desktop at the built file:
-
-```json
-{
-  "mcpServers": {
-    "capsule": {
-      "command": "node",
-      "args": ["/absolute/path/to/capsulemcp/dist/index.js"],
-      "env": {
-        "CAPSULE_API_TOKEN": "<your token>"
-      }
-    }
-  }
-}
-```
-
-After editing code, run `npm run build` and restart Claude Desktop — it re-spawns the MCP server on each app start, so the updated `dist/` is picked up. For tighter iteration, leave `npm run dev` (tsup watch mode) running and just restart Claude Desktop sessions when you want to test.
-
-The `npx -y github:arapov/capsulemcp` install above caches per-spec and **does not** auto-update from main. Pin to a commit SHA (`#abc1234`) when you want a fresh build, or clear the cache with `rm -rf ~/.npm/_npx`.
-
-## Org-wide deployment
-
-Want to deploy this once and have your whole organisation use it from a shared Claude Project — no per-user setup? See [DEPLOY.md](DEPLOY.md) for the Cloud Run + Custom Connector + shared Project walk-through. Requires a Claude Teams or Enterprise plan.
-
-## Available tools
-
-### Parties (people & organisations)
-
-| Tool | Description |
+| You want | Read this |
 |---|---|
-| `search_parties` | Search or list parties; supports `q`, `embed`, `page`, `perPage` |
-| `get_party` | Fetch a single party by ID |
-| `list_party_opportunities` | All opportunities linked to a party |
-| `list_party_projects` | All projects linked to a party |
-| `create_party` | Create a person or organisation |
-| `update_party` | Update fields on an existing party (partial update) |
-| `delete_party` | **Destructive.** Permanently delete a party and all linked records. Requires `confirm: true` |
+| To use it locally with Claude Desktop or Claude Code | [INSTALL.md](INSTALL.md) |
+| To deploy it once and have your whole team use it via Claude.ai | [DEPLOY.md](DEPLOY.md) |
+| To contribute, debug, add a tool, or cut a release | [HOWTO.md](HOWTO.md) |
 
-### Opportunities
+For most individual users the install is a single JSON snippet pasted into Claude Desktop's config — see [INSTALL.md](INSTALL.md).
 
-| Tool | Description |
-|---|---|
-| `search_opportunities` | Search or list opportunities |
-| `get_opportunity` | Fetch a single opportunity by ID |
-| `create_opportunity` | Create an opportunity linked to a party and milestone |
-| `update_opportunity` | Update fields on an existing opportunity |
-| `delete_opportunity` | **Destructive.** Permanently delete an opportunity. Requires `confirm: true` |
+## Quick start (Claude Desktop)
 
-### Projects
+1. Generate a Capsule API token: **My Preferences → API Authentication Tokens → Generate**, choose the **Read** scope for safety.
+2. Add this to your `claude_desktop_config.json` (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
 
-| Tool | Description |
-|---|---|
-| `list_projects` | List projects, optionally filtered by `OPEN`/`CLOSED` |
-| `get_project` | Fetch a single project by ID |
-| `create_project` | Create a project linked to a party |
-| `update_project` | Update fields on a project (incl. closing it via `status`) |
-| `delete_project` | **Destructive.** Permanently delete a project. Prefer closing via `update_project status='CLOSED'`. Requires `confirm: true` |
+   ```json
+   {
+     "mcpServers": {
+       "capsule": {
+         "command": "npx",
+         "args": ["-y", "github:arapov/capsulemcp#v0.3.1"],
+         "env": {
+           "CAPSULE_API_TOKEN": "<paste token here>",
+           "CAPSULE_MCP_READONLY": "1"
+         }
+       }
+     }
+   }
+   ```
 
-### Tasks
+3. Restart Claude Desktop. The Capsule tools appear in the tool picker.
 
-| Tool | Description |
-|---|---|
-| `list_tasks` | List tasks, filterable by status, assignee, or due date |
-| `create_task` | Create a task, optionally linked to a party, opportunity, or project |
-| `update_task` | Update fields on a task |
-| `complete_task` | Mark a task as completed |
-| `delete_task` | **Destructive.** Permanently delete a task. Prefer `complete_task` to keep history. Requires `confirm: true` |
+That's it. The first launch takes ~30 seconds while npx clones and builds; subsequent launches are fast. See [INSTALL.md](INSTALL.md) for the Claude Code path, manual install, and troubleshooting.
 
-### Notes
+## Tools
 
-| Tool | Description |
-|---|---|
-| `list_party_entries` | List timeline entries (notes, captured emails, completed tasks) for a party |
-| `list_opportunity_entries` | Same, for an opportunity |
-| `list_project_entries` | Same, for a project |
-| `get_entry` | Fetch a single entry by ID (full note body / email subject + body) |
-| `add_note` | Add a note to a party, opportunity, or project |
-| `delete_entry` | **Destructive.** Permanently delete a note (or other entry). Requires `confirm: true` |
+| Group | Read | Write |
+|---|---|---|
+| Parties (people/orgs) | `search_parties`, `get_party`, `list_party_opportunities`, `list_party_projects`, `list_party_entries` | `create_party`, `update_party`, `delete_party` |
+| Opportunities | `search_opportunities`, `get_opportunity`, `list_opportunity_entries` | `create_opportunity`, `update_opportunity`, `delete_opportunity` |
+| Projects (cases) | `list_projects`, `get_project`, `list_project_entries` | `create_project`, `update_project`, `delete_project` |
+| Tasks | `list_tasks` | `create_task`, `update_task`, `complete_task`, `delete_task` |
+| Entries (notes / captured emails) | `get_entry` | `add_note`, `delete_entry` |
+| Pipelines & milestones | `list_pipelines`, `list_milestones` | — |
+| Tags | `list_tags` | — |
+| Users | `list_users` | — |
 
-### Pipelines & milestones
+All paginated tools default `perPage=25` (max 100) and return a `nextPage` cursor when more results exist. Many GET tools accept an `embed` parameter (e.g. `tags,fields`) — see Capsule's API docs for the full list per resource.
 
-| Tool | Description |
-|---|---|
-| `list_pipelines` | List all sales pipelines |
-| `list_milestones` | List milestones within a specific pipeline |
+### Read-only mode
 
-### Tags
+Set `CAPSULE_MCP_READONLY=1` to disable every write/delete tool at the MCP layer (none of `create_*`, `update_*`, `complete_task`, `add_note`, or `delete_*` are registered). Pair it with a Capsule token that has the **Read** scope for defence in depth — your token's scope is the hard ceiling regardless of the env var.
 
-| Tool | Description |
-|---|---|
-| `list_tags` | List tags for `parties`, `opportunities`, or `kases` |
+### Delete safety
 
-### Users
-
-| Tool | Description |
-|---|---|
-| `list_users` | List all users in the account |
-
-## Read-only mode
-
-You have two ways to lock this MCP server to reads only. They are complementary — pick whichever fits your situation, or use both.
-
-### Option A: Generate a read-only Capsule token (recommended)
-
-When generating a Personal Access Token in Capsule (**My Preferences → API Authentication Tokens**), Capsule lets you choose the token's scope. Pick the **Read** scope and the token cannot mutate anything, no matter what tool tries to use it. Capsule rejects writes server-side with a 403.
-
-This is the strongest guarantee: even if a bug, a custom script, or a different MCP client uses the same token, it still can't write.
-
-Use this when you want a hard ceiling on what the token itself can do.
-
-### Option B: `CAPSULE_MCP_READONLY` env var
-
-Set `CAPSULE_MCP_READONLY=1` (or `true`/`yes`) to disable every write, update, and delete tool *in this MCP server* without changing the token. The server registers only the read tools (`search_*`, `get_*`, `list_*`). The underlying client also refuses non-GET HTTP as a defence-in-depth backstop.
-
-Use this when:
-
-- You already have a read-write token in use elsewhere and don't want to generate a second one
-- You want the LLM to never see write tools in its tool list (avoids confused attempts)
-- You want to flip the same install between modes by editing one config field
-
-Add it to the `env` block of your Claude Desktop config:
-
-```json
-{
-  "mcpServers": {
-    "capsule": {
-      "command": "npx",
-      "args": ["-y", "github:arapov/capsulemcp"],
-      "env": {
-        "CAPSULE_API_TOKEN": "<your token>",
-        "CAPSULE_MCP_READONLY": "1"
-      }
-    }
-  }
-}
-```
-
-When read-only mode is active, the server prints `[capsulemcp] read-only mode: write/delete tools are not registered` to stderr on startup.
-
-### Both at once?
-
-Yes — they stack. A read-scoped token + `CAPSULE_MCP_READONLY=1` gives you the cleanest tool list (no write tools registered) AND a server-side guarantee. Belt and braces.
-
-## Delete safety
-
-Every `delete_*` tool requires an explicit `confirm: true` argument. The Zod schema rejects the call before any HTTP request is made if `confirm` is missing or `false`. The tool descriptions also tell the LLM to read the entity first (e.g. `get_party`) and confirm with the user before invoking — but the schema gate is the hard backstop.
-
-There is no `delete_pipeline`, `delete_milestone`, `delete_user`, or `delete_tag` tool — those are configuration objects whose deletion can break existing records, and are intentionally out of scope.
-
-## Pagination
-
-Paginated tools return a `nextPage` field when more results exist. Pass it back as the `page` argument to fetch the next page. Default `perPage` is 25; maximum is 100.
-
-## Development
-
-```bash
-npm run dev        # watch mode build
-npm test           # run tests (no real API calls)
-npm run typecheck  # tsc --noEmit
-```
+Every `delete_*` tool requires `confirm: true` in its arguments. Without it, the schema rejects the call before any HTTP is made. Tool descriptions tell Claude to read the entity first and confirm with the user before invoking. The combined design — read-scoped token, read-only mode flag, schema-level confirm gate — means destructive actions are deliberate, not accidental.
 
 ## License
 
-Apache License 2.0 — Copyright 2026 Anton Arapov. See [LICENSE](LICENSE) for the full text.
+[Apache License 2.0](LICENSE) — Copyright 2026 Anton Arapov.
