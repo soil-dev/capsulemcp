@@ -2,7 +2,7 @@
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server for [Capsule CRM](https://capsulecrm.com). Connect Claude (Desktop, Code, or web Projects via Custom Connector) to your CRM and let it read or update parties, opportunities, projects, tasks, and timeline entries with natural-language prompts.
 
-- **32 tools** across the Capsule resource graph (17 in read-only mode) — full read coverage plus careful, confirm-gated writes
+- **35 tools** across the Capsule resource graph (20 in read-only mode) — full read coverage plus careful, confirm-gated writes
 - **Two transports**: stdio for local installs (Claude Desktop / Code), HTTP+OAuth for hosted Custom Connectors
 - **Read-only mode** as a one-env-var flag; works alongside read-scoped Capsule tokens
 - **Apache 2.0**
@@ -45,9 +45,9 @@ That's it. The first launch takes ~30 seconds while npx clones and builds; subse
 
 | Group | Read | Write |
 |---|---|---|
-| Parties (people/orgs) | `search_parties`, `get_party`, `list_party_opportunities`, `list_party_projects`, `list_party_entries` | `create_party`, `update_party`, `delete_party` |
-| Opportunities | `search_opportunities`, `get_opportunity`, `list_opportunity_entries` | `create_opportunity`, `update_opportunity`, `delete_opportunity` |
-| Projects (cases) | `list_projects`, `get_project`, `list_project_entries` | `create_project`, `update_project`, `delete_project` |
+| Parties (people/orgs) | `search_parties`, `filter_parties`, `get_party`, `list_party_opportunities`, `list_party_projects`, `list_party_entries` | `create_party`, `update_party`, `delete_party` |
+| Opportunities | `search_opportunities`, `filter_opportunities`, `get_opportunity`, `list_opportunity_entries` | `create_opportunity`, `update_opportunity`, `delete_opportunity` |
+| Projects (cases) | `list_projects`, `filter_projects`, `get_project`, `list_project_entries` | `create_project`, `update_project`, `delete_project` |
 | Tasks | `list_tasks` | `create_task`, `update_task`, `complete_task`, `delete_task` |
 | Entries (notes / captured emails) | `get_entry` | `add_note`, `delete_entry` |
 | Pipelines & milestones | `list_pipelines`, `list_milestones` | — |
@@ -55,6 +55,8 @@ That's it. The first launch takes ~30 seconds while npx clones and builds; subse
 | Users | `list_users` | — |
 
 All paginated tools default `perPage=25` (max 100) and return a `nextPage` cursor when more results exist. Many GET tools accept an `embed` parameter (e.g. `tags,fields`) — see Capsule's API docs for the full list per resource.
+
+The `filter_*` tools wrap Capsule's structured filter endpoint (`POST /<entity>/filters/results`) and accept an array of `{field, operator, value}` conditions ANDed together. Capsule's API does not support ad-hoc sort, so for "most recent X" questions filter by a date condition (e.g. `addedOn is within last 7`) and pick the highest id from the result — Capsule's numeric IDs are monotonically incrementing.
 
 ### Read-only mode
 
