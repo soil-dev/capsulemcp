@@ -50,20 +50,45 @@ gcloud resource-manager org-policies set-policy policy.yaml --project=$PROJECT
 
 The override is project-scoped — other projects in the org keep the default constraint. Reverse with `gcloud resource-manager org-policies delete iam.allowedPolicyMemberDomains --project=$PROJECT`.
 
+## Auth modes
+
+The HTTP entry supports two OAuth modes, selected at startup by env-var presence. Static-client is the recommended mode for any public deployment; auto-approve is opt-in for local / private-network use. If neither is configured, the server **refuses to start** so you can't accidentally deploy in an unsafe configuration.
+
+### `static-client` mode (default, recommended)
+
+Active when `MCP_OAUTH_CLIENT_ID` + `MCP_OAUTH_CLIENT_SECRET` are set. One hard-coded OAuth client is recognised; Dynamic Client Registration (`/register`) is **disabled**. The configured `client_secret` is the real auth boundary, equivalent to a strong API key.
+
+Only callers presenting both the right `client_id` and the right `client_secret` can complete the OAuth dance. This is the model you want for any deployment reachable from the public internet.
+
+### `insecure-auto-approve` mode
+
+Active when `MCP_OAUTH_INSECURE_AUTO_APPROVE=1`. DCR is open and `/authorize` auto-approves. **Anyone who can reach the URL can register a client and get in.** Suitable only for:
+
+- local development on `localhost`
+- private-network deployments (VPN, internal-only Cloud Run, behind Cloud Armor IP allowlist)
+- ngrok-style temporary demos
+
+The server logs a loud warning at boot when this mode is active.
+
 ## Environment variables
 
 | Variable | Required | Default | Notes |
 |---|---|---|---|
 | `CAPSULE_API_TOKEN` | yes | — | Use a read-scoped token for org deployments |
-| `PUBLIC_BASE_URL` | yes (HTTP entry only) | — | The public origin where this server is reachable, e.g. `https://capsulemcp.example.run.app`. Used to build OAuth metadata URLs and the authorization redirect base |
+| `PUBLIC_BASE_URL` | yes (HTTP entry only) | — | The public origin where this server is reachable, e.g. `https://capsulemcp.example.run.app`. Used to build OAuth metadata URLs |
 | `MCP_OAUTH_SIGNING_KEY` | yes (HTTP entry only) | — | HMAC key used to sign OAuth access tokens. Must be ≥ 16 chars and stable across instances. Treat like a private key. Falls back to `MCP_SHARED_SECRET` for backwards compat |
+| `MCP_OAUTH_CLIENT_ID` | yes for `static-client` mode | — | The one allowed OAuth client_id; pasted into Anthropic's connector form |
+| `MCP_OAUTH_CLIENT_SECRET` | yes for `static-client` mode | — | The matching client_secret; same treatment. Must be ≥ 16 chars |
+| `MCP_OAUTH_REDIRECT_URIS` | no | Anthropic's known callbacks | Comma-separated allow-list of redirect URIs. Default covers `claude.ai/api/mcp/auth_callback`, `claude.ai/api/oauth/callback`, `claude.ai/oauth/callback` |
+| `MCP_OAUTH_INSECURE_AUTO_APPROVE` | yes for that mode | — | Set to `1`/`true` to enable auto-approve mode. Mutually exclusive with `MCP_OAUTH_CLIENT_ID` |
 | `CAPSULE_MCP_READONLY` | no | unset | Set to `1` to belt-and-brace your read-scoped token (skips registering write tools at the MCP layer) |
 | `PORT` | no | `8080` | Cloud Run sets this automatically |
 
-Generate a strong signing key with:
+Generate strong values with:
 
 ```bash
-openssl rand -hex 32
+openssl rand -hex 32        # signing key, client_secret
+uuidgen                     # client_id (any unique string is fine, UUID is convenient)
 ```
 
 ## Security model
@@ -93,9 +118,9 @@ Two distinct credentials handle two distinct trust relationships. Understanding 
 
 ### Why this design
 
-Anthropic's Custom Connector machinery requires the MCP HTTP server to speak OAuth 2.1 + RFC 7591 (Dynamic Client Registration). Behind the OAuth surface this server runs an **auto-approve provider**: any caller that completes the flow gets an access token, and all access tokens grant the same effective access (calls to Capsule are made with the single shared `CAPSULE_API_TOKEN`).
+Anthropic's Custom Connector machinery requires the MCP HTTP server to speak OAuth 2.1 + Dynamic Client Registration. Behind the OAuth surface, this server runs in one of two modes (see Auth modes above). In `static-client` mode the configured `client_secret` is the real auth boundary; in `insecure-auto-approve` it isn't.
 
-This is by design for a read-only org connector. Per-user identity in Capsule would require a real OAuth flow against Capsule's own OAuth — much bigger build, only worth it if you need per-user audit in Capsule.
+Even in `static-client` mode, all valid callers grant the same effective access — there's no per-user identity. Calls to Capsule use the single shared `CAPSULE_API_TOKEN`. Per-user identity in Capsule would require federating `/authorize` to Capsule's own OAuth, which is significantly more code and only worth it if you need per-user audit in Capsule.
 
 ### What end users (and Claude) never see
 
@@ -106,17 +131,19 @@ The Capsule API token is set as a Cloud Run env var, read by the server at start
 | Layer | Type | Protects against | Doesn't protect against |
 |---|---|---|---|
 | The URL itself | Obscurity | Random scans, casual snooping | Targeted lookups via Certificate Transparency logs (every Cloud Run cert is in CT logs, searchable on `crt.sh`) |
-| OAuth handshake + access token | Authentication | Direct unauthenticated requests to `/mcp` | Any caller willing to complete the auto-approve flow (which is anyone who can reach the URL) |
-| `MCP_OAUTH_SIGNING_KEY` | Token integrity | Forged tokens, replay against a rotated key | Tokens stolen from in-flight HTTPS / a compromised Anthropic side |
+| `MCP_OAUTH_CLIENT_SECRET` (static-client mode only) | Real authentication | Anyone without the client_secret | Anyone *with* the client_secret |
+| OAuth handshake + access token | Token integrity | Forged tokens, replay against a rotated key | Tokens stolen from in-flight HTTPS / a compromised Anthropic side |
 | `CAPSULE_API_TOKEN` scope | Authorisation / blast radius | Limits what tokens at any of the above layers can ultimately do | Reading data the Capsule token's user already has access to |
 
-**Treat the URL as public.** Cloud Run URLs are not secrets — they're indexed in CT logs. Your security boundary is the OAuth signing key + the Capsule token's scope, not URL obscurity.
+**Treat the URL as public.** Cloud Run URLs are not secrets — they're indexed in CT logs. In `static-client` mode your security boundary is the `client_secret` + the Capsule token's scope; in `insecure-auto-approve` mode it's only the Capsule token's scope.
 
 ### Threat-model summary
 
-The auto-approve OAuth flow is open in the same sense as the MCP itself: anyone who can reach the URL can complete it and get a valid token. **What ultimately limits an attacker is the Capsule API token's scope.** This is why DEPLOY.md insists on a read-scoped token.
+In `static-client` mode: anyone who obtains both the URL AND `MCP_OAUTH_CLIENT_SECRET` can read whatever the deployed Capsule token can read. The `client_secret` is the gate.
 
-For an internal read-only org connector this is the right balance: simple to operate, no per-user OAuth plumbing, blast radius bounded by the read scope.
+In `insecure-auto-approve` mode: anyone who can reach the URL can read whatever the deployed Capsule token can read. There is no real auth gate — only the Capsule token's read scope bounds the damage.
+
+For an internal read-only org connector deployed publicly, **use `static-client` mode plus a read-scoped Capsule token** and you have a sensible balance: simple to operate, real auth boundary, blast radius capped by the read scope.
 
 ### Optional hardening
 
@@ -142,7 +169,13 @@ PROJECT_NUMBER=$(gcloud projects describe $PROJECT --format='value(projectNumber
 REGION=europe-west1
 SERVICE=capsulemcp
 SIGNING_KEY=$(openssl rand -hex 32)
+CLIENT_ID=$(uuidgen)
+CLIENT_SECRET=$(openssl rand -hex 32)
 PUBLIC_URL=https://${SERVICE}-${PROJECT_NUMBER}.${REGION}.run.app
+
+echo "Save these for the Anthropic Custom Connector form:"
+echo "  CLIENT_ID=$CLIENT_ID"
+echo "  CLIENT_SECRET=$CLIENT_SECRET"
 
 gcloud run deploy $SERVICE \
   --project=$PROJECT \
@@ -150,10 +183,11 @@ gcloud run deploy $SERVICE \
   --source=. \
   --allow-unauthenticated \
   --set-env-vars=CAPSULE_MCP_READONLY=1,MCP_OAUTH_SIGNING_KEY=$SIGNING_KEY,PUBLIC_BASE_URL=$PUBLIC_URL \
+  --set-env-vars=MCP_OAUTH_CLIENT_ID=$CLIENT_ID,MCP_OAUTH_CLIENT_SECRET=$CLIENT_SECRET \
   --set-env-vars=^|^CAPSULE_API_TOKEN=<your read-scoped capsule token>
 ```
 
-`--allow-unauthenticated` makes the service reachable from Claude's servers; auth is enforced at the application layer via OAuth. Cloud Run prints the service URL after a minute or two — it should match the `PUBLIC_BASE_URL` you computed (`https://${SERVICE}-${PROJECT_NUMBER}.${REGION}.run.app`).
+`--allow-unauthenticated` makes the service reachable from Claude's servers; auth is enforced at the application layer via OAuth (static-client mode). Cloud Run prints the service URL after a minute or two — it should match the `PUBLIC_BASE_URL` you computed (`https://${SERVICE}-${PROJECT_NUMBER}.${REGION}.run.app`).
 
 ### Path B — build locally, push to Artifact Registry
 
@@ -186,13 +220,17 @@ podman push $REPO/$SERVICE:$TAG
 # 4. deploy that exact image
 PROJECT_NUMBER=$(gcloud projects describe $PROJECT --format='value(projectNumber)')
 SIGNING_KEY=$(openssl rand -hex 32)
+CLIENT_ID=$(uuidgen)
+CLIENT_SECRET=$(openssl rand -hex 32)
 PUBLIC_URL=https://${SERVICE}-${PROJECT_NUMBER}.${REGION}.run.app
+echo "  CLIENT_ID=$CLIENT_ID  CLIENT_SECRET=$CLIENT_SECRET   ← paste into Anthropic"
 gcloud run deploy $SERVICE \
   --project=$PROJECT \
   --region=$REGION \
   --image=$REPO/$SERVICE:$TAG \
   --allow-unauthenticated \
   --set-env-vars=CAPSULE_MCP_READONLY=1,MCP_OAUTH_SIGNING_KEY=$SIGNING_KEY,PUBLIC_BASE_URL=$PUBLIC_URL \
+  --set-env-vars=MCP_OAUTH_CLIENT_ID=$CLIENT_ID,MCP_OAUTH_CLIENT_SECRET=$CLIENT_SECRET \
   --set-env-vars=^|^CAPSULE_API_TOKEN=<your read-scoped capsule token>
 ```
 
@@ -241,15 +279,35 @@ If both pass, the OAuth surfaces are correctly exposed and the connector machine
 
 ## Register as a Custom Connector in Claude
 
-Anthropic's Custom Connector machinery handles the OAuth dance for you. From the connector's point of view this server is just an OAuth-protected MCP endpoint.
+Anthropic's Custom Connector form (as of this writing) asks for three values: **MCP Server URL**, **Client ID**, **Client Secret**. In `static-client` mode you provide them directly:
 
-1. In Claude.ai, open **Settings → Connectors → Custom Connectors** (admin only)
-2. Click **Add custom connector**
-3. **Name**: `Capsule CRM` (or whatever fits your org)
-4. **Description**: short summary that helps members understand what it does
-5. **Server URL**: `https://<your-service-url>/mcp`
-6. **Authentication**: Anthropic will detect from `/.well-known/oauth-protected-resource` that the server requires OAuth and walk through Dynamic Client Registration on its own. There is no static token to paste.
-7. Save
+| Field | Value |
+|---|---|
+| MCP Server URL | `https://<your-service-url>/mcp` |
+| Client ID | `MCP_OAUTH_CLIENT_ID` you set during deploy |
+| Client Secret | `MCP_OAUTH_CLIENT_SECRET` you set during deploy |
+
+Save. Anthropic walks the OAuth dance using those credentials. No DCR involved.
+
+In `insecure-auto-approve` mode the Anthropic UI still wants Client ID + Client Secret, so you do a one-off DCR call against your deployed server to mint a pair:
+
+```sh
+URL=https://<your-service-url>
+curl -s -X POST "$URL/register" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "client_name": "Anthropic Claude Custom Connector",
+    "redirect_uris": [
+      "https://claude.ai/api/mcp/auth_callback",
+      "https://claude.ai/api/oauth/callback",
+      "https://claude.ai/oauth/callback"
+    ],
+    "grant_types": ["authorization_code", "refresh_token"],
+    "response_types": ["code"]
+  }' | python3 -m json.tool
+```
+
+The response contains `client_id` and `client_secret` to paste into Anthropic's form. Note: in auto-approve mode anyone can do this — that's the whole point of the warning.
 
 Anthropic's UI evolves; if a field looks different, check Anthropic's current connector docs.
 

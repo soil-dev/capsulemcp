@@ -1,35 +1,35 @@
 /**
- * Auto-approve OAuth 2.1 server provider for capsulemcp.
+ * OAuth 2.1 server provider for capsulemcp.
  *
  * Anthropic's Custom Connector machinery requires the MCP HTTP server to
- * speak the OAuth 2.1 + RFC 7591 (Dynamic Client Registration) protocol.
- * Building a real OAuth server with login pages, consent screens, and
- * per-user identity is overkill for an internal read-only org connector
- * backed by a single shared Capsule API token. This provider satisfies
- * the protocol surface while doing the simplest thing on every step:
+ * speak OAuth 2.1 + RFC 7591 (Dynamic Client Registration). This module
+ * implements a single OAuth server (`OAuthProvider`) parameterised by a
+ * clients store. Two stores are exported:
  *
- *   - DCR /register: accept any registration; mint random client_id and
- *     client_secret; remember it in process memory.
- *   - /authorize: auto-approve; immediately redirect with an
- *     authorization code containing PKCE challenge claims.
- *   - /token: verify the code, issue an HMAC-signed access token (and
- *     refresh token).
- *   - access tokens: HMAC-signed, stateless (no server-side storage),
- *     verifiable from the signing key alone.
+ *   - InMemoryClientsStore  — open DCR; auto-approve mode. Anyone who can
+ *                             reach the URL can register and get in.
+ *                             Suitable for local development or
+ *                             private-network deployments only.
  *
- * Trade-offs documented:
- *   - The DCR client store is in-memory; if the Cloud Run instance dies,
- *     existing access tokens still verify (signing key is stable) but a
- *     refresh would fail because the client_id is unknown. Anthropic
- *     would re-register on next use, which is silent.
- *   - Authorization codes are also in-memory; they're consumed within
- *     seconds so this is fine.
- *   - All clients get the same effective access — the underlying Capsule
- *     API token is shared. This is by design for a read-only org
- *     connector.
+ *   - FixedClientStore      — one hard-coded client; DCR disabled at the
+ *                             SDK level (registerClient is not
+ *                             implemented, so /register is not exposed).
+ *                             The shared client_secret is the real auth
+ *                             boundary. Recommended for any public
+ *                             deployment.
+ *
+ * In both cases /authorize is auto-approved (no human consent screen),
+ * because per-user identity isn't part of the model — the underlying
+ * Capsule API token is shared for all callers. To add real per-user
+ * identity, federate /authorize to an external OAuth/OIDC provider
+ * (future work).
+ *
+ * Access tokens and refresh tokens are HMAC-signed by `signingKey`
+ * (stable across instances). Authorization codes are kept in process
+ * memory; they're consumed within seconds so this is fine.
  */
 
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import type { Response } from "express";
 import type { OAuthRegisteredClientsStore } from "@modelcontextprotocol/sdk/server/auth/clients.js";
 import type {
@@ -64,7 +64,14 @@ interface AuthCodeState {
   expiresAt: number;
 }
 
-class InMemoryClientsStore implements OAuthRegisteredClientsStore {
+// ── Clients stores ──────────────────────────────────────────────────────────
+
+/**
+ * Open DCR: any caller can /register and get a fresh client_id +
+ * client_secret. Used in the insecure auto-approve mode for local /
+ * private-network deployments.
+ */
+export class InMemoryClientsStore implements OAuthRegisteredClientsStore {
   private readonly clients = new Map<string, OAuthClientInformationFull>();
 
   getClient(clientId: string): OAuthClientInformationFull | undefined {
@@ -85,18 +92,83 @@ class InMemoryClientsStore implements OAuthRegisteredClientsStore {
   }
 }
 
-export class AutoApproveOAuthProvider implements OAuthServerProvider {
-  readonly clientsStore: OAuthRegisteredClientsStore = new InMemoryClientsStore();
+/**
+ * Closed DCR: exactly one client recognised, configured at startup
+ * via env vars. Note the absence of `registerClient` — that signals
+ * the SDK to not expose /register, so DCR is unavailable.
+ *
+ * Verifying client_secret uses constant-time compare to defend against
+ * timing oracles on the secret value.
+ */
+export class FixedClientStore implements OAuthRegisteredClientsStore {
+  private readonly client: OAuthClientInformationFull;
+  private readonly secretBuffer: Buffer;
+
+  constructor(args: {
+    clientId: string;
+    clientSecret: string;
+    redirectUris: string[];
+    clientName?: string;
+  }) {
+    if (!args.clientId || args.clientId.length < 1) {
+      throw new Error("FixedClientStore: clientId is required");
+    }
+    if (!args.clientSecret || args.clientSecret.length < 16) {
+      throw new Error("FixedClientStore: clientSecret must be at least 16 chars");
+    }
+    if (!args.redirectUris.length) {
+      throw new Error("FixedClientStore: at least one redirectUri is required");
+    }
+    this.client = {
+      client_id: args.clientId,
+      client_secret: args.clientSecret,
+      client_id_issued_at: Math.floor(Date.now() / 1000),
+      // No expiry on the secret — managed externally (rotate by changing env).
+      client_secret_expires_at: 0,
+      redirect_uris: args.redirectUris,
+      grant_types: ["authorization_code", "refresh_token"],
+      response_types: ["code"],
+      token_endpoint_auth_method: "client_secret_post",
+      ...(args.clientName ? { client_name: args.clientName } : {}),
+    };
+    this.secretBuffer = Buffer.from(args.clientSecret);
+  }
+
+  getClient(clientId: string): OAuthClientInformationFull | undefined {
+    if (clientId !== this.client.client_id) return undefined;
+    return this.client;
+  }
+
+  /**
+   * Constant-time check that a presented client_secret matches the one
+   * configured at startup. Used by the auth router during /token grant
+   * validation. The router calls clientsStore.getClient(id) and then
+   * compares secrets itself, but providing this helper keeps the
+   * comparison logic in one place if the SDK shape ever changes.
+   */
+  verifyClientSecret(presented: string): boolean {
+    const a = Buffer.from(presented);
+    if (a.length !== this.secretBuffer.length) return false;
+    return timingSafeEqual(a, this.secretBuffer);
+  }
+}
+
+// ── Provider ────────────────────────────────────────────────────────────────
+
+export class OAuthProvider implements OAuthServerProvider {
+  readonly clientsStore: OAuthRegisteredClientsStore;
   private readonly authCodes = new Map<string, AuthCodeState>();
   private readonly signingKey: string;
 
-  constructor(signingKey: string) {
-    if (!signingKey || signingKey.length < 16) {
-      throw new Error(
-        "AutoApproveOAuthProvider: signing key must be at least 16 chars long",
-      );
+  constructor(args: {
+    clientsStore: OAuthRegisteredClientsStore;
+    signingKey: string;
+  }) {
+    if (!args.signingKey || args.signingKey.length < 16) {
+      throw new Error("OAuthProvider: signing key must be at least 16 chars long");
     }
-    this.signingKey = signingKey;
+    this.clientsStore = args.clientsStore;
+    this.signingKey = args.signingKey;
   }
 
   /**
@@ -117,7 +189,6 @@ export class AutoApproveOAuthProvider implements OAuthServerProvider {
       expiresAt: Date.now() + AUTH_CODE_TTL_MS,
     });
 
-    // Best-effort GC of expired codes — keeps the map from growing.
     this.gcAuthCodes();
 
     const url = new URL(params.redirectUri);
@@ -153,10 +224,7 @@ export class AutoApproveOAuthProvider implements OAuthServerProvider {
     if (redirectUri && redirectUri !== state.redirectUri) {
       throw new InvalidGrantError("redirect_uri mismatch");
     }
-
-    // Codes are single-use.
     this.authCodes.delete(authorizationCode);
-
     return this.issueTokenPair(client.client_id);
   }
 
@@ -243,5 +311,16 @@ export class AutoApproveOAuthProvider implements OAuthServerProvider {
     for (const [code, state] of this.authCodes.entries()) {
       if (state.expiresAt < now) this.authCodes.delete(code);
     }
+  }
+}
+
+// ── Backwards-compat alias ──────────────────────────────────────────────────
+//
+// v0.2.0 exported `AutoApproveOAuthProvider`. Keep the name as an alias so
+// any external code importing it still works.
+
+export class AutoApproveOAuthProvider extends OAuthProvider {
+  constructor(signingKey: string) {
+    super({ clientsStore: new InMemoryClientsStore(), signingKey });
   }
 }

@@ -5,7 +5,12 @@ import {
   TokenSignatureError,
   TokenExpiredError,
 } from "../src/auth/tokens.js";
-import { AutoApproveOAuthProvider } from "../src/auth/provider.js";
+import {
+  AutoApproveOAuthProvider,
+  FixedClientStore,
+  InMemoryClientsStore,
+  OAuthProvider,
+} from "../src/auth/provider.js";
 
 const KEY = "0123456789abcdef0123456789abcdef";
 
@@ -174,5 +179,92 @@ describe("AutoApproveOAuthProvider", () => {
     const tokens = await p.exchangeAuthorizationCode(client, code);
 
     await expect(p.verifyAccessToken(tokens.refresh_token!)).rejects.toThrow();
+  });
+});
+
+// ── FixedClientStore ────────────────────────────────────────────────────────
+
+describe("FixedClientStore", () => {
+  const baseArgs = {
+    clientId: "fixed-id",
+    clientSecret: "0123456789abcdef0123456789abcdef",
+    redirectUris: ["http://localhost:9999/cb"],
+  };
+
+  it("rejects empty clientId", () => {
+    expect(() => new FixedClientStore({ ...baseArgs, clientId: "" })).toThrow(
+      /clientId/,
+    );
+  });
+
+  it("rejects too-short clientSecret", () => {
+    expect(
+      () => new FixedClientStore({ ...baseArgs, clientSecret: "short" }),
+    ).toThrow(/at least 16/);
+  });
+
+  it("rejects empty redirectUris", () => {
+    expect(() => new FixedClientStore({ ...baseArgs, redirectUris: [] })).toThrow(
+      /redirectUri/,
+    );
+  });
+
+  it("getClient returns the configured client only for the configured id", () => {
+    const store = new FixedClientStore(baseArgs);
+    expect(store.getClient("fixed-id")?.client_id).toBe("fixed-id");
+    expect(store.getClient("anyone-else")).toBeUndefined();
+  });
+
+  it("does not implement registerClient (DCR disabled)", () => {
+    const store = new FixedClientStore(baseArgs);
+    expect((store as { registerClient?: unknown }).registerClient).toBeUndefined();
+  });
+
+  it("verifyClientSecret uses constant-time comparison", () => {
+    const store = new FixedClientStore(baseArgs);
+    expect(store.verifyClientSecret(baseArgs.clientSecret)).toBe(true);
+    expect(store.verifyClientSecret("short")).toBe(false);
+    expect(
+      store.verifyClientSecret("ffffffffffffffffffffffffffffffff"),
+    ).toBe(false);
+  });
+});
+
+// ── OAuthProvider with FixedClientStore — end-to-end via the provider API ───
+
+describe("OAuthProvider + FixedClientStore", () => {
+  const KEY_LOCAL = "0123456789abcdef0123456789abcdef";
+  const SECRET = "fixed-client-secret-must-be-strong-32";
+
+  function makeProvider() {
+    return new OAuthProvider({
+      clientsStore: new FixedClientStore({
+        clientId: "fixed-id",
+        clientSecret: SECRET,
+        redirectUris: ["http://x/cb"],
+      }),
+      signingKey: KEY_LOCAL,
+    });
+  }
+
+  it("authorize -> token -> verify roundtrip works for the configured client", async () => {
+    const p = makeProvider();
+    const client = p.clientsStore.getClient("fixed-id")!;
+    let redirected: string | undefined;
+    await p.authorize(
+      client,
+      { codeChallenge: "c", redirectUri: "http://x/cb" },
+      { redirect: (u: string) => { redirected = u; } } as never,
+    );
+    const code = new URL(redirected!).searchParams.get("code")!;
+    const tokens = await p.exchangeAuthorizationCode(client, code);
+    expect(tokens.access_token).toBeTruthy();
+    const auth = await p.verifyAccessToken(tokens.access_token);
+    expect(auth.clientId).toBe("fixed-id");
+  });
+
+  it("getClient returns undefined for unregistered ids", async () => {
+    const p = makeProvider();
+    expect(await p.clientsStore.getClient("not-the-fixed-one")).toBeUndefined();
   });
 });

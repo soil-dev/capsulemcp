@@ -3,31 +3,33 @@
  *
  * Runs the same MCP server the stdio entry does, but exposes it on HTTP
  * via StreamableHTTPServerTransport so Claude.ai's Custom Connector
- * feature can reach it. Designed for stateless single-container
- * deployments: each /mcp request constructs a fresh server + transport
- * pair.
+ * feature can reach it.
  *
- * Authentication is OAuth 2.1 with Dynamic Client Registration (RFC
- * 7591), as required by Anthropic's Custom Connector machinery. The
- * MCP SDK's mcpAuthRouter installs the standard /authorize, /token,
- * /register, and /.well-known/* endpoints. Our AutoApproveOAuthProvider
- * issues HMAC-signed access tokens — a Claude user goes through the
- * silent OAuth dance, gets a token, and the token then gates /mcp via
- * requireBearerAuth.
+ * Two OAuth modes are supported, selected by env-var presence:
  *
- * Required env:
- *   CAPSULE_API_TOKEN     Capsule Personal Access Token (read-scoped recommended)
- *   PUBLIC_BASE_URL       Public origin where this server is reachable,
- *                         e.g. https://capsulemcp-production-...run.app.
- *                         Used to build OAuth metadata URLs.
- *   MCP_OAUTH_SIGNING_KEY HMAC signing key for OAuth tokens. Must be a
- *                         stable secret >= 16 chars long. Treat like a
- *                         private key. Falls back to MCP_SHARED_SECRET
- *                         for backwards compat with v0.1.0 deployments.
+ *   - static-client (default, recommended for any public deployment):
+ *     One hard-coded client; DCR disabled; the client_secret is the real
+ *     auth boundary.
+ *     Required env: MCP_OAUTH_CLIENT_ID, MCP_OAUTH_CLIENT_SECRET.
+ *     Optional: MCP_OAUTH_REDIRECT_URIS (comma-separated; defaults to
+ *     Anthropic's known callback URIs).
+ *
+ *   - insecure-auto-approve (opt-in, for local / private-network use):
+ *     Open DCR + auto-approve. Anyone who can reach the URL gets in.
+ *     Required env: MCP_OAUTH_INSECURE_AUTO_APPROVE=1.
+ *
+ * If neither is configured, the server refuses to start with a clear
+ * error message — the secure mode is the path of least resistance.
+ *
+ * Required env in all modes:
+ *   CAPSULE_API_TOKEN     Capsule Personal Access Token (read-scoped)
+ *   PUBLIC_BASE_URL       Public origin where this server is reachable
+ *   MCP_OAUTH_SIGNING_KEY HMAC key for OAuth tokens (>=16 chars; stable
+ *                         across instances; falls back to MCP_SHARED_SECRET)
  *
  * Optional env:
- *   PORT                  Listen port (default 8080; Cloud Run injects this)
- *   CAPSULE_MCP_READONLY  Same semantics as the stdio server.
+ *   PORT                  Listen port (default 8080; Cloud Run injects)
+ *   CAPSULE_MCP_READONLY  Same semantics as the stdio server
  */
 
 import express from "express";
@@ -36,42 +38,111 @@ import { mcpAuthRouter } from "@modelcontextprotocol/sdk/server/auth/router.js";
 import { requireBearerAuth } from "@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js";
 import { isReadOnly } from "./capsule/client.js";
 import { createCapsuleMcpServer } from "./server.js";
-import { AutoApproveOAuthProvider } from "./auth/provider.js";
+import {
+  OAuthProvider,
+  InMemoryClientsStore,
+  FixedClientStore,
+} from "./auth/provider.js";
 
 const PORT = parseInt(process.env["PORT"] ?? "8080", 10);
 const PUBLIC_BASE_URL = process.env["PUBLIC_BASE_URL"];
 const SIGNING_KEY =
   process.env["MCP_OAUTH_SIGNING_KEY"] ?? process.env["MCP_SHARED_SECRET"];
 
-if (!PUBLIC_BASE_URL) {
-  console.error(
-    "[capsulemcp] FATAL: PUBLIC_BASE_URL is not set. " +
-      "It must be the public origin of this server (e.g. https://example.run.app), " +
-      "used to build OAuth metadata and authorization redirect URLs.",
-  );
-  process.exit(1);
-}
-if (!SIGNING_KEY || SIGNING_KEY.length < 16) {
-  console.error(
-    "[capsulemcp] FATAL: MCP_OAUTH_SIGNING_KEY (or MCP_SHARED_SECRET) " +
-      "must be set and at least 16 chars long. It is the HMAC key used to " +
-      "sign OAuth access tokens; rotating it invalidates all outstanding tokens.",
-  );
+const CLIENT_ID = process.env["MCP_OAUTH_CLIENT_ID"];
+const CLIENT_SECRET = process.env["MCP_OAUTH_CLIENT_SECRET"];
+const REDIRECT_URIS_ENV = process.env["MCP_OAUTH_REDIRECT_URIS"];
+const INSECURE_AUTO_APPROVE =
+  process.env["MCP_OAUTH_INSECURE_AUTO_APPROVE"] === "1" ||
+  process.env["MCP_OAUTH_INSECURE_AUTO_APPROVE"]?.toLowerCase() === "true";
+
+// Anthropic's known Custom Connector callback URIs. Used as the default
+// redirect_uris allow-list in static-client mode when the env var is not
+// set. Update as Anthropic publishes new ones.
+const DEFAULT_ANTHROPIC_REDIRECT_URIS = [
+  "https://claude.ai/api/mcp/auth_callback",
+  "https://claude.ai/api/oauth/callback",
+  "https://claude.ai/oauth/callback",
+];
+
+function fatal(message: string): never {
+  console.error(`[capsulemcp] FATAL: ${message}`);
   process.exit(1);
 }
 
+if (!PUBLIC_BASE_URL) {
+  fatal(
+    "PUBLIC_BASE_URL is not set. It must be the public origin of this server (e.g. https://example.run.app), used to build OAuth metadata and authorization redirect URLs.",
+  );
+}
+if (!SIGNING_KEY || SIGNING_KEY.length < 16) {
+  fatal(
+    "MCP_OAUTH_SIGNING_KEY (or MCP_SHARED_SECRET) must be set and at least 16 chars long. It is the HMAC key used to sign OAuth access tokens; rotating it invalidates all outstanding tokens.",
+  );
+}
+
+// ── Mode selection ──────────────────────────────────────────────────────────
+
+type Mode =
+  | { kind: "static-client"; clientId: string; clientSecret: string; redirectUris: string[] }
+  | { kind: "insecure-auto-approve" };
+
+function selectMode(): Mode {
+  if (CLIENT_ID && CLIENT_SECRET) {
+    const redirectUris = REDIRECT_URIS_ENV
+      ? REDIRECT_URIS_ENV.split(",").map((s) => s.trim()).filter(Boolean)
+      : DEFAULT_ANTHROPIC_REDIRECT_URIS;
+    if (!redirectUris.length) {
+      fatal("MCP_OAUTH_REDIRECT_URIS was set but contained no usable URIs");
+    }
+    return {
+      kind: "static-client",
+      clientId: CLIENT_ID,
+      clientSecret: CLIENT_SECRET,
+      redirectUris,
+    };
+  }
+  if (CLIENT_ID || CLIENT_SECRET) {
+    fatal(
+      "MCP_OAUTH_CLIENT_ID and MCP_OAUTH_CLIENT_SECRET must both be set to enable static-client mode (got only one).",
+    );
+  }
+  if (INSECURE_AUTO_APPROVE) {
+    return { kind: "insecure-auto-approve" };
+  }
+  fatal(
+    "No OAuth mode configured. Either:\n" +
+      "  - Set MCP_OAUTH_CLIENT_ID and MCP_OAUTH_CLIENT_SECRET (recommended for public deployments)\n" +
+      "  - Or set MCP_OAUTH_INSECURE_AUTO_APPROVE=1 (only safe for local development or private-network deployments)",
+  );
+}
+
+const mode = selectMode();
 const issuerUrl = new URL(PUBLIC_BASE_URL);
+
+// ── Provider construction ───────────────────────────────────────────────────
+
+const oauthProvider =
+  mode.kind === "static-client"
+    ? new OAuthProvider({
+        clientsStore: new FixedClientStore({
+          clientId: mode.clientId,
+          clientSecret: mode.clientSecret,
+          redirectUris: mode.redirectUris,
+          clientName: "capsulemcp pre-registered client",
+        }),
+        signingKey: SIGNING_KEY,
+      })
+    : new OAuthProvider({
+        clientsStore: new InMemoryClientsStore(),
+        signingKey: SIGNING_KEY,
+      });
+
+// ── Express app ─────────────────────────────────────────────────────────────
 
 const app = express();
 app.use(express.json({ limit: "1mb" }));
 
-// ── OAuth provider + router ─────────────────────────────────────────────────
-
-const oauthProvider = new AutoApproveOAuthProvider(SIGNING_KEY);
-
-// Installs /.well-known/oauth-authorization-server,
-// /.well-known/oauth-protected-resource, /authorize, /token, /register
-// at the application root. Per the SDK, this MUST be at the root.
 app.use(
   mcpAuthRouter({
     provider: oauthProvider,
@@ -89,10 +160,6 @@ app.post(
   async (req, res) => {
     try {
       const server = createCapsuleMcpServer();
-      // Stateless: one transport per request. Cloud Run instances are
-      // ephemeral and traffic can land on any of them, so we don't try
-      // to track sessions across requests. Omitting sessionIdGenerator
-      // is the SDK's documented stateless trigger.
       const transport = new StreamableHTTPServerTransport({});
 
       res.on("close", () => {
@@ -112,8 +179,6 @@ app.post(
   },
 );
 
-// Stateless mode doesn't expose a server-pushed event stream. Reject
-// GET/DELETE on /mcp with a clear message rather than 404.
 app.get("/mcp", requireBearerAuth({ verifier: oauthProvider }), (_req, res) => {
   res.status(405).json({
     error: "method_not_allowed",
@@ -130,8 +195,18 @@ app.delete("/mcp", requireBearerAuth({ verifier: oauthProvider }), (_req, res) =
 // ── Start ───────────────────────────────────────────────────────────────────
 
 app.listen(PORT, () => {
-  const mode = isReadOnly() ? "read-only" : "read-write";
+  const readMode = isReadOnly() ? "read-only" : "read-write";
+  const authLabel =
+    mode.kind === "static-client" ? "static-client" : "INSECURE_AUTO_APPROVE";
   console.log(
-    `[capsulemcp] HTTP server listening on :${PORT} | mode=${mode} | auth=OAuth | issuer=${issuerUrl}`,
+    `[capsulemcp] HTTP server listening on :${PORT} | mode=${readMode} | auth=${authLabel} | issuer=${issuerUrl}`,
   );
+  if (mode.kind === "insecure-auto-approve") {
+    console.warn(
+      "[capsulemcp] WARNING: auth mode is INSECURE_AUTO_APPROVE. " +
+        "Anyone who can reach this URL can register a client and use the configured Capsule token. " +
+        "Suitable only for local development or private-network deployments. " +
+        "For public deployments, set MCP_OAUTH_CLIENT_ID and MCP_OAUTH_CLIENT_SECRET.",
+    );
+  }
 });
