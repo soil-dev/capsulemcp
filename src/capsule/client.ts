@@ -217,6 +217,31 @@ export async function capsulePost<T>(path: string, body: unknown): Promise<T> {
   return handleResponse<T>(res);
 }
 
+/**
+ * POST a body to a Capsule endpoint that semantically performs a *read*
+ * (e.g. `/parties/filters/results`). Capsule uses POST for these
+ * endpoints because the filter conditions don't fit cleanly into a query
+ * string, but they are not mutations — so this helper does NOT gate on
+ * `isReadOnly()`. Returns a paginated result with `nextPage` parsed from
+ * the Link header, mirroring `capsuleGet`.
+ */
+export async function capsuleSearch<T>(
+  path: string,
+  body: unknown,
+  params?: QueryParams,
+): Promise<PagedResult<T>> {
+  const token = getToken();
+  const url = buildUrl(path, params);
+  const res = await doFetch(url, {
+    method: "POST",
+    headers: { ...baseHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await handleResponse<T>(res);
+  const nextPage = parseNextPage(res.headers.get("Link"));
+  return { data, nextPage };
+}
+
 export async function capsulePut<T>(path: string, body: unknown): Promise<T> {
   if (isReadOnly()) throw new CapsuleReadOnlyError("PUT");
   const token = getToken();
