@@ -54,3 +54,49 @@ describe("listActivityTypes", () => {
     expect(result.activityTypes).toHaveLength(1);
   });
 });
+
+describe("getSite", () => {
+  it("GETs /site and returns the site object", async () => {
+    mockFetch(200, { site: { name: "OpenSSL", subdomain: "openssl" } });
+    const { getSite } = await import("../src/tools/metadata.js");
+    const result = await getSite({});
+    const [url] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toContain("/site");
+    expect((result as { site: { subdomain: string } }).site.subdomain).toBe("openssl");
+  });
+});
+
+describe("listTrackDefinitions", () => {
+  it("GETs /trackdefinitions and surfaces the trackDefinitions key (camelCase)", async () => {
+    mockFetch(200, {
+      trackDefinitions: [{ id: 1, description: "Onboard", taskDefinitions: [] }],
+    });
+    const { listTrackDefinitions } = await import("../src/tools/metadata.js");
+    const result = await listTrackDefinitions({});
+    const [url] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toContain("/trackdefinitions");
+    expect(result.trackDefinitions).toHaveLength(1);
+  });
+});
+
+describe("listCategories", () => {
+  it("GETs /categories", async () => {
+    mockFetch(200, { categories: [{ id: 1, name: "Call", colour: "#EF4444" }] });
+    const { listCategories } = await import("../src/tools/metadata.js");
+    const result = await listCategories({});
+    const [url] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toContain("/categories");
+    expect(result.categories).toHaveLength(1);
+  });
+});
+
+describe("listGoals", () => {
+  it("GETs /goals (returns empty list when none configured)", async () => {
+    mockFetch(200, { goals: [] });
+    const { listGoals } = await import("../src/tools/metadata.js");
+    const result = await listGoals({});
+    const [url] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toContain("/goals");
+    expect(result.goals).toEqual([]);
+  });
+});
