@@ -2,7 +2,7 @@
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server for [Capsule CRM](https://capsulecrm.com). Connect Claude (Desktop, Code, or web Projects via Custom Connector) to your CRM and let it read or update parties, opportunities, projects, tasks, and timeline entries with natural-language prompts.
 
-- **35 tools** across the Capsule resource graph (20 in read-only mode) — full read coverage plus careful, confirm-gated writes
+- **43 tools** across the Capsule resource graph (28 in read-only mode) — full read coverage plus careful, confirm-gated writes
 - **Two transports**: stdio for local installs (Claude Desktop / Code), HTTP+OAuth for hosted Custom Connectors
 - **Read-only mode** as a one-env-var flag; works alongside read-scoped Capsule tokens
 - **Apache 2.0**
@@ -27,7 +27,7 @@ For most individual users the install is a single JSON snippet pasted into Claud
      "mcpServers": {
        "capsule": {
          "command": "npx",
-         "args": ["-y", "github:arapov/capsulemcp#v0.3.4"],
+         "args": ["-y", "github:arapov/capsulemcp#v0.4.0"],
          "env": {
            "CAPSULE_API_TOKEN": "<paste token here>",
            "CAPSULE_MCP_READONLY": "1"
@@ -49,14 +49,19 @@ That's it. The first launch takes ~30 seconds while npx clones and builds; subse
 | Opportunities | `search_opportunities`, `filter_opportunities`, `get_opportunity`, `list_opportunity_entries` | `create_opportunity`, `update_opportunity`, `delete_opportunity` |
 | Projects (cases) | `list_projects`, `filter_projects`, `get_project`, `list_project_entries` | `create_project`, `update_project`, `delete_project` |
 | Tasks | `list_tasks` | `create_task`, `update_task`, `complete_task`, `delete_task` |
-| Entries (notes / captured emails) | `get_entry` | `add_note`, `delete_entry` |
-| Pipelines & milestones | `list_pipelines`, `list_milestones` | — |
+| Entries (notes / captured emails) | `get_entry`, `list_entries` | `add_note`, `delete_entry` |
+| Pipelines & milestones (opportunities) | `list_pipelines`, `list_milestones` | — |
+| Boards & stages (projects) | `list_boards`, `list_stages` | — |
+| Saved filters | `list_saved_filters`, `run_saved_filter` | — |
 | Tags | `list_tags` | — |
-| Users | `list_users` | — |
+| Users & teams | `list_users`, `list_teams` | — |
+| Reference metadata | `list_lostreasons`, `list_activitytypes` | — |
 
 All paginated tools default `perPage=25` (max 100) and return a `nextPage` cursor when more results exist. Many GET tools accept an `embed` parameter (e.g. `tags,fields`) — see Capsule's API docs for the full list per resource.
 
 The `filter_*` tools wrap Capsule's structured filter endpoint (`POST /<entity>/filters/results`) and accept an array of `{field, operator, value}` conditions ANDed together. Capsule's API does not support ad-hoc sort, so for "most recent X" questions filter by a date condition (e.g. `addedOn is within last 7`) and pick the highest id from the result — Capsule's numeric IDs are monotonically incrementing.
+
+If you want **sortable** queries, use **saved filters** instead. Create the filter once in Capsule's web UI (it lets you set conditions, columns, and orderBy), then call `run_saved_filter` with its id. Use `list_saved_filters` to discover what's available.
 
 ### Read-only mode
 
