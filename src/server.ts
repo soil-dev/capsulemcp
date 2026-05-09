@@ -71,6 +71,23 @@ import {
   listDeletedProjectsSchema, listDeletedProjects,
 } from "./tools/audit.js";
 import {
+  listAdditionalPartiesSchema, listAdditionalParties,
+  addAdditionalPartySchema, addAdditionalParty,
+  removeAdditionalPartySchema, removeAdditionalParty,
+  listAssociatedProjectsSchema, listAssociatedProjects,
+} from "./tools/relationships.js";
+import {
+  listCustomFieldsSchema, listCustomFields,
+  getCustomFieldSchema, getCustomField,
+} from "./tools/custom-fields.js";
+import {
+  listEntityTracksSchema, listEntityTracks,
+  showTrackSchema, showTrack,
+  applyTrackSchema, applyTrack,
+  updateTrackSchema, updateTrack,
+  removeTrackSchema, removeTrack,
+} from "./tools/tracks.js";
+import {
   listSavedFiltersSchema, listSavedFilters,
   runSavedFilterSchema, runSavedFilter,
 } from "./tools/saved-filters.js";
@@ -89,7 +106,7 @@ export function createCapsuleMcpServer(): McpServer {
   const readOnly = isReadOnly();
   const server = new McpServer({
     name: "capsulemcp",
-    version: "0.5.0",
+    version: "0.5.1",
     description: "Read and (optionally) modify Capsule CRM data — parties, opportunities, projects, tasks, timeline entries, pipelines, tags.",
     websiteUrl: "https://github.com/arapov/capsulemcp",
     icons: ICONS,
@@ -153,6 +170,26 @@ export function createCapsuleMcpServer(): McpServer {
     listEmployeesSchema.shape,
     async (input) => {
       const result = await listEmployees(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    "list_custom_fields",
+    "List custom field DEFINITIONS for an entity type (parties, opportunities, or projects/kases). Returns the schema — name, type, options for list-type fields, etc. — NOT the values on any specific record. To read values on a record, use get_party / get_opportunity / get_project with embed=fields.",
+    listCustomFieldsSchema.shape,
+    async (input) => {
+      const result = await listCustomFields(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    "get_custom_field",
+    "Show a single custom field DEFINITION by id. Use list_custom_fields first to discover field ids.",
+    getCustomFieldSchema.shape,
+    async (input) => {
+      const result = await getCustomField(input);
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     },
   );
@@ -237,6 +274,26 @@ export function createCapsuleMcpServer(): McpServer {
     listDeletedOpportunitiesSchema.shape,
     async (input) => {
       const result = await listDeletedOpportunities(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    "list_additional_parties",
+    "List secondary party links on an opportunity or project. The 'main' party is on the entity itself (opportunity.party); additional parties are e.g. partners, consultants, or referrers also involved in the deal. Set entity to 'opportunities' or 'kases' (Capsule's term for projects).",
+    listAdditionalPartiesSchema.shape,
+    async (input) => {
+      const result = await listAdditionalParties(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    "list_associated_projects",
+    "List projects (cases) associated with a given opportunity. The inverse direction (project → opportunity) is on each project's `opportunity` field directly.",
+    listAssociatedProjectsSchema.shape,
+    async (input) => {
+      const result = await listAssociatedProjects(input);
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     },
   );
@@ -342,6 +399,60 @@ export function createCapsuleMcpServer(): McpServer {
       deleteProjectSchema.shape,
       async (input) => {
         const result = await deleteProject(input);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      },
+    );
+
+    // ── Relationships (writes) ──────────────────────────────────────────────
+
+    server.tool(
+      "add_additional_party",
+      "Link an existing party as an additional (secondary) party on an opportunity or project. The 'main' party is set via update_opportunity / update_project; this adds *additional* parties beyond the main one. Idempotent — re-adding a linked party is harmless.",
+      addAdditionalPartySchema.shape,
+      async (input) => {
+        const result = await addAdditionalParty(input);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      },
+    );
+
+    server.tool(
+      "remove_additional_party",
+      "Remove an additional-party link between an opportunity/project and a party. The party itself is NOT deleted. Requires confirm=true. Reversible by re-adding via add_additional_party.",
+      removeAdditionalPartySchema.shape,
+      async (input) => {
+        const result = await removeAdditionalParty(input);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      },
+    );
+
+    // ── Tracks (writes) ─────────────────────────────────────────────────────
+
+    server.tool(
+      "apply_track",
+      "Apply a track definition to an opportunity or project. This creates a track instance and auto-creates tasks per the track's task definitions. Use list_track_definitions to discover available templates.",
+      applyTrackSchema.shape,
+      async (input) => {
+        const result = await applyTrack(input);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      },
+    );
+
+    server.tool(
+      "update_track",
+      "Update a track instance. Capsule's PUT semantics are partial — provide only the fields you want to change in `fields`. Common: { complete: true } to mark a track completed.",
+      updateTrackSchema.shape,
+      async (input) => {
+        const result = await updateTrack(input);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      },
+    );
+
+    server.tool(
+      "remove_track",
+      "Remove a track instance from its entity. Tasks already created by the track stay on the entity and must be deleted separately if desired. Requires confirm=true.",
+      removeTrackSchema.shape,
+      async (input) => {
+        const result = await removeTrack(input);
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       },
     );
@@ -580,6 +691,26 @@ export function createCapsuleMcpServer(): McpServer {
     listTrackDefinitionsSchema.shape,
     async (input) => {
       const result = await listTrackDefinitions(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    "list_entity_tracks",
+    "List track INSTANCES on a specific record — i.e., which tracks have been applied to this opportunity / project / party. Distinct from list_track_definitions, which lists the templates.",
+    listEntityTracksSchema.shape,
+    async (input) => {
+      const result = await listEntityTracks(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    "show_track",
+    "Fetch a single track instance by id. Returns the track's link to its trackDefinition, the entity it's applied to, dates, and completion status.",
+    showTrackSchema.shape,
+    async (input) => {
+      const result = await showTrack(input);
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     },
   );
