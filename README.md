@@ -11,6 +11,7 @@ A [Model Context Protocol](https://modelcontextprotocol.io) server for [Capsule 
 
 | You want | Read this |
 |---|---|
+| Example questions to ask once the connector is running | [EXAMPLES.md](EXAMPLES.md) |
 | To use it locally with Claude Desktop or Claude Code | [INSTALL.md](INSTALL.md) |
 | To deploy it once and have your whole team use it via Claude.ai | [DEPLOY.md](DEPLOY.md) |
 | To contribute, debug, add a tool, or cut a release | [HOWTO.md](HOWTO.md) |
