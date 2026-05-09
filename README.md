@@ -2,7 +2,7 @@
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server for [Capsule CRM](https://capsulecrm.com). Connect Claude (Desktop, Code, or web Projects via Custom Connector) to your CRM and let it read or update parties, opportunities, projects, tasks, and timeline entries with natural-language prompts.
 
-- **63 tools** across the Capsule resource graph (42 in read-only mode) — full read coverage plus careful, confirm-gated writes
+- **68 tools** across the Capsule resource graph (47 in read-only mode) — full read coverage plus careful, confirm-gated writes
 - **Two transports**: stdio for local installs (Claude Desktop / Code), HTTP+OAuth for hosted Custom Connectors
 - **Read-only mode** as a one-env-var flag; works alongside read-scoped Capsule tokens
 - **Apache 2.0**
@@ -27,7 +27,7 @@ For most individual users the install is a single JSON snippet pasted into Claud
      "mcpServers": {
        "capsule": {
          "command": "npx",
-         "args": ["-y", "github:arapov/capsulemcp#v0.5.1"],
+         "args": ["-y", "github:arapov/capsulemcp#v0.5.2"],
          "env": {
            "CAPSULE_API_TOKEN": "<paste token here>",
            "CAPSULE_MCP_READONLY": "1"
@@ -45,11 +45,11 @@ That's it. The first launch takes ~30 seconds while npx clones and builds; subse
 
 | Group | Read | Write |
 |---|---|---|
-| Parties (people/orgs) | `search_parties`, `filter_parties`, `get_party`, `list_employees`, `list_party_opportunities`, `list_party_projects`, `list_party_entries` | `create_party`, `update_party`, `delete_party` |
-| Opportunities | `search_opportunities`, `filter_opportunities`, `get_opportunity`, `list_opportunity_entries`, `list_associated_projects` | `create_opportunity`, `update_opportunity`, `delete_opportunity` |
-| Projects (cases) | `list_projects`, `filter_projects`, `get_project`, `list_project_entries` | `create_project`, `update_project`, `delete_project` |
+| Parties (people/orgs) | `search_parties`, `filter_parties`, `get_party`, `get_parties`, `list_employees`, `list_party_opportunities`, `list_party_projects`, `list_party_entries` | `create_party`, `update_party`, `delete_party` |
+| Opportunities | `search_opportunities`, `filter_opportunities`, `get_opportunity`, `get_opportunities`, `list_opportunity_entries`, `list_associated_projects` | `create_opportunity`, `update_opportunity`, `delete_opportunity` |
+| Projects (cases) | `list_projects`, `filter_projects`, `get_project`, `get_projects`, `list_project_entries` | `create_project`, `update_project`, `delete_project` |
 | Additional parties (multi-party deals) | `list_additional_parties` | `add_additional_party`, `remove_additional_party` |
-| Tasks | `list_tasks` | `create_task`, `update_task`, `complete_task`, `delete_task` |
+| Tasks | `list_tasks`, `get_task`, `get_tasks` | `create_task`, `update_task`, `complete_task`, `delete_task` |
 | Entries (notes / captured emails) | `get_entry`, `list_entries` | `add_note`, `update_entry`, `delete_entry` |
 | Audit (deleted records) | `list_deleted_parties`, `list_deleted_opportunities`, `list_deleted_projects` | — |
 | Pipelines & milestones (opportunities) | `list_pipelines`, `list_milestones` | — |
