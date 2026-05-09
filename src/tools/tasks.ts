@@ -23,6 +23,37 @@ export async function listTasks(input: z.infer<typeof listTasksSchema>) {
   return { ...data, nextPage };
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+
+export const getTaskSchema = z.object({
+  id: z.number().int().positive().describe("Task ID"),
+});
+
+export async function getTask(input: z.infer<typeof getTaskSchema>) {
+  const { data } = await capsuleGet<{ task: unknown }>(`/tasks/${input.id}`);
+  return data;
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+//
+// Batch fetch up to 10 tasks by id in a single call. Capsule's path
+// syntax: GET /tasks/<id1>,<id2>,... — the server caps at 10 per call.
+
+export const getTasksSchema = z.object({
+  ids: z
+    .array(z.number().int().positive())
+    .min(1)
+    .max(10)
+    .describe("Array of task IDs (1–10). Capsule caps batch fetches at 10."),
+});
+
+export async function getTasks(input: z.infer<typeof getTasksSchema>) {
+  const { data } = await capsuleGet<{ tasks: unknown[] }>(
+    `/tasks/${input.ids.join(",")}`,
+  );
+  return data;
+}
+
 // ── Write ───────────────────────────────────────────────────────────────────
 
 // MCP SDK needs a plain ZodObject shape; keep refine in the handler.

@@ -42,6 +42,30 @@ export async function getOpportunity(input: z.infer<typeof getOpportunitySchema>
   return data;
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+//
+// Batch fetch up to 10 opportunities by id in a single call. Capsule's
+// path syntax: GET /opportunities/<id1>,<id2>,... — capped at 10 per call.
+
+export const getOpportunitiesSchema = z.object({
+  ids: z
+    .array(z.number().int().positive())
+    .min(1)
+    .max(10)
+    .describe("Array of opportunity IDs (1–10). Capsule caps batch fetches at 10."),
+  embed: z.string().optional().describe("Comma-separated embeds, e.g. 'tags,fields'"),
+});
+
+export async function getOpportunities(
+  input: z.infer<typeof getOpportunitiesSchema>,
+) {
+  const { data } = await capsuleGet<{ opportunities: unknown[] }>(
+    `/opportunities/${input.ids.join(",")}`,
+    { embed: input.embed },
+  );
+  return data;
+}
+
 // ── Write ───────────────────────────────────────────────────────────────────
 
 export const createOpportunitySchema = z.object({

@@ -63,6 +63,28 @@ export async function getParty(input: z.infer<typeof getPartySchema>) {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+//
+// Batch fetch up to 10 parties by id in a single call. Capsule's path
+// syntax: GET /parties/<id1>,<id2>,... — the server caps at 10 per call.
+
+export const getPartiesSchema = z.object({
+  ids: z
+    .array(z.number().int().positive())
+    .min(1)
+    .max(10)
+    .describe("Array of party IDs (1–10). Capsule caps batch fetches at 10."),
+  embed: z.string().optional().describe("Comma-separated embeds, e.g. 'tags,fields'"),
+});
+
+export async function getParties(input: z.infer<typeof getPartiesSchema>) {
+  const { data } = await capsuleGet<{ parties: unknown[] }>(
+    `/parties/${input.ids.join(",")}`,
+    { embed: input.embed },
+  );
+  return data;
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 
 export const listPartyOpportunitiesSchema = z.object({
   partyId: z.number().int().positive(),

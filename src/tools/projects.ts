@@ -34,6 +34,29 @@ export async function getProject(input: z.infer<typeof getProjectSchema>) {
   return data;
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+//
+// Batch fetch up to 10 projects by id in a single call. Capsule's path
+// uses /kases (its legacy projects naming): GET /kases/<id1>,<id2>,...
+// Capped at 10 per call.
+
+export const getProjectsSchema = z.object({
+  ids: z
+    .array(z.number().int().positive())
+    .min(1)
+    .max(10)
+    .describe("Array of project IDs (1–10). Capsule caps batch fetches at 10."),
+  embed: z.string().optional().describe("Comma-separated embeds, e.g. 'tags,fields'"),
+});
+
+export async function getProjects(input: z.infer<typeof getProjectsSchema>) {
+  const { data } = await capsuleGet<{ kases: unknown[] }>(
+    `/kases/${input.ids.join(",")}`,
+    { embed: input.embed },
+  );
+  return data;
+}
+
 // ── Write ───────────────────────────────────────────────────────────────────
 
 export const createProjectSchema = z.object({
