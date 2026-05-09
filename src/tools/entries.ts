@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { capsuleDelete, capsuleGet, capsulePost } from "../capsule/client.js";
+import {
+  capsuleDelete,
+  capsuleGet,
+  capsulePost,
+  capsulePut,
+} from "../capsule/client.js";
 
 // ── Read ────────────────────────────────────────────────────────────────────
 
@@ -110,6 +115,46 @@ export async function addNote(input: z.infer<typeof addNoteSchema>) {
   if (projectId) body["kase"] = { id: projectId };
 
   return capsulePost<{ entry: unknown }>("/entries", { entry: body });
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+//
+// update_entry: edit an existing timeline entry (typically a note Claude
+// or a user added previously). Capsule's PUT semantics are partial: only
+// fields you provide are changed. The most common use case is editing
+// `content` on a note. The `type` field is fixed at create time and
+// can't be changed via this endpoint.
+
+export const updateEntrySchema = z.object({
+  id: z.number().int().positive().describe("Entry ID to update"),
+  content: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      "New body text for the entry. For notes, this is the markdown content; for emails, the body. Provide only if you want to change it.",
+    ),
+  subject: z
+    .string()
+    .optional()
+    .describe(
+      "New subject line. Mostly meaningful on email-type entries; ignored on plain notes.",
+    ),
+});
+
+export async function updateEntry(input: z.infer<typeof updateEntrySchema>) {
+  const { id, ...rest } = input;
+  const body: Record<string, unknown> = {};
+  if (rest.content !== undefined) body["content"] = rest.content;
+  if (rest.subject !== undefined) body["subject"] = rest.subject;
+
+  if (Object.keys(body).length === 0) {
+    throw new Error(
+      "update_entry: provide at least one field to update (content or subject)",
+    );
+  }
+
+  return capsulePut<{ entry: unknown }>(`/entries/${id}`, { entry: body });
 }
 
 // ───────────────────────────────────────────────────────────────────────────

@@ -67,6 +67,37 @@ describe("getEntry", () => {
   });
 });
 
+describe("updateEntry", () => {
+  it("PUTs to /entries/{id} with content wrapped in {entry: ...}", async () => {
+    mockFetch(200, { entry: { id: 99, content: "edited" } });
+    const { updateEntry } = await import("../src/tools/entries.js");
+    await updateEntry({ id: 99, content: "edited" });
+
+    const [url, init] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toContain("/entries/99");
+    const i = init as { method: string; body: string };
+    expect(i.method).toBe("PUT");
+    expect(JSON.parse(i.body)).toEqual({ entry: { content: "edited" } });
+  });
+
+  it("supports updating subject only", async () => {
+    mockFetch(200, { entry: { id: 1 } });
+    const { updateEntry } = await import("../src/tools/entries.js");
+    await updateEntry({ id: 1, subject: "New subject" });
+    const [, init] = vi.mocked(fetch).mock.calls[0]!;
+    expect(JSON.parse((init as { body: string }).body)).toEqual({
+      entry: { subject: "New subject" },
+    });
+  });
+
+  it("rejects calls with no fields to update", async () => {
+    const { updateEntry } = await import("../src/tools/entries.js");
+    await expect(updateEntry({ id: 1 })).rejects.toThrow(
+      /provide at least one field/,
+    );
+  });
+});
+
 describe("listEntries (global feed)", () => {
   it("GETs /entries (no entity prefix) with pagination", async () => {
     mockFetch(
