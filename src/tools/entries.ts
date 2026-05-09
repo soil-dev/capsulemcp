@@ -67,6 +67,25 @@ export async function getEntry(input: z.infer<typeof getEntrySchema>) {
   return data;
 }
 
+// ── Global entries feed ─────────────────────────────────────────────────────
+//
+// GET /entries returns every timeline entry in the account, paginated.
+// Useful for "what activity happened across the company today/this week"
+// without iterating over every party/opportunity/project. Default order
+// is most-recent-first (Capsule's default for /entries specifically).
+
+export const listEntriesSchema = z.object({
+  ...listEntriesPagination,
+});
+
+export async function listEntries(input: z.infer<typeof listEntriesSchema>) {
+  const { data, nextPage } = await capsuleGet<{ entries: unknown[] }>(
+    "/entries",
+    { embed: input.embed, page: input.page, perPage: input.perPage },
+  );
+  return { ...data, nextPage };
+}
+
 // ── Write ───────────────────────────────────────────────────────────────────
 
 // MCP SDK needs a plain ZodObject shape; enforce the exactly-one constraint in the handler.

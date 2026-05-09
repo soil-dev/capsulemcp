@@ -3,11 +3,11 @@ import { fetch } from "undici";
 
 vi.mock("undici", () => ({ fetch: vi.fn() }));
 
-function mockFetch(status: number, body: unknown) {
+function mockFetch(status: number, body: unknown, headers: Record<string, string> = {}) {
   vi.mocked(fetch).mockResolvedValueOnce({
     status,
     ok: status >= 200 && status < 300,
-    headers: new Headers(),
+    headers: new Headers(headers),
     json: async () => body,
     statusText: String(status),
   } as Awaited<ReturnType<typeof fetch>>);
@@ -64,6 +64,26 @@ describe("getEntry", () => {
     const [url] = vi.mocked(fetch).mock.calls[0]!;
     expect(url).toContain("/entries/99");
     expect((result as { entry: { subject: string } }).entry.subject).toBe("Re: deal");
+  });
+});
+
+describe("listEntries (global feed)", () => {
+  it("GETs /entries (no entity prefix) with pagination", async () => {
+    mockFetch(
+      200,
+      { entries: [{ id: 1, type: "note" }] },
+      { Link: '<https://api.capsulecrm.com/api/v2/entries?page=2&perPage=25>; rel="next"' },
+    );
+
+    const { listEntries } = await import("../src/tools/entries.js");
+    const result = await listEntries({ page: 1, perPage: 25 });
+
+    const [url] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toMatch(/\/entries\?/);
+    expect(url).not.toMatch(/\/parties\/\d+\/entries/);
+    expect(url).not.toMatch(/\/opportunities\/\d+\/entries/);
+    expect(url).not.toMatch(/\/kases\/\d+\/entries/);
+    expect(result.nextPage).toBe(2);
   });
 });
 
