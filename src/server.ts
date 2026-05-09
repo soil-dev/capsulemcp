@@ -41,10 +41,12 @@ import {
   listOpportunityEntriesSchema, listOpportunityEntries,
   listProjectEntriesSchema, listProjectEntries,
   getEntrySchema, getEntry,
+  listEntriesSchema, listEntries,
   addNoteSchema, addNote,
   deleteEntrySchema, deleteEntry,
 } from "./tools/entries.js";
 import { listPipelinesSchema, listPipelines, listMilestonesSchema, listMilestones } from "./tools/pipelines.js";
+import { listBoardsSchema, listBoards, listStagesSchema, listStages } from "./tools/boards.js";
 import { listTagsSchema, listTags } from "./tools/tags.js";
 import { listUsersSchema, listUsers } from "./tools/users.js";
 import {
@@ -52,6 +54,15 @@ import {
   filterOpportunitiesSchema, filterOpportunities,
   filterProjectsSchema, filterProjects,
 } from "./tools/filters.js";
+import {
+  listTeamsSchema, listTeams,
+  listLostReasonsSchema, listLostReasons,
+  listActivityTypesSchema, listActivityTypes,
+} from "./tools/metadata.js";
+import {
+  listSavedFiltersSchema, listSavedFilters,
+  runSavedFilterSchema, runSavedFilter,
+} from "./tools/saved-filters.js";
 
 /**
  * Build a fully-configured MCP server with all Capsule tools registered.
@@ -381,6 +392,16 @@ export function createCapsuleMcpServer(): McpServer {
     },
   );
 
+  server.tool(
+    "list_entries",
+    "Global timeline feed: every note, captured email, and completed-task record across the whole Capsule account, paginated. Default order is most-recent-first. Use this for 'what activity happened today/this week across the company?' rather than iterating list_party_entries / list_opportunity_entries / list_project_entries.",
+    listEntriesSchema.shape,
+    async (input) => {
+      const result = await listEntries(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
   if (!readOnly) {
     server.tool(
       "add_note",
@@ -417,10 +438,89 @@ export function createCapsuleMcpServer(): McpServer {
 
   server.tool(
     "list_milestones",
-    "List all milestones (stages) within a specific pipeline.",
+    "List all milestones (stages) within a specific opportunity pipeline.",
     listMilestonesSchema.shape,
     async (input) => {
       const result = await listMilestones(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  // ── Boards & stages (project workflow metadata) ───────────────────────────
+  //
+  // Boards/stages are to projects what pipelines/milestones are to
+  // opportunities. A project sits at one stage at a time on one board.
+
+  server.tool(
+    "list_boards",
+    "List all project (kase) boards defined in Capsule. A board is a grouping of stages that projects flow through — the project equivalent of an opportunity pipeline.",
+    listBoardsSchema.shape,
+    async (input) => {
+      const result = await listBoards(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    "list_stages",
+    "List project stages. Without arguments returns every stage across every board (each carries a .board reference). Pass boardId to scope to one specific board.",
+    listStagesSchema.shape,
+    async (input) => {
+      const result = await listStages(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  // ── Reference metadata (teams, lost reasons, activity types) ──────────────
+
+  server.tool(
+    "list_teams",
+    "List all teams configured in the Capsule account. Useful as input for filter_* queries that scope by team, and for reporting.",
+    listTeamsSchema.shape,
+    async (input) => {
+      const result = await listTeams(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    "list_lostreasons",
+    "List all configured opportunity-loss reasons (e.g. 'Poor Qualification', 'Lost to competitor'). Useful for analysing closed-lost opportunities by reason.",
+    listLostReasonsSchema.shape,
+    async (input) => {
+      const result = await listLostReasons(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    "list_activitytypes",
+    "List all configured activity types (e.g. Call, Meeting, Email). These are the categories used when logging timeline entries.",
+    listActivityTypesSchema.shape,
+    async (input) => {
+      const result = await listActivityTypes(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  // ── Saved filters (UI-defined filters; support sort, unlike ad-hoc) ───────
+
+  server.tool(
+    "list_saved_filters",
+    "List all filters that users have saved in Capsule's web UI for an entity type. Saved filters are reusable — they bundle conditions, columns, and (importantly) sort. Use this to discover what queries are already configured before building a one-off filter_* call.",
+    listSavedFiltersSchema.shape,
+    async (input) => {
+      const result = await listSavedFilters(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    "run_saved_filter",
+    "Run a saved filter by id and return its results, paginated. Unlike filter_parties / filter_opportunities / filter_projects (which use the ad-hoc filter endpoint and CANNOT sort), saved filters DO support sort — the orderBy is configured in Capsule's web UI when the filter is created. So 'most recent X by Y' questions are answerable in one call IF a saved filter exists; use list_saved_filters first to find one.",
+    runSavedFilterSchema.shape,
+    async (input) => {
+      const result = await runSavedFilter(input);
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     },
   );
