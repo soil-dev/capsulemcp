@@ -120,3 +120,23 @@ describe("completeTask", () => {
     expect(body.task.status).toBe("COMPLETED");
   });
 });
+
+describe("getTask", () => {
+  it("GETs /tasks/{id}", async () => {
+    mockFetch(200, { task: { id: 99, description: "x" } });
+    const { getTask } = await import("../src/tools/tasks.js");
+    await getTask({ id: 99 });
+    const [url] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toContain("/tasks/99");
+  });
+});
+
+describe("getTasks (batch)", () => {
+  it("GETs /tasks/{ids}", async () => {
+    mockFetch(200, { tasks: [{ id: 1 }] });
+    const { getTasks } = await import("../src/tools/tasks.js");
+    await getTasks({ ids: [1, 2] });
+    const [url] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toMatch(/\/tasks\/1,2($|\?)/);
+  });
+});

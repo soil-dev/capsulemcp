@@ -234,3 +234,29 @@ describe("429 retry", () => {
     expect(result.parties).toEqual([]);
   });
 });
+
+describe("getParties (batch)", () => {
+  it("GETs /parties/{ids} with comma-joined ids", async () => {
+    mockFetch(200, { parties: [{ id: 1 }, { id: 2 }] });
+    const { getParties } = await import("../src/tools/parties.js");
+    await getParties({ ids: [1, 2] });
+    const [url] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toMatch(/\/parties\/1,2($|\?)/);
+  });
+
+  it("propagates embed", async () => {
+    mockFetch(200, { parties: [] });
+    const { getParties } = await import("../src/tools/parties.js");
+    await getParties({ ids: [1], embed: "tags,fields" });
+    const [url] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toContain("embed=tags%2Cfields");
+  });
+
+  it("rejects empty or oversize id arrays at the schema layer", async () => {
+    const { getPartiesSchema } = await import("../src/tools/parties.js");
+    expect(() => getPartiesSchema.parse({ ids: [] })).toThrow();
+    expect(() =>
+      getPartiesSchema.parse({ ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] }),
+    ).toThrow();
+  });
+});

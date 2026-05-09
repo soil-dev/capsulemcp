@@ -111,3 +111,14 @@ describe("updateProject", () => {
     expect(body.kase.ownerId).toBeUndefined();
   });
 });
+
+describe("getProjects (batch)", () => {
+  it("GETs /kases/{ids} (legacy projects path)", async () => {
+    mockFetch(200, { kases: [{ id: 1 }] });
+    const { getProjects } = await import("../src/tools/projects.js");
+    await getProjects({ ids: [1, 2] });
+    const [url] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toMatch(/\/kases\/1,2($|\?)/);
+    expect(url).not.toContain("/projects/");
+  });
+});

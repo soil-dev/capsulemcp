@@ -101,3 +101,13 @@ describe("updateOpportunity", () => {
     expect((options as RequestInit).method).toBe("PUT");
   });
 });
+
+describe("getOpportunities (batch)", () => {
+  it("GETs /opportunities/{ids}", async () => {
+    mockFetch(200, { opportunities: [{ id: 1 }] });
+    const { getOpportunities } = await import("../src/tools/opportunities.js");
+    await getOpportunities({ ids: [1, 2, 3] });
+    const [url] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toMatch(/\/opportunities\/1,2,3($|\?)/);
+  });
+});

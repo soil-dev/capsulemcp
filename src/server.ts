@@ -5,6 +5,7 @@ import { ICONS } from "./icon.js";
 import {
   searchPartiesSchema, searchParties,
   getPartySchema, getParty,
+  getPartiesSchema, getParties,
   listPartyOpportunitiesSchema, listPartyOpportunities,
   listPartyProjectsSchema, listPartyProjects,
   createPartySchema, createParty,
@@ -15,6 +16,7 @@ import {
 import {
   searchOpportunitiesSchema, searchOpportunities,
   getOpportunitySchema, getOpportunity,
+  getOpportunitiesSchema, getOpportunities,
   createOpportunitySchema, createOpportunity,
   updateOpportunitySchema, updateOpportunity,
   deleteOpportunitySchema, deleteOpportunity,
@@ -23,6 +25,7 @@ import {
 import {
   listProjectsSchema, listProjects,
   getProjectSchema, getProject,
+  getProjectsSchema, getProjects,
   createProjectSchema, createProject,
   updateProjectSchema, updateProject,
   deleteProjectSchema, deleteProject,
@@ -30,6 +33,8 @@ import {
 
 import {
   listTasksSchema, listTasks,
+  getTaskSchema, getTask,
+  getTasksSchema, getTasks,
   createTaskSchema, createTask,
   updateTaskSchema, updateTask,
   completeTaskSchema, completeTask,
@@ -106,7 +111,7 @@ export function createCapsuleMcpServer(): McpServer {
   const readOnly = isReadOnly();
   const server = new McpServer({
     name: "capsulemcp",
-    version: "0.5.1",
+    version: "0.5.2",
     description: "Read and (optionally) modify Capsule CRM data — parties, opportunities, projects, tasks, timeline entries, pipelines, tags.",
     websiteUrl: "https://github.com/arapov/capsulemcp",
     icons: ICONS,
@@ -140,6 +145,16 @@ export function createCapsuleMcpServer(): McpServer {
     getPartySchema.shape,
     async (input) => {
       const result = await getParty(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    "get_parties",
+    "Batch-fetch up to 10 parties by ID in a single call. Use this when Claude already knows several party IDs to avoid N round trips of get_party.",
+    getPartiesSchema.shape,
+    async (input) => {
+      const result = await getParties(input);
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     },
   );
@@ -269,6 +284,16 @@ export function createCapsuleMcpServer(): McpServer {
   );
 
   server.tool(
+    "get_opportunities",
+    "Batch-fetch up to 10 opportunities by ID in a single call.",
+    getOpportunitiesSchema.shape,
+    async (input) => {
+      const result = await getOpportunities(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
     "list_deleted_opportunities",
     "Audit feature: list opportunities deleted on or after a given timestamp. The `since` parameter is REQUIRED. Response also includes a `restrictedOpportunities` key for records the integration user can't read fully.",
     listDeletedOpportunitiesSchema.shape,
@@ -358,6 +383,16 @@ export function createCapsuleMcpServer(): McpServer {
     getProjectSchema.shape,
     async (input) => {
       const result = await getProject(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    "get_projects",
+    "Batch-fetch up to 10 projects (cases) by ID in a single call.",
+    getProjectsSchema.shape,
+    async (input) => {
+      const result = await getProjects(input);
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     },
   );
@@ -466,6 +501,26 @@ export function createCapsuleMcpServer(): McpServer {
     listTasksSchema.shape,
     async (input) => {
       const result = await listTasks(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    "get_task",
+    "Fetch a single task by its numeric ID.",
+    getTaskSchema.shape,
+    async (input) => {
+      const result = await getTask(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    "get_tasks",
+    "Batch-fetch up to 10 tasks by ID in a single call.",
+    getTasksSchema.shape,
+    async (input) => {
+      const result = await getTasks(input);
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     },
   );
