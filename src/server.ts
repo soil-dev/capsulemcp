@@ -43,6 +43,7 @@ import {
   getEntrySchema, getEntry,
   listEntriesSchema, listEntries,
   addNoteSchema, addNote,
+  updateEntrySchema, updateEntry,
   deleteEntrySchema, deleteEntry,
 } from "./tools/entries.js";
 import { listPipelinesSchema, listPipelines, listMilestonesSchema, listMilestones } from "./tools/pipelines.js";
@@ -58,7 +59,17 @@ import {
   listTeamsSchema, listTeams,
   listLostReasonsSchema, listLostReasons,
   listActivityTypesSchema, listActivityTypes,
+  getSiteSchema, getSite,
+  listTrackDefinitionsSchema, listTrackDefinitions,
+  listCategoriesSchema, listCategories,
+  listGoalsSchema, listGoals,
 } from "./tools/metadata.js";
+import {
+  listEmployeesSchema, listEmployees,
+  listDeletedPartiesSchema, listDeletedParties,
+  listDeletedOpportunitiesSchema, listDeletedOpportunities,
+  listDeletedProjectsSchema, listDeletedProjects,
+} from "./tools/audit.js";
 import {
   listSavedFiltersSchema, listSavedFilters,
   runSavedFilterSchema, runSavedFilter,
@@ -78,7 +89,7 @@ export function createCapsuleMcpServer(): McpServer {
   const readOnly = isReadOnly();
   const server = new McpServer({
     name: "capsulemcp",
-    version: "0.4.0",
+    version: "0.5.0",
     description: "Read and (optionally) modify Capsule CRM data — parties, opportunities, projects, tasks, timeline entries, pipelines, tags.",
     websiteUrl: "https://github.com/arapov/capsulemcp",
     icons: ICONS,
@@ -132,6 +143,26 @@ export function createCapsuleMcpServer(): McpServer {
     listPartyProjectsSchema.shape,
     async (input) => {
       const result = await listPartyProjects(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    "list_employees",
+    "List the people who work at a given organisation party. Returns the parties whose `organisation` field references the given partyId. Use this to answer 'who works at X?' rather than enumerating all parties.",
+    listEmployeesSchema.shape,
+    async (input) => {
+      const result = await listEmployees(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    "list_deleted_parties",
+    "Audit feature: list parties deleted on or after a given timestamp. The `since` parameter is REQUIRED (Capsule rejects the call without it). Response also includes a `restrictedParties` key — records the integration user can see were deleted but cannot read fully.",
+    listDeletedPartiesSchema.shape,
+    async (input) => {
+      const result = await listDeletedParties(input);
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     },
   );
@@ -200,6 +231,16 @@ export function createCapsuleMcpServer(): McpServer {
     },
   );
 
+  server.tool(
+    "list_deleted_opportunities",
+    "Audit feature: list opportunities deleted on or after a given timestamp. The `since` parameter is REQUIRED. Response also includes a `restrictedOpportunities` key for records the integration user can't read fully.",
+    listDeletedOpportunitiesSchema.shape,
+    async (input) => {
+      const result = await listDeletedOpportunities(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
   if (!readOnly) {
     server.tool(
       "create_opportunity",
@@ -260,6 +301,16 @@ export function createCapsuleMcpServer(): McpServer {
     getProjectSchema.shape,
     async (input) => {
       const result = await getProject(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    "list_deleted_projects",
+    "Audit feature: list projects deleted on or after a given timestamp. The `since` parameter is REQUIRED. Response also includes a `restrictedKases` key for records the integration user can't read fully.",
+    listDeletedProjectsSchema.shape,
+    async (input) => {
+      const result = await listDeletedProjects(input);
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     },
   );
@@ -414,6 +465,16 @@ export function createCapsuleMcpServer(): McpServer {
     );
 
     server.tool(
+      "update_entry",
+      "Edit an existing timeline entry — typically a note. Provide the entry id plus the fields you want to change (content, subject). Only the fields you supply are modified; other fields keep their current values. Cannot change the entry's type. Use this to correct or extend a note added previously.",
+      updateEntrySchema.shape,
+      async (input) => {
+        const result = await updateEntry(input);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      },
+    );
+
+    server.tool(
       "delete_entry",
       "DESTRUCTIVE & IRREVERSIBLE: permanently delete a note (or other entry) by its ID. Requires confirm=true.",
       deleteEntrySchema.shape,
@@ -499,6 +560,46 @@ export function createCapsuleMcpServer(): McpServer {
     listActivityTypesSchema.shape,
     async (input) => {
       const result = await listActivityTypes(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    "list_categories",
+    "List configured entry/task categories (Call, Email, Meeting, Follow-up, etc.) with their colours. Used to label and filter timeline entries and tasks.",
+    listCategoriesSchema.shape,
+    async (input) => {
+      const result = await listCategories(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    "list_track_definitions",
+    "List workflow track definitions: reusable templates that auto-create tasks at configured intervals when applied to an opportunity or project. Each track includes nested taskDefinitions specifying what to create and when. Use this to understand what automations exist.",
+    listTrackDefinitionsSchema.shape,
+    async (input) => {
+      const result = await listTrackDefinitions(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    "list_goals",
+    "List sales / activity goals configured in the account (per-user or per-team revenue or activity targets). Returns an empty list for accounts that don't use the Goals feature.",
+    listGoalsSchema.shape,
+    async (input) => {
+      const result = await listGoals(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    "get_site",
+    "Return the Capsule account this connector is currently authenticated against (subdomain, display name, URL). Diagnostic — Capsule v2 has no /users/me endpoint, so this is the closest 'where am I?' check.",
+    getSiteSchema.shape,
+    async (input) => {
+      const result = await getSite(input);
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     },
   );
