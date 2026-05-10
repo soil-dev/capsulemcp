@@ -11,6 +11,33 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Fixed
+
+- `get_attachment` was comparing Content-Type with `===
+  "application/json"`, which missed `application/json; charset=UTF-8`
+  (a real shape Capsule returns). Now strips Content-Type parameters
+  before comparing — JSON / XML / text-typed attachments correctly
+  return decoded text instead of falling through to base64.
+- `list_tasks` description claimed an "or due date" filter that
+  didn't exist in the schema. Description rewritten to match the
+  actual filters (status + ownerId).
+- `OpportunityValueSchema.currency` was optional in zod but Capsule
+  rejects `{amount}` without a currency (422). Currency is now
+  required at the schema layer so the error surfaces before the HTTP
+  call.
+- `upload_attachment` silently accepted invalid base64 input
+  (Node's tolerant decoder produced corrupt bytes that Capsule then
+  stored). Now validates the input matches the base64 alphabet and
+  has a length divisible by 4 before uploading.
+- Reference-data tools (`list_teams`, `list_lostreasons`,
+  `list_activitytypes`, `list_track_definitions`, `list_categories`,
+  `list_goals`, `list_users`, `list_pipelines`, `list_milestones`,
+  `list_boards`, `list_stages`, `list_tags`) now accept optional
+  `page` / `perPage` and surface `nextPage` from the Link header.
+  Default `perPage=100` (Capsule's max) so small accounts still get
+  everything in one call. Previously a 51-team account would have
+  silently capped at Capsule's 50-record default page size.
+
 ### Changed
 
 - HTTP entry's inbound JSON body limit defaulted to 1 MB; bumped to
@@ -19,6 +46,10 @@ versions adhere to [Semantic Versioning](https://semver.org).
 - `list_tasks` now actually defaults `status` to `"OPEN"` — the
   description had said so since v0.1 but the code passed `undefined`
   and let Capsule pick.
+- `create_project` now applies its `OPEN` status default in code
+  (`?? "OPEN"`) instead of via zod's `.default()`, matching the
+  pattern adopted for `list_tasks`. The output type stays
+  consistent for direct callers.
 - README description rewritten to reflect the v0.5.x and v0.6.0
   surface (attachments, tracks, saved filters, audit, batch fetches).
 - `package.json` description and keywords filled out for npm /
@@ -29,12 +60,18 @@ versions adhere to [Semantic Versioning](https://semver.org).
   `node dist/http.js` without the noise.
 - HTTP entry's mode-selection and base-config validation extracted to
   `src/http/config.ts` with pure functions, unit-tested.
+- Repository moved from `arapov/capsulemcp` to `soil-dev/capsulemcp`
+  (org-owned). GitHub redirects keep the old URL working; in-repo
+  references all point at the new canonical location.
 
 ### Added
 
 - `tests/http-config.test.ts` covers `selectMode` and
-  `resolveBaseConfig` across all expected env permutations (19 new
-  tests; suite now 165/165 passing).
+  `resolveBaseConfig` across all expected env permutations.
+- Pagination tests for the reference-data tools.
+- Base64-validation regression tests for `upload_attachment`.
+
+Suite now 171/171 passing.
 
 ## [0.6.0] — 2026-05-10
 
