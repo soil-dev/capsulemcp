@@ -1,43 +1,70 @@
 import { z } from "zod";
 import { capsuleGet } from "../capsule/client.js";
 
-// Small reference-data endpoints. None paginate in practice (Capsule
-// accounts have a handful of teams, loss reasons, activity types) so
-// we don't expose page/perPage. We surface the full response.
+// Reference-data endpoints. Most accounts have a small number of each
+// (a handful of teams, ~10 loss reasons, etc.) so a single call typically
+// returns everything. But Capsule's default page size is 50, so an
+// account with 51+ users / 100+ track definitions / etc. would silently
+// get capped without pagination.
+//
+// All tools below accept optional page/perPage and return a `nextPage`
+// cursor when more results exist. perPage defaults to 100 (Capsule's max)
+// to maximise the chance of a single-page result for small accounts.
+//
+// Defaults applied in code via `?? value` (not via zod's .default()) so
+// the inferred input types keep page/perPage optional for callers.
+
+const paginationFields = {
+  page: z.number().int().positive().optional(),
+  perPage: z
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .optional()
+    .describe("Page size, max 100. Defaults to 100 for reference data."),
+};
 
 // ── Teams ───────────────────────────────────────────────────────────────────
 
-export const listTeamsSchema = z.object({});
+export const listTeamsSchema = z.object({ ...paginationFields });
 
-export async function listTeams(_input: z.infer<typeof listTeamsSchema>) {
-  const { data } = await capsuleGet<{ teams: unknown[] }>("/teams");
-  return data;
+export async function listTeams(input: z.infer<typeof listTeamsSchema>) {
+  const { data, nextPage } = await capsuleGet<{ teams: unknown[] }>("/teams", {
+    page: input.page ?? 1,
+    perPage: input.perPage ?? 100,
+  });
+  return { ...data, nextPage };
 }
 
 // ── Loss reasons ────────────────────────────────────────────────────────────
 
-export const listLostReasonsSchema = z.object({});
+export const listLostReasonsSchema = z.object({ ...paginationFields });
 
 export async function listLostReasons(
-  _input: z.infer<typeof listLostReasonsSchema>,
+  input: z.infer<typeof listLostReasonsSchema>,
 ) {
   // Note response key: `lostReasons` (camelCase plural).
-  const { data } = await capsuleGet<{ lostReasons: unknown[] }>("/lostreasons");
-  return data;
+  const { data, nextPage } = await capsuleGet<{ lostReasons: unknown[] }>(
+    "/lostreasons",
+    { page: input.page ?? 1, perPage: input.perPage ?? 100 },
+  );
+  return { ...data, nextPage };
 }
 
 // ── Activity types ──────────────────────────────────────────────────────────
 
-export const listActivityTypesSchema = z.object({});
+export const listActivityTypesSchema = z.object({ ...paginationFields });
 
 export async function listActivityTypes(
-  _input: z.infer<typeof listActivityTypesSchema>,
+  input: z.infer<typeof listActivityTypesSchema>,
 ) {
   // Note response key: `activityTypes` (camelCase plural).
-  const { data } = await capsuleGet<{ activityTypes: unknown[] }>(
+  const { data, nextPage } = await capsuleGet<{ activityTypes: unknown[] }>(
     "/activitytypes",
+    { page: input.page ?? 1, perPage: input.perPage ?? 100 },
   );
-  return data;
+  return { ...data, nextPage };
 }
 
 // ── Site (account info) ─────────────────────────────────────────────────────
@@ -46,6 +73,7 @@ export async function listActivityTypes(
 // subdomain, display name, URL. Useful as a "which Capsule am I talking
 // to?" diagnostic — Capsule v2 does not expose a /users/me endpoint, so
 // /site is the closest equivalent for "who/where am I authenticated as".
+// Singular response, no pagination.
 
 export const getSiteSchema = z.object({});
 
@@ -61,18 +89,19 @@ export async function getSite(_input: z.infer<typeof getSiteSchema>) {
 // Useful for understanding what automations exist and what the team's
 // standard processes look like.
 
-export const listTrackDefinitionsSchema = z.object({});
+export const listTrackDefinitionsSchema = z.object({ ...paginationFields });
 
 export async function listTrackDefinitions(
-  _input: z.infer<typeof listTrackDefinitionsSchema>,
+  input: z.infer<typeof listTrackDefinitionsSchema>,
 ) {
   // Note response key: `trackDefinitions` (camelCase plural). Each entry
   // includes nested taskDefinitions describing the auto-tasks the track
   // creates when applied.
-  const { data } = await capsuleGet<{ trackDefinitions: unknown[] }>(
+  const { data, nextPage } = await capsuleGet<{ trackDefinitions: unknown[] }>(
     "/trackdefinitions",
+    { page: input.page ?? 1, perPage: input.perPage ?? 100 },
   );
-  return data;
+  return { ...data, nextPage };
 }
 
 // ── Categories (entry/task categorisation) ──────────────────────────────────
@@ -81,13 +110,16 @@ export async function listTrackDefinitions(
 // Email, Meeting, Follow-up, etc.) for reporting. Returns the configured
 // category list with id, name, and colour.
 
-export const listCategoriesSchema = z.object({});
+export const listCategoriesSchema = z.object({ ...paginationFields });
 
 export async function listCategories(
-  _input: z.infer<typeof listCategoriesSchema>,
+  input: z.infer<typeof listCategoriesSchema>,
 ) {
-  const { data } = await capsuleGet<{ categories: unknown[] }>("/categories");
-  return data;
+  const { data, nextPage } = await capsuleGet<{ categories: unknown[] }>(
+    "/categories",
+    { page: input.page ?? 1, perPage: input.perPage ?? 100 },
+  );
+  return { ...data, nextPage };
 }
 
 // ── Goals (sales targets) ───────────────────────────────────────────────────
@@ -96,9 +128,12 @@ export async function listCategories(
 // don't use the feature, populated for those that do. Useful for
 // progress reporting.
 
-export const listGoalsSchema = z.object({});
+export const listGoalsSchema = z.object({ ...paginationFields });
 
-export async function listGoals(_input: z.infer<typeof listGoalsSchema>) {
-  const { data } = await capsuleGet<{ goals: unknown[] }>("/goals");
-  return data;
+export async function listGoals(input: z.infer<typeof listGoalsSchema>) {
+  const { data, nextPage } = await capsuleGet<{ goals: unknown[] }>("/goals", {
+    page: input.page ?? 1,
+    perPage: input.perPage ?? 100,
+  });
+  return { ...data, nextPage };
 }

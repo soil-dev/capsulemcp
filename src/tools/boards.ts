@@ -6,13 +6,21 @@ import { capsuleGet } from "../capsule/client.js";
 // one stage at a time. Capsule's response shape is symmetric to /pipelines
 // and /milestones.
 
+const paginationFields = {
+  page: z.number().int().positive().optional(),
+  perPage: z.number().int().min(1).max(100).optional(),
+};
+
 // ── Boards ──────────────────────────────────────────────────────────────────
 
-export const listBoardsSchema = z.object({});
+export const listBoardsSchema = z.object({ ...paginationFields });
 
-export async function listBoards(_input: z.infer<typeof listBoardsSchema>) {
-  const { data } = await capsuleGet<{ boards: unknown[] }>("/boards");
-  return data;
+export async function listBoards(input: z.infer<typeof listBoardsSchema>) {
+  const { data, nextPage } = await capsuleGet<{ boards: unknown[] }>("/boards", {
+    page: input.page ?? 1,
+    perPage: input.perPage ?? 100,
+  });
+  return { ...data, nextPage };
 }
 
 // ── Stages ──────────────────────────────────────────────────────────────────
@@ -31,6 +39,7 @@ export const listStagesSchema = z.object({
     .describe(
       "Optional. If provided, returns only the stages defined on that specific board (uses /boards/{id}/stages). Omit to get all stages across all boards in one call.",
     ),
+  ...paginationFields,
 });
 
 export async function listStages(input: z.infer<typeof listStagesSchema>) {
@@ -38,6 +47,9 @@ export async function listStages(input: z.infer<typeof listStagesSchema>) {
     input.boardId !== undefined
       ? `/boards/${input.boardId}/stages`
       : "/stages";
-  const { data } = await capsuleGet<{ stages: unknown[] }>(path);
-  return data;
+  const { data, nextPage } = await capsuleGet<{ stages: unknown[] }>(path, {
+    page: input.page ?? 1,
+    perPage: input.perPage ?? 100,
+  });
+  return { ...data, nextPage };
 }

@@ -100,3 +100,36 @@ describe("listGoals", () => {
     expect(result.goals).toEqual([]);
   });
 });
+
+describe("metadata pagination", () => {
+  it("listTeams defaults perPage=100 to maximise single-page coverage", async () => {
+    mockFetch(200, { teams: [] });
+    const { listTeams } = await import("../src/tools/metadata.js");
+    await listTeams({});
+    const [url] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toContain("perPage=100");
+    expect(url).toContain("page=1");
+  });
+
+  it("listTeams surfaces nextPage when Capsule returns Link header", async () => {
+    mockFetch(
+      200,
+      { teams: [{ id: 1 }] },
+      {
+        Link: '<https://api.capsulecrm.com/api/v2/teams?page=2&perPage=100>; rel="next"',
+      },
+    );
+    const { listTeams } = await import("../src/tools/metadata.js");
+    const result = await listTeams({});
+    expect(result.nextPage).toBe(2);
+  });
+
+  it("listCategories accepts explicit page/perPage overrides", async () => {
+    mockFetch(200, { categories: [] });
+    const { listCategories } = await import("../src/tools/metadata.js");
+    await listCategories({ page: 2, perPage: 25 });
+    const [url] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toContain("page=2");
+    expect(url).toContain("perPage=25");
+  });
+});
