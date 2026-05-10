@@ -87,10 +87,21 @@ describe("OAuth metadata endpoints", () => {
     expect(body["registration_endpoint"]).toBeUndefined();
   });
 
-  it("/.well-known/oauth-protected-resource returns 200 and points at the AS", async () => {
-    const res = await fetch(`${baseUrl}/.well-known/oauth-protected-resource`);
+  it("/.well-known/oauth-protected-resource/mcp advertises /mcp as the resource", async () => {
+    // The MCP server lives at /mcp, so per RFC 9728 the
+    // protected-resource metadata is published with that path
+    // suffix. Bare /.well-known/oauth-protected-resource is
+    // intentionally NOT served (it would advertise the issuer root,
+    // which isn't a resource).
+    const res = await fetch(
+      `${baseUrl}/.well-known/oauth-protected-resource/mcp`,
+    );
     expect(res.status).toBe(200);
     const body = (await res.json()) as Record<string, unknown>;
+    // Resource URL is built from the configured issuerUrl (not the
+    // ephemeral test port), so assert on the path/origin pair rather
+    // than the test baseUrl.
+    expect(body["resource"]).toBe("http://localhost/mcp");
     expect(body["authorization_servers"]).toBeTruthy();
   });
 });
@@ -107,14 +118,20 @@ describe("DCR is disabled in static-client mode", () => {
 });
 
 describe("Negative auth surface on /mcp", () => {
-  it("POST /mcp without bearer returns 401 with WWW-Authenticate", async () => {
+  it("POST /mcp without bearer returns 401 with WWW-Authenticate (incl. resource_metadata)", async () => {
     const res = await fetch(`${baseUrl}/mcp`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}),
     });
     expect(res.status).toBe(401);
-    expect(res.headers.get("www-authenticate")?.toLowerCase()).toContain("bearer");
+    const wwwAuth = res.headers.get("www-authenticate") ?? "";
+    expect(wwwAuth.toLowerCase()).toContain("bearer");
+    // The metadata URL must be advertised so generic clients can
+    // discover the resource server's protected-resource metadata
+    // (RFC 9728 §5.1).
+    expect(wwwAuth).toContain("resource_metadata=");
+    expect(wwwAuth).toContain("/.well-known/oauth-protected-resource/mcp");
   });
 
   it("POST /mcp with a forged bearer returns 401", async () => {

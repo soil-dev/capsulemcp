@@ -11,7 +11,10 @@
 
 import express from "express";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { mcpAuthRouter } from "@modelcontextprotocol/sdk/server/auth/router.js";
+import {
+  mcpAuthRouter,
+  getOAuthProtectedResourceMetadataUrl,
+} from "@modelcontextprotocol/sdk/server/auth/router.js";
 import { requireBearerAuth } from "@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js";
 import type { OAuthProvider } from "../auth/provider.js";
 import { createCapsuleMcpServer } from "../server.js";
@@ -44,6 +47,15 @@ export function createApp(opts: AppOptions): express.Express {
   const resourceName = opts.resourceName ?? "Capsule CRM MCP";
   const trustProxy = opts.trustProxy ?? 1;
 
+  // The MCP server lives at /mcp under the issuer. Advertise its
+  // path-specific protected-resource metadata at
+  // /.well-known/oauth-protected-resource/mcp, and include the
+  // metadata URL in WWW-Authenticate on /mcp's 401s so generic
+  // OAuth/MCP clients can discover it without baked-in knowledge.
+  const mcpResourceUrl = new URL("/mcp", issuerUrl);
+  const mcpResourceMetadataUrl =
+    getOAuthProtectedResourceMetadataUrl(mcpResourceUrl);
+
   const app = express();
   // MUST be set before mcpAuthRouter so the rate-limit middleware
   // inside the SDK's auth router sees the configured trust setting.
@@ -56,6 +68,7 @@ export function createApp(opts: AppOptions): express.Express {
       issuerUrl,
       scopesSupported: [],
       resourceName,
+      resourceServerUrl: mcpResourceUrl,
     }),
   );
 
@@ -79,7 +92,10 @@ export function createApp(opts: AppOptions): express.Express {
   // ── MCP endpoint (gated by Bearer token from the OAuth provider) ─────────
   app.post(
     "/mcp",
-    requireBearerAuth({ verifier: oauthProvider }),
+    requireBearerAuth({
+      verifier: oauthProvider,
+      resourceMetadataUrl: mcpResourceMetadataUrl,
+    }),
     async (req, res) => {
       try {
         const server = createCapsuleMcpServer();
@@ -104,7 +120,10 @@ export function createApp(opts: AppOptions): express.Express {
 
   app.get(
     "/mcp",
-    requireBearerAuth({ verifier: oauthProvider }),
+    requireBearerAuth({
+      verifier: oauthProvider,
+      resourceMetadataUrl: mcpResourceMetadataUrl,
+    }),
     (_req, res) => {
       res.status(405).json({
         error: "method_not_allowed",
@@ -115,7 +134,10 @@ export function createApp(opts: AppOptions): express.Express {
   );
   app.delete(
     "/mcp",
-    requireBearerAuth({ verifier: oauthProvider }),
+    requireBearerAuth({
+      verifier: oauthProvider,
+      resourceMetadataUrl: mcpResourceMetadataUrl,
+    }),
     (_req, res) => {
       res.status(405).json({
         error: "method_not_allowed",
