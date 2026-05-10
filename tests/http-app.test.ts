@@ -47,6 +47,7 @@ beforeAll(async () => {
       clientName: "test client",
     }),
     signingKey: SIGNING_KEY,
+    resourceUrl: new URL("http://localhost/mcp"),
     enableAuthCodeGc: false,
   });
 
@@ -54,6 +55,7 @@ beforeAll(async () => {
     oauthProvider: provider,
     issuerUrl: new URL("http://localhost"),
     jsonLimit: "1mb",
+    allowedOrigins: ["http://localhost", "https://claude.ai"],
   });
 
   await new Promise<void>((resolve) => {
@@ -135,6 +137,30 @@ describe("Negative auth surface on /mcp", () => {
     expect(wwwAuth).toContain("/.well-known/oauth-protected-resource/mcp");
   });
 
+  it("POST /mcp rejects invalid browser origins before auth", async () => {
+    const res = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "https://evil.example",
+      },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it("POST /mcp allows configured browser origins through to auth", async () => {
+    const res = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "https://claude.ai",
+      },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(401);
+  });
+
   it("POST /mcp authenticates before parsing the JSON body", async () => {
     const res = await fetch(`${baseUrl}/mcp`, {
       method: "POST",
@@ -166,6 +192,18 @@ describe("Negative auth surface on /mcp", () => {
     expect(res.status).toBe(405);
     const body = (await res.json()) as Record<string, unknown>;
     expect(body["error"]).toBe("method_not_allowed");
+  });
+
+  it("GET /mcp with a valid bearer rejects unsupported protocol versions before 405", async () => {
+    const accessToken = await mintToken();
+    const res = await fetch(`${baseUrl}/mcp`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "MCP-Protocol-Version": "2099-01-01",
+      },
+    });
+    expect(res.status).toBe(400);
   });
 
   it("DELETE /mcp with a valid bearer returns 405", async () => {
@@ -330,6 +368,7 @@ async function getAuthCode(): Promise<string> {
     redirect_uri: REDIRECT_URI,
     code_challenge: CODE_CHALLENGE,
     code_challenge_method: "S256",
+    resource: "http://localhost/mcp",
   });
   const res = await fetch(`${baseUrl}/authorize?${params}`, {
     redirect: "manual",
@@ -349,6 +388,7 @@ async function mintToken(): Promise<string> {
     client_secret: CLIENT_SECRET,
     redirect_uri: REDIRECT_URI,
     code_verifier: CODE_VERIFIER,
+    resource: "http://localhost/mcp",
   });
   const res = await fetch(`${baseUrl}/token`, {
     method: "POST",

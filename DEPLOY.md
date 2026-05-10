@@ -46,6 +46,7 @@ If neither mode is configured, the server **refuses to start**. There's no path 
 | `MCP_OAUTH_CLIENT_ID` | yes for static-client mode | The one allowed OAuth client_id. Pasted into Anthropic's connector config |
 | `MCP_OAUTH_CLIENT_SECRET` | yes for static-client mode | Matching client_secret; ≥ 16 chars. The real auth gate |
 | `MCP_OAUTH_REDIRECT_URIS` | optional | Comma-separated allow-list. Defaults to Anthropic's known callbacks (`https://claude.ai/api/mcp/auth_callback`, `https://claude.ai/api/oauth/callback`, `https://claude.ai/oauth/callback`) |
+| `MCP_ALLOWED_ORIGINS` | optional | Comma-separated browser origins allowed to send Origin-bearing `/mcp` requests. Defaults include `PUBLIC_BASE_URL`'s origin and `https://claude.ai` |
 | `MCP_OAUTH_INSECURE_AUTO_APPROVE` | yes for that mode | Set to `1` to enable auto-approve. Mutually exclusive with the static-client vars. Refused at startup unless `PUBLIC_BASE_URL` is loopback or `MCP_OAUTH_I_KNOW_WHAT_IM_DOING=yes` |
 | `MCP_OAUTH_I_KNOW_WHAT_IM_DOING` | only with insecure-auto-approve on a non-loopback host | Set to `yes` to acknowledge that you've put the deployment behind a private-network ingress (e.g. Tailscale, VPN). Required because the auto-approve mode lets anyone who reaches the URL register a client and use the shared Capsule token |
 | `CAPSULE_MCP_READONLY` | optional | Set to `1` to skip registering all write/delete tools at the MCP layer |
@@ -223,6 +224,8 @@ Three secrets, three concerns:
 
 - The `client_secret` is what stops a random caller from completing the OAuth flow. It lives in your Cloud Run env (or Secret Manager) and Anthropic's stored connector config; nowhere else.
 - The `signing_key` is what stops anyone from forging an access token. Anyone who has it can mint tokens; treat it like a private key. **It is also the kill switch**: rotating `MCP_OAUTH_SIGNING_KEY` immediately invalidates every outstanding access and refresh token (the design is stateless HMAC, so there is no per-token revocation list — by intent, since Cloud Run instances must come and go without sharing state).
+- OAuth tokens are bound to the canonical MCP resource URL (`PUBLIC_BASE_URL` + `/mcp`) via the MCP/RFC 8707 `resource` indicator. Requests with tokens minted for a different MCP resource are rejected.
+- `/mcp` validates any browser `Origin` header against `PUBLIC_BASE_URL`, `https://claude.ai`, and optional `MCP_ALLOWED_ORIGINS` entries, matching the Streamable HTTP DNS-rebinding guidance.
 - Issued tokens have **1-day access TTL** and **30-day refresh TTL**. Anthropic's connector renews silently in the background using the static client_id/secret; if a refresh token leaks, its useful life is bounded by the 30-day TTL **or** by the next signing-key rotation, whichever comes first.
 - The `capsule_api_token` scope is the **blast radius cap**. If a token leaks somehow, the read-only scope means no writes happen.
 

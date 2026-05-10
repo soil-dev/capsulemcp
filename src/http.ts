@@ -64,6 +64,7 @@ if ("error" in modeResult) fatal(modeResult.error);
 const mode = modeResult.ok;
 
 const issuerUrl = new URL(publicBaseUrl);
+const mcpResourceUrl = new URL("/mcp", issuerUrl);
 
 // ── Provider construction ───────────────────────────────────────────────────
 
@@ -77,15 +78,22 @@ const oauthProvider =
           clientName: "capsulemcp pre-registered client",
         }),
         signingKey,
+        resourceUrl: mcpResourceUrl,
       })
     : new OAuthProvider({
         clientsStore: new InMemoryClientsStore(),
         signingKey,
+        resourceUrl: mcpResourceUrl,
       });
 
 // ── Build app and start ─────────────────────────────────────────────────────
 
-const app = createApp({ oauthProvider, issuerUrl, jsonLimit });
+const app = createApp({
+  oauthProvider,
+  issuerUrl,
+  jsonLimit,
+  allowedOrigins: baseResult.ok.allowedOrigins,
+});
 
 app.listen(port, () => {
   const readMode = isReadOnly() ? "read-only" : "read-write";

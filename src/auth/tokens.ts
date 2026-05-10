@@ -17,6 +17,8 @@ export type TokenType = "access" | "refresh";
 export interface SignedTokenClaims {
   type: TokenType;
   clientId: string;
+  /** Canonical MCP resource URI this token was issued for. */
+  resource?: string;
   scopes: string[];
   /** ms-since-epoch when this token expires. */
   expiresAt: number;
