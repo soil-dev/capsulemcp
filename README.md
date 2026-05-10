@@ -16,6 +16,7 @@ A [Model Context Protocol](https://modelcontextprotocol.io) server for [Capsule 
 | To deploy it once and have your whole team use it via Claude.ai | [DEPLOY.md](DEPLOY.md) |
 | To contribute, debug, add a tool, or cut a release | [HOWTO.md](HOWTO.md) |
 | To understand what's intentionally not implemented (and why) | [DESIGN.md](DESIGN.md) |
+| To see ideas for features that might land in future versions | [IDEAS.md](IDEAS.md) |
 
 For most individual users the install is a single JSON snippet pasted into Claude Desktop's config — see [INSTALL.md](INSTALL.md).
 

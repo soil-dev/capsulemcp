@@ -343,55 +343,7 @@ unimplemented.
 
 ## Future considerations
 
-Things that might be worth doing but aren't planned. Listed without
+Ideas for features that go beyond the existing surface — per-user
+OAuth, caching, larger attachment caps, the MCP `prompts` capability,
+etc. — live in [IDEAS.md](IDEAS.md). They're listed there without
 commitment.
-
-### F1. Per-user OAuth (multi-tenant deployment)
-
-Solve L1 / L4 by federating identity. Each Claude user goes through
-Capsule's OAuth 2 flow once, gets their own Capsule access token,
-and the MCP server uses that token for their calls. Audit trails
-attribute correctly. Record visibility filters per the user's
-Capsule role.
-
-Cost: significantly more state (per-user token store), more refresh
-handling, more configuration. Worth it only if capsulemcp is
-deployed as a multi-customer service.
-
-### F2. Rate-limit fairness
-
-Add a per-user rate-limit budget on top of Capsule's per-token
-limit. Prevents one user from starving others. Probably combines
-with F1 since fairness needs identity.
-
-### F3. Reference-data caching
-
-Cache the rarely-changing reference data (teams, lost reasons,
-custom field definitions) with a short TTL. Bigger benefit if a
-single Claude turn asks many questions that need the same metadata.
-Implementation: in-memory map with TTL, invalidated on process
-restart. Don't cache anything that changes (parties, opportunities,
-entries) — the staleness window is worse than the round-trip.
-
-### F4. Webhook ingest
-
-Capsule emits webhooks for record creation / update / deletion. An
-MCP server could ingest these and proactively notify Claude of
-changes. Fundamentally different protocol from MCP's tool-call
-model — would need a parallel non-MCP component.
-
-### F5. MCP `prompts` capability
-
-Once popular MCP-client UIs surface prompts, expose the EXAMPLES.md
-catalogue as discoverable prompt templates so users can pick a
-prompt rather than typing one.
-
-### F6. Add-attachment-to-existing-entry
-
-The current `upload_attachment` always creates a new note. To attach
-to an existing entry without losing its other attachments, we'd need
-to read the entry first, append our token to its `attachments` array,
-and PUT the modified entry. Doable; deferred because the new-note
-case covers the 80% scenario and the read-then-write dance is
-non-trivial to get right (race conditions if two tools attach
-concurrently).
