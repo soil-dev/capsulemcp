@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { capsuleDelete, capsuleGet, capsulePost } from "../capsule/client.js";
+import {
+  capsuleDelete,
+  capsuleGet,
+  capsulePostNoContent,
+} from "../capsule/client.js";
 
 // Inter-entity relationships:
 //
@@ -62,11 +66,17 @@ export const addAdditionalPartySchema = z.object({
 export async function addAdditionalParty(
   input: z.infer<typeof addAdditionalPartySchema>,
 ) {
-  // Capsule's POST returns the updated entity (opportunity or kase).
-  return capsulePost<unknown>(
+  // Capsule returns 204 No Content on success — there's no JSON body
+  // to parse. `capsulePostNoContent` handles the empty response cleanly.
+  await capsulePostNoContent(
     `/${input.entity}/${input.entityId}/parties/${input.partyId}`,
-    {},
   );
+  return {
+    linked: true,
+    entity: input.entity,
+    entityId: input.entityId,
+    partyId: input.partyId,
+  };
 }
 
 // ── Remove additional party ─────────────────────────────────────────────────

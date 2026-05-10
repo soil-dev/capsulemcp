@@ -58,12 +58,15 @@ describe("listAdditionalParties", () => {
 });
 
 describe("addAdditionalParty", () => {
-  it("POSTs to /<entity>/{id}/parties/{partyId}", async () => {
-    mockFetch(200, { opportunity: { id: 99 } });
+  it("POSTs to /<entity>/{id}/parties/{partyId} (Capsule returns 204 No Content)", async () => {
+    // Capsule returns 204 with an empty body — verified live during
+    // the v1.0.0 wire-trace. capsulePost would have crashed on JSON
+    // parse of an empty body; capsulePostNoContent handles it.
+    mockFetch(204, {});
     const { addAdditionalParty } = await import(
       "../src/tools/relationships.js"
     );
-    await addAdditionalParty({
+    const result = await addAdditionalParty({
       entity: "opportunities",
       entityId: 99,
       partyId: 42,
@@ -71,6 +74,24 @@ describe("addAdditionalParty", () => {
     const [url, init] = vi.mocked(fetch).mock.calls[0]!;
     expect(url).toContain("/opportunities/99/parties/42");
     expect((init as { method: string }).method).toBe("POST");
+    expect(result.linked).toBe(true);
+    expect(result.entityId).toBe(99);
+    expect(result.partyId).toBe(42);
+  });
+
+  it("does not send a Content-Type header (no body)", async () => {
+    mockFetch(204, {});
+    const { addAdditionalParty } = await import(
+      "../src/tools/relationships.js"
+    );
+    await addAdditionalParty({
+      entity: "kases",
+      entityId: 1,
+      partyId: 2,
+    });
+    const [, init] = vi.mocked(fetch).mock.calls[0]!;
+    const headers = (init as { headers: Record<string, string> }).headers;
+    expect(headers["Content-Type"]).toBeUndefined();
   });
 });
 

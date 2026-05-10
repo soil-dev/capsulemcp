@@ -218,6 +218,27 @@ export async function capsulePost<T>(path: string, body: unknown): Promise<T> {
 }
 
 /**
+ * POST a request that creates a side-effect (linking, applying, etc.)
+ * but doesn't return a body. Capsule returns 204 No Content on these
+ * endpoints, e.g. POST /opportunities/{id}/parties/{partyId} (link an
+ * additional party). `capsulePost` would crash trying to JSON-parse
+ * an empty body; this helper handles it.
+ */
+export async function capsulePostNoContent(path: string): Promise<void> {
+  if (isReadOnly()) throw new CapsuleReadOnlyError("POST");
+  const token = getToken();
+  const url = buildUrl(path);
+  const res = await doFetch(url, {
+    method: "POST",
+    headers: baseHeaders(token),
+  });
+  if (res.status === 204) return;
+  await throwForStatus(res);
+  // 2xx-but-not-204: drain the body so the connection can be reused.
+  await res.text();
+}
+
+/**
  * POST a body to a Capsule endpoint that semantically performs a *read*
  * (e.g. `/parties/filters/results`). Capsule uses POST for these
  * endpoints because the filter conditions don't fit cleanly into a query

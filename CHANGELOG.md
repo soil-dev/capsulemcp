@@ -13,6 +13,14 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ### Fixed
 
+- `add_additional_party` was crashing with
+  `SyntaxError: Unexpected end of JSON input` because Capsule
+  returns 204 No Content on the link endpoint
+  (`POST /<entity>/{id}/parties/{partyId}`) and `capsulePost` always
+  called `res.json()`. New `capsulePostNoContent` helper handles the
+  empty-body case; the tool now returns a synthetic
+  `{linked: true, ...}` summary instead. Caught during the v1.0.0
+  wire-trace.
 - `apply_track` was sending `{trackDefinition: {id}}` in the request
   body, which Capsule rejects with 422 "track definition is required;
   field=definition". The correct field name is `definition`. The GET
@@ -76,8 +84,17 @@ versions adhere to [Semantic Versioning](https://semver.org).
   `resolveBaseConfig` across all expected env permutations.
 - Pagination tests for the reference-data tools.
 - Base64-validation regression tests for `upload_attachment`.
+- `capsulePostNoContent` client helper for 204-returning POSTs
+  (currently used only by `add_additional_party`; available for
+  any future endpoint with the same shape).
+- `scripts/wire-trace.ts` — pre-1.0 verification harness that
+  invokes every write-side tool function against the live API,
+  observes the actual HTTP requests our code emits via undici's
+  diagnostic_channel, and cleans up. Caught two production bugs
+  (`apply_track` field name, `add_additional_party` 204 handling)
+  that mock-only tests would have missed.
 
-Suite now 171/171 passing.
+Suite now 172/172 passing.
 
 ## [0.6.0] — 2026-05-10
 
