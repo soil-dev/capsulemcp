@@ -5,7 +5,7 @@ Task-oriented procedures for working on capsulemcp. Focused on the things you mi
 ## Run tests locally
 
 ```sh
-git clone https://github.com/arapov/capsulemcp.git
+git clone https://github.com/soil-dev/capsulemcp.git
 cd capsulemcp
 npm install
 npm test
@@ -194,7 +194,7 @@ git push origin vX.Y.Z
 gh release create vX.Y.Z --title "vX.Y.Z — title" --notes "<release notes>"
 ```
 
-The `npx -y github:arapov/capsulemcp#vX.Y.Z` install path picks up the new tag immediately. Users on `#vX.Y.(Z-1)` keep using the old tag until they bump.
+The `npx -y github:soil-dev/capsulemcp#vX.Y.Z` install path picks up the new tag immediately. Users on `#vX.Y.(Z-1)` keep using the old tag until they bump.
 
 Versioning convention:
 

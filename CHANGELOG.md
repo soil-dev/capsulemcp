@@ -3,7 +3,7 @@
 All notable changes to capsulemcp.
 
 The full release notes for each tagged version live on GitHub:
-<https://github.com/arapov/capsulemcp/releases>. This file mirrors the
+<https://github.com/soil-dev/capsulemcp/releases>. This file mirrors the
 high-level summary so it's discoverable from the repo and on npm.
 
 The format follows [Keep a Changelog](https://keepachangelog.com), and

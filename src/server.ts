@@ -117,7 +117,7 @@ export function createCapsuleMcpServer(): McpServer {
     name: "capsulemcp",
     version: "0.6.0",
     description: "Read and (optionally) modify Capsule CRM data — parties, opportunities, projects, tasks, timeline entries, pipelines, tags.",
-    websiteUrl: "https://github.com/arapov/capsulemcp",
+    websiteUrl: "https://github.com/soil-dev/capsulemcp",
     icons: ICONS,
   });
 

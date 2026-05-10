@@ -34,7 +34,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/arapov/capsulemcp.git"
+    "url": "git+https://github.com/soil-dev/capsulemcp.git"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",

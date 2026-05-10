@@ -100,7 +100,7 @@ echo "  CLIENT_SECRET=$CLIENT_SECRET"
 # 2. Deploy. Note: a single --set-env-vars with the ^|^ delimiter syntax —
 #    repeated --set-env-vars flags would overwrite each other (gcloud's
 #    "set" semantics). Use --update-env-vars later for incremental adds.
-git clone https://github.com/arapov/capsulemcp.git
+git clone https://github.com/soil-dev/capsulemcp.git
 cd capsulemcp
 gcloud run deploy $SERVICE \
   --project=$PROJECT \
