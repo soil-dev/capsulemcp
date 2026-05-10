@@ -1,17 +1,16 @@
 /**
- * The capsulemcp icon.
+ * The capsulemcp icon. Stylised diagonal capsule: two halves with a
+ * faint highlight stripe. Designed for crisp display down to 16x16.
+ * Visually neutral — does not reproduce any Capsule CRM trademark.
  *
- * Inlined as a string here (rather than read from disk) so it survives
- * the tsup bundle without needing assets/ in the runtime image. The
- * canonical source is `assets/icon.svg`; if you edit one, edit both,
- * or run a build step that generates this from the SVG file.
+ * Inlined as a string so it survives the tsup bundle without needing a
+ * separate assets/ tree at runtime.
  *
  * Exposed two ways:
  *   - Embedded as a data: URI in the MCP `serverInfo.icons` array
- *     (spec-compliant; works without any HTTP route)
+ *     (spec-compliant; works without any HTTP route).
  *   - Served at `/icon.svg` and `/favicon.ico` by the HTTP entry, in
- *     case the consuming client (Anthropic's connector UI) prefers a
- *     URL it can fetch
+ *     case the consuming client prefers a URL it can fetch.
  */
 
 export const ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="capsulemcp">

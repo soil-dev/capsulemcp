@@ -36,19 +36,14 @@
  *                         accepts shorthand like '50mb' or raw bytes.)
  */
 
-import express from "express";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { mcpAuthRouter } from "@modelcontextprotocol/sdk/server/auth/router.js";
-import { requireBearerAuth } from "@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js";
 import { isReadOnly } from "./capsule/client.js";
-import { createCapsuleMcpServer } from "./server.js";
 import {
   OAuthProvider,
   InMemoryClientsStore,
   FixedClientStore,
 } from "./auth/provider.js";
-import { ICON_SVG } from "./icon.js";
 import { resolveBaseConfig, selectMode } from "./http/config.js";
+import { createApp } from "./http/app.js";
 
 // ── Module top-level: wire the pure config helpers into a running server ────
 
@@ -85,77 +80,9 @@ const oauthProvider =
         signingKey,
       });
 
-// ── Express app ─────────────────────────────────────────────────────────────
+// ── Build app and start ─────────────────────────────────────────────────────
 
-const app = express();
-app.use(express.json({ limit: jsonLimit }));
-
-app.use(
-  mcpAuthRouter({
-    provider: oauthProvider,
-    issuerUrl,
-    scopesSupported: [],
-    resourceName: "Capsule CRM MCP",
-  }),
-);
-
-// ── Icon (cosmetic) ─────────────────────────────────────────────────────────
-//
-// Some connector UIs prefer fetching an icon over a URL rather than reading
-// it from the MCP serverInfo payload. Serve our SVG at both /icon.svg and
-// /favicon.ico (browsers default-fetch the latter). 24h cache — the icon
-// rotates approximately never.
-
-const iconHandler = (_req: express.Request, res: express.Response): void => {
-  res
-    .set("Content-Type", "image/svg+xml")
-    .set("Cache-Control", "public, max-age=86400")
-    .send(ICON_SVG);
-};
-app.get("/icon.svg", iconHandler);
-app.get("/favicon.ico", iconHandler);
-
-// ── MCP endpoint (gated by Bearer token from the OAuth provider) ────────────
-
-app.post(
-  "/mcp",
-  requireBearerAuth({ verifier: oauthProvider }),
-  async (req, res) => {
-    try {
-      const server = createCapsuleMcpServer();
-      const transport = new StreamableHTTPServerTransport({});
-
-      res.on("close", () => {
-        void transport.close();
-        void server.close();
-      });
-
-      await server.connect(transport);
-      await transport.handleRequest(req, res, req.body);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error(`[capsulemcp] /mcp error: ${message}`);
-      if (!res.headersSent) {
-        res.status(500).json({ error: "internal_error", message });
-      }
-    }
-  },
-);
-
-app.get("/mcp", requireBearerAuth({ verifier: oauthProvider }), (_req, res) => {
-  res.status(405).json({
-    error: "method_not_allowed",
-    message: "Use POST for MCP requests; this server runs in stateless mode.",
-  });
-});
-app.delete("/mcp", requireBearerAuth({ verifier: oauthProvider }), (_req, res) => {
-  res.status(405).json({
-    error: "method_not_allowed",
-    message: "Use POST for MCP requests; this server runs in stateless mode.",
-  });
-});
-
-// ── Start ───────────────────────────────────────────────────────────────────
+const app = createApp({ oauthProvider, issuerUrl, jsonLimit });
 
 app.listen(port, () => {
   const readMode = isReadOnly() ? "read-only" : "read-write";

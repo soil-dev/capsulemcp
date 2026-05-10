@@ -103,8 +103,35 @@ versions adhere to [Semantic Versioning](https://semver.org).
 - The stale `scripts/live-smoke.ts` was removed —
   `scripts/wire-trace.ts` covers everything it did and more (every
   write tool, including v0.4–v0.6 additions).
+- HTTP-app factory extracted to `src/http/app.ts` (mirrors the
+  earlier `src/http/config.ts` extraction). `src/http.ts` is now a
+  thin entry that resolves config, builds the OAuth provider,
+  invokes `createApp`, and listens.
+- `tests/rate-limit.test.ts` (7 tests): retry-on-429 with both
+  integer-seconds and HTTP-date Retry-After headers, infinite-loop
+  prevention (gives up after one retry), 5-second default when
+  Retry-After is missing, 60-second clamp on absurdly large values,
+  pass-through of non-429 errors, no retry on 401.
+- `tests/http-app.test.ts` (15 tests): `/.well-known/*` metadata
+  shapes, DCR disabled in static-client mode (`POST /register` →
+  404), bearer-required gates on `/mcp` (401 without bearer, 401 on
+  forged token, 405 on GET/DELETE with valid bearer), `/authorize`
+  redirect with code (and rejection for wrong client_id), `/token`
+  invalid_client on wrong secret, icon endpoint content-type and
+  cache headers.
+- `tests/stdio-entry.test.ts` (4 tests): smoke for the npx-installed
+  binary. Spawns `dist/index.js` as a child process, walks the
+  initialize handshake, calls `tools/list`, asserts the
+  read-only-mode catalogue. Catches regressions in the post-build
+  bundle that no other test layer would see.
+- Removed unused `assets/icon.svg` — it was nominally the canonical
+  source per a comment in `src/icon.ts`, but nothing imported it at
+  runtime and the comment was a hand-sync hazard.
+- `AutoApproveOAuthProvider` annotated as `@deprecated since v1.0.0`
+  in source. Kept as an alias for backwards compatibility; future
+  major release may remove it.
 
-Suite now 186/186 passing.
+Suite now 212/212 passing across 24 test files.
 
 ## [0.6.0] — 2026-05-10
 
