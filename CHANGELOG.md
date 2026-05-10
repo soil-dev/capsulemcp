@@ -66,6 +66,29 @@ versions adhere to [Semantic Versioning](https://semver.org).
   Default `perPage=100` (Capsule's max) so small accounts still get
   everything in one call. Previously a 51-team account would have
   silently capped at Capsule's 50-record default page size.
+- HTTP transport: `app.set("trust proxy", 1)` is set before the
+  SDK's `mcpAuthRouter`. Without it, `express-rate-limit` (used
+  internally by the auth router on `/authorize`, `/token`, and
+  `/register`) treats Cloud Run's `X-Forwarded-For` as a
+  misconfiguration and can fail OAuth requests in any
+  ingress-fronted deployment. Configurable via the `trustProxy`
+  option on `createApp` for multi-hop setups. (Issue #4.)
+- HTTP transport: protected-resource metadata is now published at
+  the RFC 9728 path-suffixed location keyed on the actual MCP
+  resource (`/.well-known/oauth-protected-resource/mcp`), not the
+  bare `/.well-known/oauth-protected-resource`. The `/mcp` 401
+  response also includes `resource_metadata=…` in
+  `WWW-Authenticate` so generic OAuth/MCP clients can discover the
+  metadata without baked-in knowledge of the server layout.
+  (Issue #5.)
+- HTTP transport: `resolveBaseConfig` and `selectMode` now validate
+  env up front. `PUBLIC_BASE_URL` must parse as a URL and use
+  `https://` (or `http://` on localhost / 127.0.0.1 / ::1) — every
+  other scheme, including schemeless `localhost:3000`, is rejected
+  at startup. Each `MCP_OAUTH_REDIRECT_URIS` entry is validated
+  with `URL.canParse`. `PORT` must be an integer in 1..65535. Bad
+  values produce clear startup errors instead of late stack traces
+  or broken OAuth metadata. (Issues #6 + #7.)
 
 ### Changed
 
@@ -158,6 +181,10 @@ versions adhere to [Semantic Versioning](https://semver.org).
   that don't exist outside of OpenSSL's (which already migrated to
   `MCP_OAUTH_SIGNING_KEY` long ago). Error message and DEPLOY.md
   table updated to drop the fallback reference.
+- Dependency bumps via Dependabot security advisories:
+  `express-rate-limit` 8.5.0 → 8.5.1, transitive `ip-address`
+  10.1.0 → 10.2.0 (PR #1); `esbuild` 0.21 → 0.27/0.28 and `vitest`
+  2.1 → 4.1.5 (PR #3, superseding the redundant PR #2).
 
 Suite now 227/227 passing across 25 test files.
 
