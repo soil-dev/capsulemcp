@@ -3,6 +3,7 @@ import {
   selectMode,
   resolveBaseConfig,
   DEFAULT_ANTHROPIC_REDIRECT_URIS,
+  DEFAULT_MCP_CLIENT_ORIGINS,
 } from "../src/http/config.js";
 
 // ── selectMode ──────────────────────────────────────────────────────────────
@@ -191,6 +192,10 @@ describe("resolveBaseConfig", () => {
         signingKey: VALID_KEY,
         port: 8080,
         jsonLimit: "35mb",
+        allowedOrigins: [
+          "https://example.run.app",
+          ...DEFAULT_MCP_CLIENT_ORIGINS,
+        ],
       },
     });
   });
@@ -211,6 +216,46 @@ describe("resolveBaseConfig", () => {
       MCP_HTTP_JSON_LIMIT: "100mb",
     });
     if ("ok" in result) expect(result.ok.jsonLimit).toBe("100mb");
+  });
+
+  it("uses MCP_ALLOWED_ORIGINS when set", () => {
+    const result = resolveBaseConfig({
+      PUBLIC_BASE_URL: "https://example.run.app",
+      MCP_OAUTH_SIGNING_KEY: VALID_KEY,
+      MCP_ALLOWED_ORIGINS: "https://app.example, https://other.example/path",
+    });
+    if ("ok" in result) {
+      expect(result.ok.allowedOrigins).toEqual([
+        "https://example.run.app",
+        ...DEFAULT_MCP_CLIENT_ORIGINS,
+        "https://app.example",
+        "https://other.example",
+      ]);
+    }
+  });
+
+  it("errors when MCP_ALLOWED_ORIGINS contains a malformed URL", () => {
+    const result = resolveBaseConfig({
+      PUBLIC_BASE_URL: "https://example.run.app",
+      MCP_OAUTH_SIGNING_KEY: VALID_KEY,
+      MCP_ALLOWED_ORIGINS: "https://ok.example,not a url",
+    });
+    expect("error" in result).toBe(true);
+    if ("error" in result) {
+      expect(result.error).toContain("MCP_ALLOWED_ORIGINS");
+    }
+  });
+
+  it("errors when MCP_ALLOWED_ORIGINS contains a non-web origin", () => {
+    const result = resolveBaseConfig({
+      PUBLIC_BASE_URL: "https://example.run.app",
+      MCP_OAUTH_SIGNING_KEY: VALID_KEY,
+      MCP_ALLOWED_ORIGINS: "ftp://app.example",
+    });
+    expect("error" in result).toBe(true);
+    if ("error" in result) {
+      expect(result.error).toContain("https:// origins");
+    }
   });
 
   it("errors when PUBLIC_BASE_URL is missing", () => {

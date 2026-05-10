@@ -273,6 +273,7 @@ describe("OAuthProvider authCodes cap (DoS hardening)", () => {
 describe("OAuthProvider + FixedClientStore", () => {
   const KEY_LOCAL = "0123456789abcdef0123456789abcdef";
   const SECRET = "fixed-client-secret-must-be-strong-32";
+  const RESOURCE_URL = new URL("https://mcp.example.com/mcp");
 
   function makeProvider() {
     return new OAuthProvider({
@@ -282,6 +283,7 @@ describe("OAuthProvider + FixedClientStore", () => {
         redirectUris: ["http://x/cb"],
       }),
       signingKey: KEY_LOCAL,
+      resourceUrl: RESOURCE_URL,
       enableAuthCodeGc: false,
     });
   }
@@ -292,7 +294,11 @@ describe("OAuthProvider + FixedClientStore", () => {
     let redirected: string | undefined;
     await p.authorize(
       client,
-      { codeChallenge: "c", redirectUri: "http://x/cb" },
+      {
+        codeChallenge: "c",
+        redirectUri: "http://x/cb",
+        resource: RESOURCE_URL,
+      },
       { redirect: (u: string) => { redirected = u; } } as never,
     );
     const code = new URL(redirected!).searchParams.get("code")!;
@@ -300,6 +306,64 @@ describe("OAuthProvider + FixedClientStore", () => {
     expect(tokens.access_token).toBeTruthy();
     const auth = await p.verifyAccessToken(tokens.access_token);
     expect(auth.clientId).toBe("fixed-id");
+  });
+
+  it("rejects authorization requests for a different MCP resource", async () => {
+    const p = makeProvider();
+    const client = p.clientsStore.getClient("fixed-id")!;
+    await expect(
+      p.authorize(
+        client,
+        {
+          codeChallenge: "c",
+          redirectUri: "http://x/cb",
+          resource: new URL("https://attacker.example/mcp"),
+        },
+        { redirect: () => {} } as never,
+      ),
+    ).rejects.toThrow(/requested resource/);
+  });
+
+  it("rejects token exchange when token request resource differs from the authorization resource", async () => {
+    const p = makeProvider();
+    const client = p.clientsStore.getClient("fixed-id")!;
+    let redirected: string | undefined;
+    await p.authorize(
+      client,
+      {
+        codeChallenge: "c",
+        redirectUri: "http://x/cb",
+        resource: RESOURCE_URL,
+      },
+      { redirect: (u: string) => { redirected = u; } } as never,
+    );
+    const code = new URL(redirected!).searchParams.get("code")!;
+
+    await expect(
+      p.exchangeAuthorizationCode(
+        client,
+        code,
+        undefined,
+        "http://x/cb",
+        new URL("https://mcp.example.com/other"),
+      ),
+    ).rejects.toThrow(/resource/);
+  });
+
+  it("rejects access tokens missing the MCP resource audience", async () => {
+    const p = makeProvider();
+    const tok = issueToken(
+      {
+        type: "access",
+        clientId: "fixed-id",
+        scopes: [],
+        expiresAt: Date.now() + 60_000,
+        nonce: "n",
+      },
+      KEY_LOCAL,
+    );
+
+    await expect(p.verifyAccessToken(tok)).rejects.toThrow(/resource audience/);
   });
 
   it("getClient returns undefined for unregistered ids", async () => {

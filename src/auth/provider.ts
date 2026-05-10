@@ -39,12 +39,17 @@ import type {
 import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import {
   InvalidGrantError,
+  InvalidTargetError,
   InvalidTokenError,
 } from "@modelcontextprotocol/sdk/server/auth/errors.js";
 import type {
   OAuthClientInformationFull,
   OAuthTokens,
 } from "@modelcontextprotocol/sdk/shared/auth.js";
+import {
+  checkResourceAllowed,
+  resourceUrlFromServerUrl,
+} from "@modelcontextprotocol/sdk/shared/auth-utils.js";
 import {
   issueToken,
   verifyToken,
@@ -76,6 +81,7 @@ interface AuthCodeState {
   clientId: string;
   codeChallenge: string;
   redirectUri: string;
+  resource?: string;
   expiresAt: number;
 }
 
@@ -160,11 +166,18 @@ export class OAuthProvider implements OAuthServerProvider {
   readonly clientsStore: OAuthRegisteredClientsStore;
   private readonly authCodes = new Map<string, AuthCodeState>();
   private readonly signingKey: string;
+  private readonly resourceUrl: URL | undefined;
   private readonly gcTimer: NodeJS.Timeout | undefined;
 
   constructor(args: {
     clientsStore: OAuthRegisteredClientsStore;
     signingKey: string;
+    /**
+     * Canonical MCP resource URL this provider issues tokens for. When set,
+     * authorization-code and refresh exchanges reject mismatched resource
+     * indicators, and access-token verification enforces the audience.
+     */
+    resourceUrl?: URL | string;
     /**
      * Schedule a periodic sweep of expired authorization codes. Defaults
      * to true; set to false in tests so they don't keep the Node event
@@ -177,6 +190,9 @@ export class OAuthProvider implements OAuthServerProvider {
     }
     this.clientsStore = args.clientsStore;
     this.signingKey = args.signingKey;
+    this.resourceUrl = args.resourceUrl
+      ? resourceUrlFromServerUrl(args.resourceUrl)
+      : undefined;
     if (args.enableAuthCodeGc ?? true) {
       this.gcTimer = setInterval(() => this.gcAuthCodes(), AUTH_CODE_GC_INTERVAL_MS);
       // Don't keep the process alive on the GC alone.
@@ -199,11 +215,13 @@ export class OAuthProvider implements OAuthServerProvider {
     params: AuthorizationParams,
     res: Response,
   ): Promise<void> {
+    const resource = this.resolveResource(params.resource);
     const code = randomBytes(32).toString("hex");
     this.authCodes.set(code, {
       clientId: client.client_id,
       codeChallenge: params.codeChallenge,
       redirectUri: params.redirectUri,
+      resource,
       expiresAt: Date.now() + AUTH_CODE_TTL_MS,
     });
 
@@ -240,6 +258,7 @@ export class OAuthProvider implements OAuthServerProvider {
     authorizationCode: string,
     _codeVerifier?: string,
     redirectUri?: string,
+    resource?: URL,
   ): Promise<OAuthTokens> {
     const state = this.authCodes.get(authorizationCode);
     if (!state || state.expiresAt < Date.now()) {
@@ -251,13 +270,19 @@ export class OAuthProvider implements OAuthServerProvider {
     if (redirectUri && redirectUri !== state.redirectUri) {
       throw new InvalidGrantError("redirect_uri mismatch");
     }
+    const requestedResource = this.resolveResource(resource);
+    if (requestedResource && state.resource && requestedResource !== state.resource) {
+      throw new InvalidGrantError("resource mismatch");
+    }
     this.authCodes.delete(authorizationCode);
-    return this.issueTokenPair(client.client_id);
+    return this.issueTokenPair(client.client_id, requestedResource ?? state.resource);
   }
 
   async exchangeRefreshToken(
     client: OAuthClientInformationFull,
     refreshToken: string,
+    _scopes?: string[],
+    resource?: URL,
   ): Promise<OAuthTokens> {
     let claims: SignedTokenClaims;
     try {
@@ -274,7 +299,16 @@ export class OAuthProvider implements OAuthServerProvider {
     if (claims.clientId !== client.client_id) {
       throw new InvalidGrantError("refresh token was issued to a different client");
     }
-    return this.issueTokenPair(client.client_id);
+    this.assertClaimsResource(claims, InvalidGrantError);
+    const requestedResource = this.resolveResource(resource);
+    if (
+      requestedResource &&
+      claims.resource &&
+      requestedResource !== claims.resource
+    ) {
+      throw new InvalidGrantError("refresh token resource mismatch");
+    }
+    return this.issueTokenPair(client.client_id, requestedResource ?? claims.resource);
   }
 
   async verifyAccessToken(token: string): Promise<AuthInfo> {
@@ -293,6 +327,7 @@ export class OAuthProvider implements OAuthServerProvider {
     if (claims.type !== "access") {
       throw new InvalidTokenError("not an access token");
     }
+    this.assertClaimsResource(claims, InvalidTokenError);
     return {
       token,
       clientId: claims.clientId,
@@ -303,12 +338,13 @@ export class OAuthProvider implements OAuthServerProvider {
 
   // ── helpers ──────────────────────────────────────────────────────────────
 
-  private issueTokenPair(clientId: string): OAuthTokens {
+  private issueTokenPair(clientId: string, resource?: string): OAuthTokens {
     const now = Date.now();
     const access = issueToken(
       {
         type: "access",
         clientId,
+        ...(resource ? { resource } : {}),
         scopes: [],
         expiresAt: now + ACCESS_TOKEN_TTL_MS,
         nonce: randomBytes(8).toString("hex"),
@@ -319,6 +355,7 @@ export class OAuthProvider implements OAuthServerProvider {
       {
         type: "refresh",
         clientId,
+        ...(resource ? { resource } : {}),
         scopes: [],
         expiresAt: now + REFRESH_TOKEN_TTL_MS,
         nonce: randomBytes(8).toString("hex"),
@@ -333,6 +370,44 @@ export class OAuthProvider implements OAuthServerProvider {
     };
   }
 
+  private resolveResource(requestedResource?: URL): string | undefined {
+    if (!this.resourceUrl) {
+      return requestedResource
+        ? resourceUrlFromServerUrl(requestedResource).href
+        : undefined;
+    }
+    if (!requestedResource) return this.resourceUrl.href;
+    if (
+      !checkResourceAllowed({
+        requestedResource,
+        configuredResource: this.resourceUrl,
+      })
+    ) {
+      throw new InvalidTargetError(
+        `requested resource is not this MCP server: ${requestedResource.href}`,
+      );
+    }
+    return this.resourceUrl.href;
+  }
+
+  private assertClaimsResource(
+    claims: SignedTokenClaims,
+    ErrorClass: typeof InvalidGrantError | typeof InvalidTokenError,
+  ): void {
+    if (!this.resourceUrl) return;
+    if (!claims.resource) {
+      throw new ErrorClass("token is missing MCP resource audience");
+    }
+    if (
+      !checkResourceAllowed({
+        requestedResource: claims.resource,
+        configuredResource: this.resourceUrl,
+      })
+    ) {
+      throw new ErrorClass("token was issued for a different MCP resource");
+    }
+  }
+
   private gcAuthCodes(): void {
     const now = Date.now();
     for (const [code, state] of this.authCodes.entries()) {
@@ -340,4 +415,3 @@ export class OAuthProvider implements OAuthServerProvider {
     }
   }
 }
-

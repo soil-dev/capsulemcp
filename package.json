@@ -38,7 +38,7 @@
     "url": "git+https://github.com/soil-dev/capsulemcp.git"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "express": "^5.2.1",
     "undici": "^8.2.0",
     "zod": "^4.4.3"

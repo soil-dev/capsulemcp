@@ -13,6 +13,11 @@ export const DEFAULT_ANTHROPIC_REDIRECT_URIS = [
   "https://claude.ai/oauth/callback",
 ];
 
+// Browser-based MCP clients send an Origin header on /mcp requests.
+// Claude's web app is the default hosted-client origin for Custom Connectors;
+// operators can add more with MCP_ALLOWED_ORIGINS.
+export const DEFAULT_MCP_CLIENT_ORIGINS = ["https://claude.ai"];
+
 /** Hostname matches loopback (localhost / 127.0.0.1 / ::1). */
 export function isLocalHostname(hostname: string): boolean {
   return (
@@ -129,6 +134,7 @@ export interface BaseConfig {
   signingKey: string;
   port: number;
   jsonLimit: string;
+  allowedOrigins: string[];
 }
 
 export type BaseConfigResult = { ok: BaseConfig } | { error: string };
@@ -141,6 +147,8 @@ export type BaseConfigResult = { ok: BaseConfig } | { error: string };
  * - PORT: optional, default 8080.
  * - MCP_HTTP_JSON_LIMIT: optional, default '35mb' (fits a 25MB
  *   attachment base64-encoded in upload_attachment).
+ * - MCP_ALLOWED_ORIGINS: optional comma-separated browser origins allowed to
+ *   send Origin-bearing /mcp requests.
  */
 export function resolveBaseConfig(env: NodeJS.ProcessEnv = process.env): BaseConfigResult {
   const publicBaseUrl = env["PUBLIC_BASE_URL"];
@@ -194,5 +202,36 @@ export function resolveBaseConfig(env: NodeJS.ProcessEnv = process.env): BaseCon
   }
 
   const jsonLimit = env["MCP_HTTP_JSON_LIMIT"] ?? "35mb";
-  return { ok: { publicBaseUrl, signingKey, port, jsonLimit } };
+  const allowedOriginsRaw = env["MCP_ALLOWED_ORIGINS"];
+  const extraOrigins = allowedOriginsRaw
+    ? allowedOriginsRaw.split(",").map((s) => s.trim()).filter(Boolean)
+    : [];
+  const parsedExtraOrigins: URL[] = [];
+  for (const origin of extraOrigins) {
+    if (!URL.canParse(origin)) {
+      return {
+        error: `MCP_ALLOWED_ORIGINS contains a malformed URL: ${origin}`,
+      };
+    }
+    const parsedOrigin = new URL(origin);
+    const isAllowedHttps = parsedOrigin.protocol === "https:";
+    const isAllowedHttpLocal =
+      parsedOrigin.protocol === "http:" && isLocalHostname(parsedOrigin.hostname);
+    if (!isAllowedHttps && !isAllowedHttpLocal) {
+      return {
+        error:
+          `MCP_ALLOWED_ORIGINS entries must be https:// origins ` +
+          `(or http://localhost for development); got ${parsedOrigin.protocol}//${parsedOrigin.hostname}.`,
+      };
+    }
+    parsedExtraOrigins.push(parsedOrigin);
+  }
+  const allowedOrigins = Array.from(
+    new Set([
+      parsedBaseUrl.origin,
+      ...DEFAULT_MCP_CLIENT_ORIGINS,
+      ...parsedExtraOrigins.map((origin) => origin.origin),
+    ]),
+  );
+  return { ok: { publicBaseUrl, signingKey, port, jsonLimit, allowedOrigins } };
 }

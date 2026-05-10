@@ -16,6 +16,7 @@ import {
   getOAuthProtectedResourceMetadataUrl,
 } from "@modelcontextprotocol/sdk/server/auth/router.js";
 import { requireBearerAuth } from "@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js";
+import { SUPPORTED_PROTOCOL_VERSIONS } from "@modelcontextprotocol/sdk/types.js";
 import type { OAuthProvider } from "../auth/provider.js";
 import { createCapsuleMcpServer } from "../server.js";
 import { ICON_SVG } from "../icon.js";
@@ -24,6 +25,7 @@ export interface AppOptions {
   oauthProvider: OAuthProvider;
   issuerUrl: URL;
   jsonLimit: string;
+  allowedOrigins: string[];
   resourceName?: string;
   /**
    * Express `trust proxy` setting. Required when running behind a
@@ -43,7 +45,7 @@ export interface AppOptions {
 }
 
 export function createApp(opts: AppOptions): express.Express {
-  const { oauthProvider, issuerUrl, jsonLimit } = opts;
+  const { oauthProvider, issuerUrl, jsonLimit, allowedOrigins } = opts;
   const resourceName = opts.resourceName ?? "Capsule CRM MCP";
   const trustProxy = opts.trustProxy ?? 1;
 
@@ -89,12 +91,61 @@ export function createApp(opts: AppOptions): express.Express {
   app.get("/favicon.ico", iconHandler);
 
   // ── MCP endpoint (gated by Bearer token from the OAuth provider) ─────────
+  const guardOrigin: express.RequestHandler = (req, res, next) => {
+    const origin = req.get("Origin");
+    if (!origin) {
+      next();
+      return;
+    }
+    let normalizedOrigin: string;
+    try {
+      normalizedOrigin = new URL(origin).origin;
+    } catch {
+      res.status(403).json({
+        jsonrpc: "2.0",
+        error: { code: -32000, message: "Invalid Origin header" },
+        id: null,
+      });
+      return;
+    }
+    if (!allowedOrigins.includes(normalizedOrigin)) {
+      res.status(403).json({
+        jsonrpc: "2.0",
+        error: { code: -32000, message: "Origin is not allowed" },
+        id: null,
+      });
+      return;
+    }
+    next();
+  };
+
+  const guardProtocolVersion: express.RequestHandler = (req, res, next) => {
+    const protocolVersion = req.get("MCP-Protocol-Version");
+    if (
+      protocolVersion &&
+      !SUPPORTED_PROTOCOL_VERSIONS.includes(protocolVersion)
+    ) {
+      res.status(400).json({
+        jsonrpc: "2.0",
+        error: {
+          code: -32000,
+          message: `Bad Request: Unsupported protocol version: ${protocolVersion}`,
+        },
+        id: null,
+      });
+      return;
+    }
+    next();
+  };
+
   app.post(
     "/mcp",
+    guardOrigin,
     requireBearerAuth({
       verifier: oauthProvider,
       resourceMetadataUrl: mcpResourceMetadataUrl,
     }),
+    guardProtocolVersion,
     express.json({ limit: jsonLimit }),
     async (req, res) => {
       try {
@@ -125,30 +176,40 @@ export function createApp(opts: AppOptions): express.Express {
 
   app.get(
     "/mcp",
+    guardOrigin,
     requireBearerAuth({
       verifier: oauthProvider,
       resourceMetadataUrl: mcpResourceMetadataUrl,
     }),
+    guardProtocolVersion,
     (_req, res) => {
-      res.status(405).json({
-        error: "method_not_allowed",
-        message:
-          "Use POST for MCP requests; this server runs in stateless mode.",
-      });
+      res
+        .set("Allow", "POST")
+        .status(405)
+        .json({
+          error: "method_not_allowed",
+          message:
+            "Use POST for MCP requests; this server runs in stateless mode.",
+        });
     },
   );
   app.delete(
     "/mcp",
+    guardOrigin,
     requireBearerAuth({
       verifier: oauthProvider,
       resourceMetadataUrl: mcpResourceMetadataUrl,
     }),
+    guardProtocolVersion,
     (_req, res) => {
-      res.status(405).json({
-        error: "method_not_allowed",
-        message:
-          "Use POST for MCP requests; this server runs in stateless mode.",
-      });
+      res
+        .set("Allow", "POST")
+        .status(405)
+        .json({
+          error: "method_not_allowed",
+          message:
+            "Use POST for MCP requests; this server runs in stateless mode.",
+        });
     },
   );
 

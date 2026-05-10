@@ -86,7 +86,7 @@ print(base64.urlsafe_b64encode(hashlib.sha256(sys.argv[1].encode()).digest()).rs
 
 # 1. Authorize → get a code
 LOC=$(curl -s -o /dev/null -w '%{redirect_url}' \
-  "$URL/authorize?response_type=code&client_id=$CLIENT_ID&redirect_uri=https://claude.ai/api/mcp/auth_callback&code_challenge=$CHALLENGE&code_challenge_method=S256&state=t1")
+  "$URL/authorize?response_type=code&client_id=$CLIENT_ID&redirect_uri=https://claude.ai/api/mcp/auth_callback&code_challenge=$CHALLENGE&code_challenge_method=S256&state=t1&resource=$URL/mcp")
 CODE=$(python3 -c "
 import sys
 from urllib.parse import urlparse, parse_qs
@@ -102,6 +102,7 @@ ACCESS_TOKEN=$(curl -s -X POST "$URL/token" \
   --data-urlencode "client_secret=$CLIENT_SECRET" \
   --data-urlencode "code_verifier=$VERIFIER" \
   --data-urlencode "redirect_uri=https://claude.ai/api/mcp/auth_callback" \
+  --data-urlencode "resource=$URL/mcp" \
   | python3 -c "import json,sys; print(json.load(sys.stdin)['access_token'])")
 
 # 3. Call /mcp
