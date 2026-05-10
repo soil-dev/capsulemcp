@@ -92,9 +92,19 @@ versions adhere to [Semantic Versioning](https://semver.org).
   observes the actual HTTP requests our code emits via undici's
   diagnostic_channel, and cleans up. Caught two production bugs
   (`apply_track` field name, `add_additional_party` 204 handling)
-  that mock-only tests would have missed.
+  that mock-only tests would have missed. Documented in HOWTO.md.
+- `tests/mcp-integration.test.ts` — drives a real `McpServer`
+  through the MCP wire protocol via the SDK's in-memory transport
+  pair, with `undici.fetch` mocked. Verifies tool name registration,
+  read-only-mode gating, schema-validation propagation, error
+  responses for unregistered tools, and the `get_attachment`
+  content-type routing logic that lives in `server.ts` (not in
+  the tool function).
+- The stale `scripts/live-smoke.ts` was removed —
+  `scripts/wire-trace.ts` covers everything it did and more (every
+  write tool, including v0.4–v0.6 additions).
 
-Suite now 172/172 passing.
+Suite now 186/186 passing.
 
 ## [0.6.0] — 2026-05-10
 

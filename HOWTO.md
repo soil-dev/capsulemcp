@@ -11,7 +11,13 @@ npm install
 npm test
 ```
 
-146 tests, all mocked — no Capsule API calls happen, no token needed.
+186 tests, all mocked — no Capsule API calls happen, no token needed. The suite has three layers:
+
+- **Per-tool unit tests** (e.g. `tests/parties.test.ts`): import the tool function, mock `undici.fetch`, assert on the URL, method, body, and response handling. Most tests live here.
+- **MCP-protocol integration tests** (`tests/mcp-integration.test.ts`): drive a real `McpServer` through the wire protocol via the SDK's in-memory transport pair, with `undici.fetch` still mocked. Catches the layer between "tool function works" and "MCP correctly registers and dispatches the tool". Includes the `get_attachment` content-type routing logic (which lives in `server.ts`, not the tool function).
+- **Auth tests** (`tests/auth.test.ts`, `tests/http-config.test.ts`): cover OAuth token issuance/verification, mode selection, base config validation.
+
+The split lets you run any one file in isolation without a heavy setup.
 
 Watch mode while editing:
 
@@ -115,15 +121,33 @@ sh smoke.sh
 
 If you see `"users":` in the response, the full chain works.
 
-## Run the live round-trip script
+## Wire-trace against a real Capsule tenant (pre-release verifier)
 
-`scripts/live-smoke.ts` exercises every write tool against your real Capsule tenant: create a throwaway party → update it → add notes → create opportunity → create + complete + delete task → delete entry → delete opportunity → delete party. Cleans up on exit (success or failure).
+`scripts/wire-trace.ts` invokes **every write-side tool function** against your real Capsule tenant, end-to-end, observing the actual HTTP requests our code emits via Node's `node:diagnostics_channel`. Designed as a pre-release verifier: catches the class of bug where unit tests mock Capsule incorrectly (so the tool function passes against the wrong oracle) but Capsule itself rejects the wire format.
+
+What it covers in one run:
+- `create_party`, `update_party`, `delete_party`
+- `create_opportunity`, `update_opportunity`, `delete_opportunity`
+- `add_additional_party`, `remove_additional_party`
+- `create_project`, `update_project`, `delete_project`
+- `apply_track`, `update_track`, `remove_track`
+- `create_task`, `update_task`, `complete_task`, `delete_task`
+- `add_note`, `update_entry`, `delete_entry`
+- `upload_attachment` (orchestrates the two-step upload + entry-create)
 
 ```sh
-CAPSULE_API_TOKEN=<your token> npx tsx scripts/live-smoke.ts
+CAPSULE_API_TOKEN=<your token> npx tsx scripts/wire-trace.ts
 ```
 
-> **Use a non-production tenant if possible.** The script makes real API calls. It's careful about cleanup but a crash in just the wrong place could leave a stray party named `ZZZ-MCP-Test-...` in your Capsule.
+Uses fresh throwaway records named `ZZZ-MCP-WIRE-TRACE-A` and `ZZZ-MCP-WIRE-TRACE-B`, plus dependent records keyed off them. **Cleans up on success.** On crash, the records may stay — search Capsule for `ZZZ-MCP-WIRE-TRACE` and delete manually if so.
+
+> **Use a non-production tenant if possible.** The script makes real API calls. It's careful about cleanup but a crash in just the wrong place could leave stray records.
+
+When it caught real bugs:
+- v1.0.0 pre-release: caught `apply_track` sending `trackDefinition` instead of `definition` (Capsule API asymmetry — response uses `trackDefinition`, request uses `definition`).
+- v1.0.0 pre-release: caught `add_additional_party` crashing on the empty-body 204 response that mock tests had been modelling as 200-with-JSON.
+
+Run it before tagging any minor or major release. For patch releases, judgement call — usually the unit tests + the integration tests in `tests/mcp-integration.test.ts` are sufficient.
 
 ## Add a new tool
 
@@ -206,11 +230,11 @@ Versioning convention:
 
 ## Debug a tool that's misbehaving
 
-Reproduce locally:
+Reproduce locally with the wire-trace if it's a write tool:
 
 ```sh
 npm run build
-CAPSULE_API_TOKEN=<your token> npx tsx scripts/live-smoke.ts
+CAPSULE_API_TOKEN=<your token> npx tsx scripts/wire-trace.ts
 ```
 
 Or call the tool function directly with `tsx` (the IIFE wrapper is needed because `tsx -e` doesn't enable top-level await by default):
