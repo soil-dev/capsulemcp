@@ -1,0 +1,244 @@
+# Changelog
+
+All notable changes to capsulemcp.
+
+The full release notes for each tagged version live on GitHub:
+<https://github.com/arapov/capsulemcp/releases>. This file mirrors the
+high-level summary so it's discoverable from the repo and on npm.
+
+The format follows [Keep a Changelog](https://keepachangelog.com), and
+versions adhere to [Semantic Versioning](https://semver.org).
+
+## [Unreleased]
+
+### Changed
+
+- HTTP entry's inbound JSON body limit defaulted to 1 MB; bumped to
+  35 MB so `upload_attachment` can carry up to a 25 MB attachment
+  base64-encoded. Override via `MCP_HTTP_JSON_LIMIT`.
+- `list_tasks` now actually defaults `status` to `"OPEN"` — the
+  description had said so since v0.1 but the code passed `undefined`
+  and let Capsule pick.
+- README description rewritten to reflect the v0.5.x and v0.6.0
+  surface (attachments, tracks, saved filters, audit, batch fetches).
+- `package.json` description and keywords filled out for npm /
+  registry discoverability.
+- HOWTO.md test count refreshed to match the current suite.
+- tsup builds index.js and http.js as separate configs so the shebang
+  banner only lands on the stdio entry. http.js is now invoked as
+  `node dist/http.js` without the noise.
+- HTTP entry's mode-selection and base-config validation extracted to
+  `src/http/config.ts` with pure functions, unit-tested.
+
+### Added
+
+- `tests/http-config.test.ts` covers `selectMode` and
+  `resolveBaseConfig` across all expected env permutations (19 new
+  tests; suite now 165/165 passing).
+
+## [0.6.0] — 2026-05-10
+
+### Added
+
+- `get_attachment(id, maxSizeBytes?)` — download attachments. Returns
+  MCP image content for `image/*` types (Claude can describe them
+  natively); decoded text for `text/*` / `application/json` /
+  `application/xml`; JSON metadata + base64 payload for other
+  binaries. Files exceeding `maxSizeBytes` (default 5 MB, max 25 MB)
+  return metadata only with `truncated: true`.
+- `upload_attachment(filename, contentType, dataBase64, content?,
+  partyId? | opportunityId? | projectId?)` — orchestrates Capsule's
+  two-step upload-then-attach flow into a single tool call. Subject
+  to `CAPSULE_MCP_READONLY` like other writes.
+- `capsuleGetBinary` and `capsulePostBinary` client helpers.
+
+### Notes
+
+- Capsule's upload endpoint is **not** multipart — it's a raw POST
+  with the file as the request body and three required headers
+  (`Content-Type`, `Content-Length`, `X-Attachment-Filename`). The
+  client helpers handle this wire format.
+- Adding an attachment to an existing entry isn't supported in this
+  release; `upload_attachment` always creates a new note.
+
+### Stats
+
+- 70 tools (48 in read-only mode). 145/145 tests passing.
+
+## [0.5.2] — 2026-05-09
+
+### Added
+
+- `get_task(id)` — solo task fetch (filled the symmetry gap with
+  `get_party` / `get_opportunity` / `get_project`).
+- Batch fetchers (Capsule caps at 10 ids per call):
+  `get_parties(ids)`, `get_opportunities(ids)`, `get_projects(ids)`,
+  `get_tasks(ids)`.
+
+### Notes
+
+- Capsule v2 does not expose `GET /entries/{ids}` (returns 404), so
+  no `get_entries` companion is added.
+
+### Stats
+
+- 68 tools (47 in read-only mode). 137/137 tests passing.
+
+## [0.5.1] — 2026-05-09
+
+A patch release filling endpoint coverage that should have been in
+v0.5.0 but was dismissed during the docs crawl due to wrong-path
+errors:
+
+- `GET /opportunities/{id}/parties` (additional parties) — earlier
+  tried `/additionalparties`.
+- `GET /opportunities/{id}/kases` (associated projects) — earlier
+  tried `/projects`.
+- `GET /<entity>/fields/definitions` (custom field schema) — earlier
+  tried `/customfields`.
+- `GET /<entity>/{id}/tracks` and `GET /tracks/{id}` — earlier saw
+  `GET /tracks` (global) return 405 and gave up too early; tracks
+  are entity-scoped only.
+
+### Added
+
+- `list_additional_parties`, `add_additional_party`,
+  `remove_additional_party`.
+- `list_associated_projects` (opportunity → projects).
+- `list_custom_fields(entity)`, `get_custom_field(entity, fieldId)`
+  for custom-field schema enumeration.
+- Track instances:
+  `list_entity_tracks`, `show_track`, `apply_track`, `update_track`,
+  `remove_track`.
+
+### Stats
+
+- 63 tools (42 in read-only mode). 130/130 tests passing.
+
+## [0.5.0] — 2026-05-09
+
+### Added
+
+- Audit: `list_deleted_parties(since)`,
+  `list_deleted_opportunities(since)`,
+  `list_deleted_projects(since)`. The `since` parameter is required
+  by Capsule. Responses include `restrictedParties`/etc. siblings for
+  records the integration user can see were deleted but cannot read
+  fully.
+- Navigation: `list_employees(partyId)` — wraps
+  `GET /parties/{id}/people`.
+- Workflow metadata: `list_track_definitions`, `list_categories`,
+  `list_goals`.
+- Diagnostic: `get_site` — closest equivalent to a `/users/me`
+  endpoint, which Capsule v2 doesn't expose.
+- Write: `update_entry(id, content?, subject?)` — edit existing
+  notes/entries. Subject to read-only gate.
+
+### Stats
+
+- 52 tools (36 in read-only mode). 114/114 tests passing.
+
+## [0.4.0] — 2026-05-09
+
+### Added
+
+- Reference metadata: `list_teams`, `list_lostreasons`,
+  `list_activitytypes`.
+- Project workflow metadata: `list_boards`, `list_stages`.
+- Global timeline feed: `list_entries` — the company-wide
+  most-recent-first feed of every note, captured email, and
+  completed-task record.
+- Saved filters (the only Capsule-side path to sortable queries):
+  `list_saved_filters(entity)`, `run_saved_filter(entity, id)`.
+
+### Stats
+
+- 43 tools (28 in read-only mode). 101/101 tests passing.
+
+## [0.3.4] — 2026-05-07
+
+### Changed
+
+- `filter_*` tool descriptions corrected to use Capsule's filter-side
+  field names (e.g. `lastContactedOn`, not `lastContactedAt`;
+  `addedOn`, not `createdAt`). Capsule's filter API rejects the
+  response field names with a 422.
+- Added "common patterns" recipe blocks to `filter_parties` /
+  `filter_opportunities` / `filter_projects` so Claude reaches for
+  recency, tag, open/stale, and noise-filtering idioms naturally.
+
+## [0.3.3] — 2026-05-07
+
+### Added
+
+- Structured filter tools: `filter_parties`, `filter_opportunities`,
+  `filter_projects`. Wrap Capsule's
+  `POST /<entity>/filters/results` with `{conditions: [...]}` body.
+- `capsuleSearch` client helper for POST-based reads.
+
+### Notes
+
+- Capsule's ad-hoc filter endpoint does **not** support sort. Tool
+  descriptions guide Claude to filter by a date condition and pick
+  the highest id (Capsule numeric IDs are monotonic) for recency
+  questions. For sortable queries, use saved filters (added in
+  v0.4.0).
+
+### Stats
+
+- 35 tools (20 in read-only mode).
+
+## [0.3.2] — 2026-05-07
+
+### Added
+
+- Connector icon: SVG served from `/icon.svg` and `/favicon.ico` on
+  the HTTP entry, plus referenced from the MCP `serverInfo.icons`
+  field.
+
+## [0.3.1] — 2026-05-07
+
+### Changed
+
+- Documentation reorganisation: split into README, INSTALL, DEPLOY,
+  HOWTO so each audience has a clear landing page.
+- Code cleanups in the auth module surfaced by review.
+
+## [0.3.0] — 2026-05-07
+
+### Added
+
+- Static-client OAuth mode (default for public deployments). One
+  hard-coded client_id / client_secret recognised at startup; DCR
+  disabled at the SDK level. The shared `client_secret` is the real
+  auth boundary.
+
+### Changed
+
+- Open Dynamic Client Registration is now opt-in via
+  `MCP_OAUTH_INSECURE_AUTO_APPROVE=1`. Public deployments default to
+  the closed-client mode.
+- Server refuses to start if neither OAuth mode is configured —
+  the secure mode is the path of least resistance.
+
+### Security
+
+- Pre-v0.3.0 deployments allowed any caller to register a client and
+  complete the OAuth dance. The auto-approve mode is now an explicit
+  opt-in for local / private-network use.
+
+## [0.2.0] — 2026-05-07
+
+### Added
+
+- HTTP transport with full OAuth 2.1: `/.well-known/*`, `/authorize`,
+  `/token`, `/register`, plus the gated `/mcp` endpoint.
+- HMAC-signed access + refresh tokens (stateless; tolerant of Cloud
+  Run instance churn).
+- `Dockerfile` and Cloud Run-friendly entry.
+
+## [0.1.0] — 2026-05-07
+
+First release. Covers parties, opportunities, projects, tasks,
+timeline entries, pipelines, milestones, tags, users with read +
+write tools. Stdio transport. Apache 2.0.
