@@ -37,6 +37,16 @@ describe("listTasks", () => {
     expect(url).not.toContain("ownerId=");
     expect(url).not.toContain("assignedToUserId=");
   });
+
+  it("defaults status to OPEN when omitted (matches description)", async () => {
+    mockFetch(200, { tasks: [] });
+
+    const { listTasks } = await import("../src/tools/tasks.js");
+    await listTasks({ page: 1, perPage: 25 });
+
+    const [url] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toContain("status=OPEN");
+  });
 });
 
 describe("createTask", () => {

@@ -4,9 +4,12 @@ import { capsuleDelete, capsuleGet, capsulePost, capsulePut } from "../capsule/c
 // ── Read ────────────────────────────────────────────────────────────────────
 
 export const listTasksSchema = z.object({
-  status: z.enum(["OPEN", "COMPLETED", "PENDING"])
+  status: z
+    .enum(["OPEN", "COMPLETED", "PENDING"])
     .optional()
-    .describe("Defaults to OPEN-only when omitted; pass COMPLETED or PENDING to broaden."),
+    .describe(
+      "Defaults to OPEN-only when omitted. Pass COMPLETED or PENDING to broaden, or 'OPEN' explicitly.",
+    ),
   ownerId: z.number().int().positive().optional().describe("Filter to tasks owned by this user ID"),
   page: z.number().int().positive().optional().default(1),
   perPage: z.number().int().min(1).max(100).optional().default(25),
@@ -14,7 +17,9 @@ export const listTasksSchema = z.object({
 
 export async function listTasks(input: z.infer<typeof listTasksSchema>) {
   const { data, nextPage } = await capsuleGet<{ tasks: unknown[] }>("/tasks", {
-    status: input.status,
+    // Default 'OPEN' applied here (not via zod .default()) so that
+    // z.infer keeps `status` optional for callers that omit it.
+    status: input.status ?? "OPEN",
     // Capsule's owner filter is the bare query param `owner`, not `ownerId`/`assignedToUserId`.
     owner: input.ownerId,
     page: input.page,
