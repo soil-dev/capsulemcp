@@ -213,6 +213,31 @@ describe("/authorize and /token", () => {
   });
 });
 
+describe("Proxy trust (express-rate-limit behind X-Forwarded-For)", () => {
+  it("/authorize succeeds when X-Forwarded-For is present (does not 500)", async () => {
+    // Without `app.set('trust proxy', 1)`, express-rate-limit treats
+    // X-Forwarded-For as a misconfiguration and the request errors out
+    // before the OAuth handler runs. With trust-proxy correctly set,
+    // the request should proceed normally — i.e. behave exactly like a
+    // direct request: 302 with code on success.
+    const params = new URLSearchParams({
+      response_type: "code",
+      client_id: CLIENT_ID,
+      redirect_uri: REDIRECT_URI,
+      code_challenge: CODE_CHALLENGE,
+      code_challenge_method: "S256",
+      state: "fwd-test",
+    });
+    const res = await fetch(`${baseUrl}/authorize?${params}`, {
+      redirect: "manual",
+      headers: { "X-Forwarded-For": "203.0.113.1" },
+    });
+    expect(res.status).toBe(302);
+    const location = res.headers.get("location");
+    expect(location).toContain("code=");
+  });
+});
+
 describe("Icon endpoints (cosmetic)", () => {
   it("/icon.svg returns the SVG with correct content-type", async () => {
     const res = await fetch(`${baseUrl}/icon.svg`);

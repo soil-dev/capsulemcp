@@ -22,13 +22,32 @@ export interface AppOptions {
   issuerUrl: URL;
   jsonLimit: string;
   resourceName?: string;
+  /**
+   * Express `trust proxy` setting. Required when running behind a
+   * reverse proxy that injects `X-Forwarded-For` (e.g. Cloud Run, an
+   * nginx ingress). The MCP SDK's auth router applies
+   * `express-rate-limit` to /authorize, /token, and /register; with
+   * the default `trust proxy=false`, express-rate-limit treats the
+   * presence of `X-Forwarded-For` as a misconfiguration and may
+   * refuse the request.
+   *
+   * Defaults to `1` (trust the immediately-upstream proxy), which is
+   * correct for Cloud Run and most single-hop ingress setups. Set to
+   * `false` to disable, or to a higher integer if there are multiple
+   * proxy hops in front of the server.
+   */
+  trustProxy?: boolean | number | string;
 }
 
 export function createApp(opts: AppOptions): express.Express {
   const { oauthProvider, issuerUrl, jsonLimit } = opts;
   const resourceName = opts.resourceName ?? "Capsule CRM MCP";
+  const trustProxy = opts.trustProxy ?? 1;
 
   const app = express();
+  // MUST be set before mcpAuthRouter so the rate-limit middleware
+  // inside the SDK's auth router sees the configured trust setting.
+  app.set("trust proxy", trustProxy);
   app.use(express.json({ limit: jsonLimit }));
 
   app.use(
