@@ -11,7 +11,7 @@ npm install
 npm test
 ```
 
-84 tests, all mocked — no Capsule API calls happen, no token needed.
+146 tests, all mocked — no Capsule API calls happen, no token needed.
 
 Watch mode while editing:
 
