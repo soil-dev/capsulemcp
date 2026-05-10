@@ -11,6 +11,32 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.0.0-alpha.3] — 2026-05-10
+
+### Fixed
+
+- `create_party` / `update_party`: the `websites` schema declared
+  the address field as `url` (with `format: "uri"`, required). Capsule
+  rejects that with `422 website.address: address is required` — the
+  v2 API names it `address` regardless of service type, because the
+  value can be a URL (`service: "URL"`), a Twitter handle
+  (`service: "TWITTER"`, e.g. `@anton`), an Instagram handle, etc.
+  URL-validation here would also reject those non-URL values. Renamed
+  the schema field `url` → `address`, dropped the `.url()` validator
+  (a string is correct), and added regression tests that lock both
+  the new name and the old shape's rejection. Caught by a production
+  write-mode test against OpenSSL Corp's Capsule.
+
+### Changed
+
+- `complete_task` description rewritten from "Mark a task as
+  completed." (4 words, search-poor) to a longer form that surfaces
+  via tool_search for queries like "mark task done", "finish task",
+  "complete task". Functionally unchanged. Caught in the same
+  production write-mode test — `tool_search` was returning
+  `update_task`/`delete_task`/`create_task` for "task done" but not
+  `complete_task`, so the tool was effectively undiscoverable.
+
 ## [1.0.0-alpha.2] — 2026-05-10
 
 ### Fixed

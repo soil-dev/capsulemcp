@@ -118,7 +118,7 @@ export function createCapsuleMcpServer(): McpServer {
   const readOnly = isReadOnly();
   const server = new McpServer({
     name: "capsulemcp",
-    version: "1.0.0-alpha.2",
+    version: "1.0.0-alpha.3",
     description: "Read and (optionally) modify Capsule CRM data — parties, opportunities, projects, tasks, timeline entries, pipelines, tags.",
     websiteUrl: "https://github.com/soil-dev/capsulemcp",
     icons: ICONS,
@@ -555,7 +555,7 @@ export function createCapsuleMcpServer(): McpServer {
 
     server.tool(
       "complete_task",
-      "Mark a task as completed.",
+      "Mark a task as done / completed / finished. Sets status=COMPLETED on the task, populating completedBy and completedAt while preserving the task in history (unlike delete_task which removes it permanently). Use this whenever a user says 'mark done', 'complete', 'finish', or similar — equivalent to update_task with status:COMPLETED but more discoverable.",
       completeTaskSchema.shape,
       async (input) => {
         const result = await completeTask(input);

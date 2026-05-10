@@ -21,9 +21,25 @@ const AddressSchema = z.object({
   zip: z.string().optional(),
 });
 
+// Capsule's API names this field `address`, not `url`. The name is
+// generic because the value depends on `service`: a URL when
+// `service: "URL"`, but a handle (e.g. "@anton") for social
+// services like "TWITTER", "INSTAGRAM" — so URL-validation here
+// would reject valid Capsule data. The 422 message Capsule returns
+// when the wrong key is sent is "website.address: address is required".
 const WebsiteSchema = z.object({
-  url: z.string().url(),
-  service: z.string().optional(),
+  address: z
+    .string()
+    .min(1)
+    .describe(
+      "The website address. A URL when service='URL', or a handle (e.g. '@anton') for social services like 'TWITTER', 'INSTAGRAM'. Capsule names this field `address` regardless of service type.",
+    ),
+  service: z
+    .string()
+    .optional()
+    .describe(
+      "Service type, e.g. 'URL', 'TWITTER', 'INSTAGRAM', 'LINKED_IN'. Defaults to 'URL' if omitted.",
+    ),
 });
 
 // ── Tool definitions ────────────────────────────────────────────────────────

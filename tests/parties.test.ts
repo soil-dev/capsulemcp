@@ -89,6 +89,43 @@ describe("createParty", () => {
     );
     expect(result).toEqual(created);
   });
+
+  it("websites field is named `address` (NOT `url`) — Capsule API contract", async () => {
+    // Regression for the production write-mode bug (2026-05-10): the
+    // schema previously called this field `url`, which Capsule rejects
+    // with "website.address: address is required". The schema now uses
+    // `address`; this test locks that name.
+    const { createPartySchema } = await import("../src/tools/parties.js");
+
+    // url-shaped input must be REJECTED.
+    const wrongShape = createPartySchema.safeParse({
+      type: "person",
+      firstName: "X",
+      websites: [{ url: "https://example.test/", service: "URL" }],
+    });
+    expect(wrongShape.success).toBe(false);
+
+    // address-shaped input must be ACCEPTED.
+    const rightShape = createPartySchema.safeParse({
+      type: "person",
+      firstName: "X",
+      websites: [{ address: "https://example.test/", service: "URL" }],
+    });
+    expect(rightShape.success).toBe(true);
+  });
+
+  it("forwards `address` verbatim to Capsule (no key rewriting)", async () => {
+    mockFetch(201, { party: { id: 1, type: "person" } });
+    const { createParty } = await import("../src/tools/parties.js");
+    await createParty({
+      type: "person",
+      firstName: "X",
+      websites: [{ address: "@anton", service: "TWITTER" }],
+    });
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse(String((options as RequestInit).body));
+    expect(body.party.websites).toEqual([{ address: "@anton", service: "TWITTER" }]);
+  });
 });
 
 describe("deleteParty", () => {
