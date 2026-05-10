@@ -48,82 +48,24 @@ import {
   FixedClientStore,
 } from "./auth/provider.js";
 import { ICON_SVG } from "./icon.js";
+import { resolveBaseConfig, selectMode } from "./http/config.js";
 
-const PORT = parseInt(process.env["PORT"] ?? "8080", 10);
-const PUBLIC_BASE_URL = process.env["PUBLIC_BASE_URL"];
-const SIGNING_KEY =
-  process.env["MCP_OAUTH_SIGNING_KEY"] ?? process.env["MCP_SHARED_SECRET"];
-
-const CLIENT_ID = process.env["MCP_OAUTH_CLIENT_ID"];
-const CLIENT_SECRET = process.env["MCP_OAUTH_CLIENT_SECRET"];
-const REDIRECT_URIS_ENV = process.env["MCP_OAUTH_REDIRECT_URIS"];
-const INSECURE_AUTO_APPROVE =
-  process.env["MCP_OAUTH_INSECURE_AUTO_APPROVE"] === "1" ||
-  process.env["MCP_OAUTH_INSECURE_AUTO_APPROVE"]?.toLowerCase() === "true";
-
-// Anthropic's known Custom Connector callback URIs. Used as the default
-// redirect_uris allow-list in static-client mode when the env var is not
-// set. Update as Anthropic publishes new ones.
-const DEFAULT_ANTHROPIC_REDIRECT_URIS = [
-  "https://claude.ai/api/mcp/auth_callback",
-  "https://claude.ai/api/oauth/callback",
-  "https://claude.ai/oauth/callback",
-];
+// ── Module top-level: wire the pure config helpers into a running server ────
 
 function fatal(message: string): never {
   console.error(`[capsulemcp] FATAL: ${message}`);
   process.exit(1);
 }
 
-if (!PUBLIC_BASE_URL) {
-  fatal(
-    "PUBLIC_BASE_URL is not set. It must be the public origin of this server (e.g. https://example.run.app), used to build OAuth metadata and authorization redirect URLs.",
-  );
-}
-if (!SIGNING_KEY || SIGNING_KEY.length < 16) {
-  fatal(
-    "MCP_OAUTH_SIGNING_KEY (or MCP_SHARED_SECRET) must be set and at least 16 chars long. It is the HMAC key used to sign OAuth access tokens; rotating it invalidates all outstanding tokens.",
-  );
-}
+const baseResult = resolveBaseConfig();
+if ("error" in baseResult) fatal(baseResult.error);
+const { publicBaseUrl, signingKey, port, jsonLimit } = baseResult.ok;
 
-// ── Mode selection ──────────────────────────────────────────────────────────
+const modeResult = selectMode();
+if ("error" in modeResult) fatal(modeResult.error);
+const mode = modeResult.ok;
 
-type Mode =
-  | { kind: "static-client"; clientId: string; clientSecret: string; redirectUris: string[] }
-  | { kind: "insecure-auto-approve" };
-
-function selectMode(): Mode {
-  if (CLIENT_ID && CLIENT_SECRET) {
-    const redirectUris = REDIRECT_URIS_ENV
-      ? REDIRECT_URIS_ENV.split(",").map((s) => s.trim()).filter(Boolean)
-      : DEFAULT_ANTHROPIC_REDIRECT_URIS;
-    if (!redirectUris.length) {
-      fatal("MCP_OAUTH_REDIRECT_URIS was set but contained no usable URIs");
-    }
-    return {
-      kind: "static-client",
-      clientId: CLIENT_ID,
-      clientSecret: CLIENT_SECRET,
-      redirectUris,
-    };
-  }
-  if (CLIENT_ID || CLIENT_SECRET) {
-    fatal(
-      "MCP_OAUTH_CLIENT_ID and MCP_OAUTH_CLIENT_SECRET must both be set to enable static-client mode (got only one).",
-    );
-  }
-  if (INSECURE_AUTO_APPROVE) {
-    return { kind: "insecure-auto-approve" };
-  }
-  fatal(
-    "No OAuth mode configured. Either:\n" +
-      "  - Set MCP_OAUTH_CLIENT_ID and MCP_OAUTH_CLIENT_SECRET (recommended for public deployments)\n" +
-      "  - Or set MCP_OAUTH_INSECURE_AUTO_APPROVE=1 (only safe for local development or private-network deployments)",
-  );
-}
-
-const mode = selectMode();
-const issuerUrl = new URL(PUBLIC_BASE_URL);
+const issuerUrl = new URL(publicBaseUrl);
 
 // ── Provider construction ───────────────────────────────────────────────────
 
@@ -136,24 +78,17 @@ const oauthProvider =
           redirectUris: mode.redirectUris,
           clientName: "capsulemcp pre-registered client",
         }),
-        signingKey: SIGNING_KEY,
+        signingKey,
       })
     : new OAuthProvider({
         clientsStore: new InMemoryClientsStore(),
-        signingKey: SIGNING_KEY,
+        signingKey,
       });
 
 // ── Express app ─────────────────────────────────────────────────────────────
 
-// Inbound JSON body limit. Default 35MB so a 25MB attachment fits with
-// base64 expansion (25MB × 4/3 ≈ 33.3MB) plus surrounding JSON. Without
-// this, upload_attachment fails with PayloadTooLargeError on anything
-// non-trivial. Override via MCP_HTTP_JSON_LIMIT if your deployment
-// needs to support larger files.
-const JSON_LIMIT = process.env["MCP_HTTP_JSON_LIMIT"] ?? "35mb";
-
 const app = express();
-app.use(express.json({ limit: JSON_LIMIT }));
+app.use(express.json({ limit: jsonLimit }));
 
 app.use(
   mcpAuthRouter({
@@ -222,12 +157,12 @@ app.delete("/mcp", requireBearerAuth({ verifier: oauthProvider }), (_req, res) =
 
 // ── Start ───────────────────────────────────────────────────────────────────
 
-app.listen(PORT, () => {
+app.listen(port, () => {
   const readMode = isReadOnly() ? "read-only" : "read-write";
   const authLabel =
     mode.kind === "static-client" ? "static-client" : "INSECURE_AUTO_APPROVE";
   console.log(
-    `[capsulemcp] HTTP server listening on :${PORT} | mode=${readMode} | auth=${authLabel} | issuer=${issuerUrl}`,
+    `[capsulemcp] HTTP server listening on :${port} | mode=${readMode} | auth=${authLabel} | issuer=${issuerUrl}`,
   );
   if (mode.kind === "insecure-auto-approve") {
     console.warn(

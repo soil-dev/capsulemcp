@@ -1,0 +1,218 @@
+import { describe, it, expect } from "vitest";
+import {
+  selectMode,
+  resolveBaseConfig,
+  DEFAULT_ANTHROPIC_REDIRECT_URIS,
+} from "../src/http/config.js";
+
+// ── selectMode ──────────────────────────────────────────────────────────────
+
+describe("selectMode", () => {
+  it("returns static-client mode when both client id and secret are set", () => {
+    const result = selectMode({
+      MCP_OAUTH_CLIENT_ID: "abc",
+      MCP_OAUTH_CLIENT_SECRET: "supersecretsupersecret",
+    });
+    expect(result).toEqual({
+      ok: {
+        kind: "static-client",
+        clientId: "abc",
+        clientSecret: "supersecretsupersecret",
+        redirectUris: DEFAULT_ANTHROPIC_REDIRECT_URIS,
+      },
+    });
+  });
+
+  it("uses MCP_OAUTH_REDIRECT_URIS when provided (comma-separated)", () => {
+    const result = selectMode({
+      MCP_OAUTH_CLIENT_ID: "abc",
+      MCP_OAUTH_CLIENT_SECRET: "secret",
+      MCP_OAUTH_REDIRECT_URIS:
+        "https://one.example/cb,https://two.example/cb",
+    });
+    expect("ok" in result).toBe(true);
+    if ("ok" in result && result.ok.kind === "static-client") {
+      expect(result.ok.redirectUris).toEqual([
+        "https://one.example/cb",
+        "https://two.example/cb",
+      ]);
+    }
+  });
+
+  it("trims whitespace and drops empty entries from MCP_OAUTH_REDIRECT_URIS", () => {
+    const result = selectMode({
+      MCP_OAUTH_CLIENT_ID: "abc",
+      MCP_OAUTH_CLIENT_SECRET: "secret",
+      MCP_OAUTH_REDIRECT_URIS: "  https://one.example/cb , , https://two.example/cb  ",
+    });
+    expect("ok" in result).toBe(true);
+    if ("ok" in result && result.ok.kind === "static-client") {
+      expect(result.ok.redirectUris).toEqual([
+        "https://one.example/cb",
+        "https://two.example/cb",
+      ]);
+    }
+  });
+
+  it("errors when MCP_OAUTH_REDIRECT_URIS is set but yields no usable values", () => {
+    const result = selectMode({
+      MCP_OAUTH_CLIENT_ID: "abc",
+      MCP_OAUTH_CLIENT_SECRET: "secret",
+      MCP_OAUTH_REDIRECT_URIS: " , , ",
+    });
+    expect("error" in result).toBe(true);
+    if ("error" in result) {
+      expect(result.error).toContain("no usable URIs");
+    }
+  });
+
+  it("errors when only client id is set (not secret)", () => {
+    const result = selectMode({
+      MCP_OAUTH_CLIENT_ID: "abc",
+    });
+    expect("error" in result).toBe(true);
+    if ("error" in result) {
+      expect(result.error).toContain("must both be set");
+    }
+  });
+
+  it("errors when only client secret is set (not id)", () => {
+    const result = selectMode({
+      MCP_OAUTH_CLIENT_SECRET: "secret",
+    });
+    expect("error" in result).toBe(true);
+  });
+
+  it("returns insecure-auto-approve mode when MCP_OAUTH_INSECURE_AUTO_APPROVE=1", () => {
+    const result = selectMode({
+      MCP_OAUTH_INSECURE_AUTO_APPROVE: "1",
+    });
+    expect(result).toEqual({ ok: { kind: "insecure-auto-approve" } });
+  });
+
+  it("accepts 'true' (any case) for MCP_OAUTH_INSECURE_AUTO_APPROVE", () => {
+    expect(selectMode({ MCP_OAUTH_INSECURE_AUTO_APPROVE: "true" })).toEqual({
+      ok: { kind: "insecure-auto-approve" },
+    });
+    expect(selectMode({ MCP_OAUTH_INSECURE_AUTO_APPROVE: "TRUE" })).toEqual({
+      ok: { kind: "insecure-auto-approve" },
+    });
+  });
+
+  it("does NOT accept random truthy strings for MCP_OAUTH_INSECURE_AUTO_APPROVE", () => {
+    const result = selectMode({ MCP_OAUTH_INSECURE_AUTO_APPROVE: "yes" });
+    expect("error" in result).toBe(true);
+  });
+
+  it("errors when no OAuth mode is configured at all", () => {
+    const result = selectMode({});
+    expect("error" in result).toBe(true);
+    if ("error" in result) {
+      expect(result.error).toContain("No OAuth mode configured");
+    }
+  });
+
+  it("static-client takes precedence over INSECURE_AUTO_APPROVE if both are set", () => {
+    const result = selectMode({
+      MCP_OAUTH_CLIENT_ID: "abc",
+      MCP_OAUTH_CLIENT_SECRET: "secret",
+      MCP_OAUTH_INSECURE_AUTO_APPROVE: "1",
+    });
+    expect("ok" in result).toBe(true);
+    if ("ok" in result) {
+      expect(result.ok.kind).toBe("static-client");
+    }
+  });
+});
+
+// ── resolveBaseConfig ───────────────────────────────────────────────────────
+
+const VALID_KEY = "a".repeat(32);
+
+describe("resolveBaseConfig", () => {
+  it("returns parsed values when all required env is present", () => {
+    const result = resolveBaseConfig({
+      PUBLIC_BASE_URL: "https://example.run.app",
+      MCP_OAUTH_SIGNING_KEY: VALID_KEY,
+    });
+    expect(result).toEqual({
+      ok: {
+        publicBaseUrl: "https://example.run.app",
+        signingKey: VALID_KEY,
+        port: 8080,
+        jsonLimit: "35mb",
+      },
+    });
+  });
+
+  it("falls back to MCP_SHARED_SECRET when MCP_OAUTH_SIGNING_KEY is unset (v0.1.0 compat)", () => {
+    const result = resolveBaseConfig({
+      PUBLIC_BASE_URL: "https://example.run.app",
+      MCP_SHARED_SECRET: VALID_KEY,
+    });
+    expect("ok" in result).toBe(true);
+    if ("ok" in result) {
+      expect(result.ok.signingKey).toBe(VALID_KEY);
+    }
+  });
+
+  it("MCP_OAUTH_SIGNING_KEY wins over MCP_SHARED_SECRET when both are set", () => {
+    const newer = "x".repeat(32);
+    const older = "y".repeat(32);
+    const result = resolveBaseConfig({
+      PUBLIC_BASE_URL: "https://example.run.app",
+      MCP_OAUTH_SIGNING_KEY: newer,
+      MCP_SHARED_SECRET: older,
+    });
+    expect("ok" in result).toBe(true);
+    if ("ok" in result) {
+      expect(result.ok.signingKey).toBe(newer);
+    }
+  });
+
+  it("uses PORT env when set", () => {
+    const result = resolveBaseConfig({
+      PUBLIC_BASE_URL: "https://example.run.app",
+      MCP_OAUTH_SIGNING_KEY: VALID_KEY,
+      PORT: "9090",
+    });
+    if ("ok" in result) expect(result.ok.port).toBe(9090);
+  });
+
+  it("uses MCP_HTTP_JSON_LIMIT env when set", () => {
+    const result = resolveBaseConfig({
+      PUBLIC_BASE_URL: "https://example.run.app",
+      MCP_OAUTH_SIGNING_KEY: VALID_KEY,
+      MCP_HTTP_JSON_LIMIT: "100mb",
+    });
+    if ("ok" in result) expect(result.ok.jsonLimit).toBe("100mb");
+  });
+
+  it("errors when PUBLIC_BASE_URL is missing", () => {
+    const result = resolveBaseConfig({
+      MCP_OAUTH_SIGNING_KEY: VALID_KEY,
+    });
+    expect("error" in result).toBe(true);
+    if ("error" in result) {
+      expect(result.error).toContain("PUBLIC_BASE_URL is not set");
+    }
+  });
+
+  it("errors when signing key is missing entirely", () => {
+    const result = resolveBaseConfig({
+      PUBLIC_BASE_URL: "https://example.run.app",
+    });
+    expect("error" in result).toBe(true);
+    if ("error" in result) {
+      expect(result.error).toContain("at least 16 chars long");
+    }
+  });
+
+  it("errors when signing key is shorter than 16 chars", () => {
+    const result = resolveBaseConfig({
+      PUBLIC_BASE_URL: "https://example.run.app",
+      MCP_OAUTH_SIGNING_KEY: "tooshort",
+    });
+    expect("error" in result).toBe(true);
+  });
+});
