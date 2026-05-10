@@ -54,7 +54,10 @@ import {
 import { listPipelinesSchema, listPipelines, listMilestonesSchema, listMilestones } from "./tools/pipelines.js";
 import { listBoardsSchema, listBoards, listStagesSchema, listStages } from "./tools/boards.js";
 import { listTagsSchema, listTags } from "./tools/tags.js";
-import { listUsersSchema, listUsers } from "./tools/users.js";
+import {
+  listUsersSchema, listUsers,
+  getCurrentUserSchema, getCurrentUser,
+} from "./tools/users.js";
 import {
   filterPartiesSchema, filterParties,
   filterOpportunitiesSchema, filterOpportunities,
@@ -944,6 +947,16 @@ export function createCapsuleMcpServer(): McpServer {
     listUsersSchema.shape,
     async (input) => {
       const result = await listUsers(input);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    "get_current_user",
+    "Show the user owning the API token this connector is using. Useful for audit ('under whose Capsule identity is the connector running?') and for confirming a token rotation moved ownership to the expected account. Wraps Capsule's GET /users/current — note the endpoint is /users/current, not /users/me.",
+    getCurrentUserSchema.shape,
+    async (input) => {
+      const result = await getCurrentUser(input);
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     },
   );

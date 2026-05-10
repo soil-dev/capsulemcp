@@ -318,11 +318,16 @@ retrying.
 
 | Wanted | Status | Substitute |
 |---|---|---|
-| `GET /users/me` (authenticated user) | 404 | `get_site` returns the connected account's name and subdomain. The PAT identity itself isn't queryable. |
 | `GET /tasks/deleted` (audit) | 404 | No soft-delete list for tasks. Parties / opportunities / projects do have it. |
 | `GET /tracks` (global list) | 405 Method Not Allowed | Tracks are entity-scoped. Use `list_entity_tracks(entity, entityId)` or `show_track(id)`. |
 | `GET /entries/{ids}` (batch fetch) | 404 | Capsule v2 doesn't expose a batch fetcher for entries. Parties / opportunities / projects / tasks all do. |
 | `POST /attachments/upload` (multipart) | works as raw POST | The doc page suggested multipart at first reading; it's actually a raw-body POST with three custom headers (`Content-Type`, `Content-Length`, `X-Attachment-Filename`). |
+
+For the catalogue of Capsule API quirks — including the cases where
+a wrong-path probe led us to claim an endpoint didn't exist when it
+actually did — see [NOTES-ON-CAPSULE-API.md](NOTES-ON-CAPSULE-API.md).
+Each quirk there carries a verbatim quote from Capsule's official docs
+and a pointer to where in our code we encode the resolution.
 
 ### Wrong-path errors and their corrections
 
@@ -336,6 +341,7 @@ Each was fixed in v0.5.1.
 | `GET /opportunities/{id}/additionalparties` | `GET /opportunities/{id}/parties` |
 | `GET /opportunities/{id}/projects` | `GET /opportunities/{id}/kases` (legacy term) |
 | `GET /<entity>/customfields` | `GET /<entity>/fields/definitions` |
+| `GET /users/me` | `GET /users/current` (added in v1.0.0 as `get_current_user`) |
 
 The lesson: when an endpoint that the docs claim exists returns 404,
 re-check the docs for the *exact* path before concluding it's

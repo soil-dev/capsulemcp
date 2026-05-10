@@ -17,6 +17,7 @@ A [Model Context Protocol](https://modelcontextprotocol.io) server for [Capsule 
 | To contribute, debug, add a tool, or cut a release | [HOWTO.md](HOWTO.md) |
 | To understand what's intentionally not implemented (and why) | [DESIGN.md](DESIGN.md) |
 | To see ideas for features that might land in future versions | [IDEAS.md](IDEAS.md) |
+| To learn the surprising parts of Capsule's v2 API (with verbatim doc quotes) | [NOTES-ON-CAPSULE-API.md](NOTES-ON-CAPSULE-API.md) |
 
 For most individual users the install is a single JSON snippet pasted into Claude Desktop's config — see [INSTALL.md](INSTALL.md).
 

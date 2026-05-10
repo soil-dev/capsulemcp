@@ -11,6 +11,21 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Added
+
+- `get_current_user` tool wraps `GET /users/current`. Earlier
+  releases claimed (in DESIGN.md) that Capsule v2 had no
+  authenticated-user endpoint and substituted `get_site` — that
+  was a wrong-path error. The endpoint is `/users/current`, not
+  the GitHub-style `/users/me`. Returns the user owning the PAT
+  this connector is using; useful for audit and for confirming a
+  token rotation moved ownership to the expected account.
+- `NOTES-ON-CAPSULE-API.md` — reference doc cataloguing 16
+  Capsule v2 quirks discovered during development, each with a
+  verbatim quote from the relevant Capsule doc page (so the
+  reference is a snapshot if Capsule's docs ever change). Linked
+  from the README pointer table.
+
 ### Fixed
 
 - `add_additional_party` was crashing with
@@ -144,9 +159,7 @@ versions adhere to [Semantic Versioning](https://semver.org).
   `MCP_OAUTH_SIGNING_KEY` long ago). Error message and DEPLOY.md
   table updated to drop the fallback reference.
 
-Suite now 213/213 passing across 25 test files (215 minus the two
-v0.1.0-compat tests that became unreachable when `MCP_SHARED_SECRET`
-was removed).
+Suite now 214/214 passing across 25 test files.
 
 ## [0.6.0] — 2026-05-10
 

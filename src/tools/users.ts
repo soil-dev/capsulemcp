@@ -18,3 +18,21 @@ export async function listUsers(input: z.infer<typeof listUsersSchema>) {
   });
   return { ...data, nextPage };
 }
+
+// ── Current user ────────────────────────────────────────────────────────────
+//
+// GET /users/current returns the user owning the PAT in use. Useful for
+// audit ("under whose identity does the connector run?") and for
+// admins switching between rotated tokens. Documented at
+// <https://developer.capsulecrm.com/v2/operations/User#showCurrentUser>;
+// note the path is /users/current, NOT /users/me as the GitHub API
+// convention would suggest.
+
+export const getCurrentUserSchema = z.object({});
+
+export async function getCurrentUser(
+  _input: z.infer<typeof getCurrentUserSchema>,
+) {
+  const { data } = await capsuleGet<{ user: unknown }>("/users/current");
+  return data;
+}
