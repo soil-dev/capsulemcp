@@ -11,6 +11,44 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Added
+
+- 8 new atomic child-array tools on parties, giving callers
+  surgical control over the `emailAddresses`, `phoneNumbers`,
+  `addresses`, and `websites` lists without the surprises of the
+  bulk-array path on `update_party` (which is append-only by
+  Capsule's PUT semantics):
+  - `add_party_email_address`, `remove_party_email_address_by_id`
+  - `add_party_phone_number`, `remove_party_phone_number_by_id`
+  - `add_party_address`, `remove_party_address_by_id`
+  - `add_party_website`, `remove_party_website_by_id`
+  Each tool issues exactly one PUT to `/parties/{id}` with a single
+  item — adds carry no `id`/`_destroy` (Capsule appends), removes
+  carry `{id, _destroy: true}` (Capsule removes that specific row).
+  No GET-then-PUT diff, no value-matching heuristic, no race
+  window where concurrent edits could be silently dropped.
+  "Replace one email" decomposes into
+  `remove_party_email_address_by_id` + `add_party_email_address` —
+  two atomic ops, both observable.
+  Discover row IDs via the existing `get_party` tool (each entry
+  in the child arrays carries its own `id`).
+  Removes do NOT require `confirm: true` — losing one email row is
+  reversible (re-add the value); only whole-record deletes
+  (`delete_party`, `delete_opportunity`, ...) carry the confirm
+  gate.
+  Tool count goes 71 → 79; read-only count stays at 49 (these are
+  all writes).
+
+### Changed
+
+- `update_party` description rewritten to point callers at the new
+  atomic tools for surgical changes. The bulk arrays on
+  `update_party` are kept for callers who want to add multiple
+  items in a single round-trip; their descriptions explain the
+  APPEND-ONLY semantic and link to the matching atomic tool by
+  name (e.g. emailAddresses → "use add_party_email_address /
+  remove_party_email_address_by_id").
+
 ### Fixed
 
 - `update_party` (and `create_party`) child-array tools now

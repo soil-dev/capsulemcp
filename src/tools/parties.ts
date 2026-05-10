@@ -169,37 +169,37 @@ export async function listPartyProjects(
 // IMPORTANT: child arrays (emailAddresses, phoneNumbers, addresses,
 // websites) are APPEND-ONLY in Capsule's PUT semantics. Sending an
 // array does NOT replace the existing items — every item you pass is
-// added on top. Passing the same item twice creates a duplicate;
-// passing `[]` is a no-op (the existing list is unchanged and
-// `updatedAt` is not even advanced). Removal of an existing item
-// requires the v2 API's `_destroy: true` shape, which this connector
-// does not yet expose. Plan accordingly: read the party, decide what
-// to add, and call update_party with only the new items.
+// added on top. For surgical control over these lists (replacing a
+// value, removing one entry, changing a single type) prefer the
+// dedicated atomic tools: add_party_email_address /
+// remove_party_email_address_by_id, and the phone/address/website
+// equivalents. The bulk arrays here are kept for callers who want to
+// add multiple items in a single round-trip.
 const PartyWriteBaseSchema = {
   about: z.string().optional(),
   emailAddresses: z
     .array(EmailAddressSchema)
     .optional()
     .describe(
-      "APPEND-ONLY: items are added to the existing list, NOT replaced. Passing the same address twice creates a duplicate. Passing `[]` is a silent no-op (does not clear the list and does not advance updatedAt). Removing an entry requires Capsule's _destroy semantics which this connector does not yet expose.",
+      "APPEND-ONLY: items are merged into the existing list, never replaced. For atomic add/remove/replace use add_party_email_address and remove_party_email_address_by_id. Passing `[]` here is a silent no-op (does not clear the list and does not advance updatedAt).",
     ),
   phoneNumbers: z
     .array(PhoneNumberSchema)
     .optional()
     .describe(
-      "APPEND-ONLY: items are added to the existing list, NOT replaced. Passing the same number twice creates a duplicate. Passing `[]` is a silent no-op.",
+      "APPEND-ONLY: items are merged into the existing list, never replaced. For atomic add/remove/replace use add_party_phone_number and remove_party_phone_number_by_id.",
     ),
   addresses: z
     .array(AddressSchema)
     .optional()
     .describe(
-      "APPEND-ONLY: items are added to the existing list, NOT replaced. Capsule canonicalises the `country` field through its country dictionary (e.g. 'USA' is stored as 'United States') — this is normalisation, not rejection. Passing `[]` is a silent no-op.",
+      "APPEND-ONLY: items are merged into the existing list, never replaced. For atomic add/remove/replace use add_party_address and remove_party_address_by_id. Capsule canonicalises `country` through its country dictionary (e.g. 'USA' → 'United States') — normalisation, not rejection.",
     ),
   websites: z
     .array(WebsiteSchema)
     .optional()
     .describe(
-      "APPEND-ONLY: items are added to the existing list, NOT replaced. Passing the same address twice creates a duplicate. Passing `[]` is a silent no-op.",
+      "APPEND-ONLY: items are merged into the existing list, never replaced. For atomic add/remove/replace use add_party_website and remove_party_website_by_id.",
     ),
   ownerId: z.number().int().positive().optional().describe("Assign to user ID"),
 };
@@ -266,4 +266,215 @@ export async function deleteParty(input: z.infer<typeof deletePartySchema>) {
   }
   await capsuleDelete(`/parties/${input.id}`);
   return { deleted: true, id: input.id };
+}
+
+// ── Atomic child-array operations ──────────────────────────────────────────
+//
+// Capsule's `PUT /parties/{id}` treats child arrays (emailAddresses,
+// phoneNumbers, addresses, websites) as merge-not-replace. The
+// add_party_*  and remove_party_*_by_id tools below give callers
+// atomic, surgical control over those arrays without the surprises of
+// the bulk-array path on `update_party` (which is append-only).
+//
+// Every add_* tool issues a single PUT with one new item — Capsule
+// appends and returns the updated party.
+//
+// Every remove_*_by_id tool issues a single PUT with one
+// `{id, _destroy: true}` entry — Capsule removes that specific item
+// and returns the updated party. No `confirm: true` gate: removing one
+// email address is reversible (re-add the value); only whole-record
+// deletes (`delete_party`, `delete_opportunity`, ...) carry the
+// confirm requirement.
+
+// emailAddresses ─────────────────────────────────────────────────────
+
+export const addPartyEmailAddressSchema = z.object({
+  partyId: z.number().int().positive(),
+  address: z.string().email(),
+  type: z.string().optional().describe("Free-form label, e.g. 'Work', 'Home'."),
+});
+
+export async function addPartyEmailAddress(
+  input: z.infer<typeof addPartyEmailAddressSchema>,
+) {
+  const { partyId, address, type } = input;
+  const item: Record<string, unknown> = { address };
+  if (type !== undefined) item["type"] = type;
+  return capsulePut<{ party: unknown }>(`/parties/${partyId}`, {
+    party: { emailAddresses: [item] },
+  });
+}
+
+export const removePartyEmailAddressByIdSchema = z.object({
+  partyId: z.number().int().positive(),
+  emailAddressId: z
+    .number()
+    .int()
+    .positive()
+    .describe(
+      "Capsule's id for the email-address row. Read it from get_party (each entry in emailAddresses carries an id).",
+    ),
+});
+
+export async function removePartyEmailAddressById(
+  input: z.infer<typeof removePartyEmailAddressByIdSchema>,
+) {
+  const { partyId, emailAddressId } = input;
+  return capsulePut<{ party: unknown }>(`/parties/${partyId}`, {
+    party: { emailAddresses: [{ id: emailAddressId, _destroy: true }] },
+  });
+}
+
+// phoneNumbers ───────────────────────────────────────────────────────
+
+export const addPartyPhoneNumberSchema = z.object({
+  partyId: z.number().int().positive(),
+  number: z.string().min(1),
+  type: z.string().optional().describe("Free-form label, e.g. 'Work', 'Mobile'."),
+});
+
+export async function addPartyPhoneNumber(
+  input: z.infer<typeof addPartyPhoneNumberSchema>,
+) {
+  const { partyId, number, type } = input;
+  const item: Record<string, unknown> = { number };
+  if (type !== undefined) item["type"] = type;
+  return capsulePut<{ party: unknown }>(`/parties/${partyId}`, {
+    party: { phoneNumbers: [item] },
+  });
+}
+
+export const removePartyPhoneNumberByIdSchema = z.object({
+  partyId: z.number().int().positive(),
+  phoneNumberId: z
+    .number()
+    .int()
+    .positive()
+    .describe(
+      "Capsule's id for the phone-number row. Read it from get_party (each entry in phoneNumbers carries an id).",
+    ),
+});
+
+export async function removePartyPhoneNumberById(
+  input: z.infer<typeof removePartyPhoneNumberByIdSchema>,
+) {
+  const { partyId, phoneNumberId } = input;
+  return capsulePut<{ party: unknown }>(`/parties/${partyId}`, {
+    party: { phoneNumbers: [{ id: phoneNumberId, _destroy: true }] },
+  });
+}
+
+// addresses ──────────────────────────────────────────────────────────
+
+export const addPartyAddressSchema = z.object({
+  partyId: z.number().int().positive(),
+  street: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  country: z
+    .string()
+    .optional()
+    .describe(
+      "Capsule canonicalises through its country dictionary (e.g. 'USA' is stored as 'United States') — normalisation, not rejection.",
+    ),
+  zip: z.string().optional(),
+  type: z.string().optional().describe("Free-form label, e.g. 'Office', 'Home'."),
+});
+
+export async function addPartyAddress(
+  input: z.infer<typeof addPartyAddressSchema>,
+) {
+  const { partyId, ...rest } = input;
+  const item: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(rest)) {
+    if (v !== undefined) item[k] = v;
+  }
+  return capsulePut<{ party: unknown }>(`/parties/${partyId}`, {
+    party: { addresses: [item] },
+  });
+}
+
+export const removePartyAddressByIdSchema = z.object({
+  partyId: z.number().int().positive(),
+  addressId: z
+    .number()
+    .int()
+    .positive()
+    .describe(
+      "Capsule's id for the address row. Read it from get_party (each entry in addresses carries an id).",
+    ),
+});
+
+export async function removePartyAddressById(
+  input: z.infer<typeof removePartyAddressByIdSchema>,
+) {
+  const { partyId, addressId } = input;
+  return capsulePut<{ party: unknown }>(`/parties/${partyId}`, {
+    party: { addresses: [{ id: addressId, _destroy: true }] },
+  });
+}
+
+// websites ───────────────────────────────────────────────────────────
+
+export const addPartyWebsiteSchema = z.object({
+  partyId: z.number().int().positive(),
+  address: z
+    .string()
+    .min(1)
+    .describe(
+      "The website address. A URL when service='URL', or a handle (e.g. '@anton') for social services.",
+    ),
+  service: z
+    .enum([
+      "URL",
+      "SKYPE",
+      "TWITTER",
+      "LINKED_IN",
+      "FACEBOOK",
+      "XING",
+      "FEED",
+      "GOOGLE_PLUS",
+      "FLICKR",
+      "GITHUB",
+      "YOUTUBE",
+      "INSTAGRAM",
+      "PINTEREST",
+      "TIKTOK",
+      "THREADS",
+      "BLUESKY",
+      "SNAPCHAT",
+    ])
+    .optional()
+    .describe("Defaults to 'URL' if omitted."),
+});
+
+export async function addPartyWebsite(
+  input: z.infer<typeof addPartyWebsiteSchema>,
+) {
+  const { partyId, address, service } = input;
+  const item: Record<string, unknown> = { address };
+  if (service !== undefined) item["service"] = service;
+  return capsulePut<{ party: unknown }>(`/parties/${partyId}`, {
+    party: { websites: [item] },
+  });
+}
+
+export const removePartyWebsiteByIdSchema = z.object({
+  partyId: z.number().int().positive(),
+  websiteId: z
+    .number()
+    .int()
+    .positive()
+    .describe(
+      "Capsule's id for the website row. Read it from get_party (each entry in websites carries an id).",
+    ),
+});
+
+export async function removePartyWebsiteById(
+  input: z.infer<typeof removePartyWebsiteByIdSchema>,
+) {
+  const { partyId, websiteId } = input;
+  return capsulePut<{ party: unknown }>(`/parties/${partyId}`, {
+    party: { websites: [{ id: websiteId, _destroy: true }] },
+  });
 }

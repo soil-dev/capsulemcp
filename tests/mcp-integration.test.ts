@@ -127,6 +127,14 @@ describe("tools/list", () => {
       "create_party",
       "update_party",
       "delete_party",
+      "add_party_email_address",
+      "remove_party_email_address_by_id",
+      "add_party_phone_number",
+      "remove_party_phone_number_by_id",
+      "add_party_address",
+      "remove_party_address_by_id",
+      "add_party_website",
+      "remove_party_website_by_id",
       "create_opportunity",
       "delete_opportunity",
       "add_note",
@@ -148,7 +156,14 @@ describe("tools/list", () => {
     const names = tools.map((t) => t.name);
 
     // No write tools should appear
-    const writePrefixes = ["create_", "update_", "delete_", "complete_"];
+    const writePrefixes = [
+      "create_",
+      "update_",
+      "delete_",
+      "complete_",
+      "add_party_",
+      "remove_party_",
+    ];
     const writeSpecific = [
       "add_note",
       "add_additional_party",

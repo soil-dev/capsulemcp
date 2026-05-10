@@ -75,6 +75,140 @@ describe("getParty", () => {
   });
 });
 
+describe("atomic child-array operations", () => {
+  // Each tool must do EXACTLY one PUT to /parties/{id} with a single
+  // item in the relevant array. No GET-then-PUT diff, no value-matching
+  // heuristics. The body shape mirrors Capsule's documented "merge"
+  // contract: an entry without `_destroy` is added, an entry
+  // `{id, _destroy: true}` is removed.
+
+  it("add_party_email_address PUTs one item with no id, no _destroy", async () => {
+    mockFetch(200, { party: { id: 99 } });
+    const { addPartyEmailAddress } = await import("../src/tools/parties.js");
+    await addPartyEmailAddress({ partyId: 99, address: "a@x.test", type: "Work" });
+    const [url, opts] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toContain("/parties/99");
+    expect((opts as RequestInit).method).toBe("PUT");
+    const body = JSON.parse((opts as RequestInit).body as string);
+    expect(body.party.emailAddresses).toEqual([
+      { address: "a@x.test", type: "Work" },
+    ]);
+    expect(body.party.emailAddresses[0].id).toBeUndefined();
+    expect(body.party.emailAddresses[0]._destroy).toBeUndefined();
+  });
+
+  it("remove_party_email_address_by_id PUTs {id, _destroy:true} only", async () => {
+    mockFetch(200, { party: { id: 99 } });
+    const { removePartyEmailAddressById } = await import(
+      "../src/tools/parties.js"
+    );
+    await removePartyEmailAddressById({ partyId: 99, emailAddressId: 555 });
+    const [url, opts] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toContain("/parties/99");
+    expect((opts as RequestInit).method).toBe("PUT");
+    const body = JSON.parse((opts as RequestInit).body as string);
+    expect(body.party.emailAddresses).toEqual([{ id: 555, _destroy: true }]);
+  });
+
+  it("add_party_phone_number PUTs one phone item with type", async () => {
+    mockFetch(200, { party: { id: 99 } });
+    const { addPartyPhoneNumber } = await import("../src/tools/parties.js");
+    await addPartyPhoneNumber({ partyId: 99, number: "+1-555", type: "Mobile" });
+    const body = JSON.parse(
+      (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string,
+    );
+    expect(body.party.phoneNumbers).toEqual([
+      { number: "+1-555", type: "Mobile" },
+    ]);
+  });
+
+  it("add_party_phone_number rejects empty number at schema layer", async () => {
+    const { addPartyPhoneNumberSchema } = await import(
+      "../src/tools/parties.js"
+    );
+    expect(
+      addPartyPhoneNumberSchema.safeParse({ partyId: 1, number: "" }).success,
+    ).toBe(false);
+  });
+
+  it("remove_party_phone_number_by_id PUTs the destroy entry", async () => {
+    mockFetch(200, { party: { id: 99 } });
+    const { removePartyPhoneNumberById } = await import(
+      "../src/tools/parties.js"
+    );
+    await removePartyPhoneNumberById({ partyId: 99, phoneNumberId: 12 });
+    const body = JSON.parse(
+      (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string,
+    );
+    expect(body.party.phoneNumbers).toEqual([{ id: 12, _destroy: true }]);
+  });
+
+  it("add_party_address forwards only the provided sub-fields", async () => {
+    mockFetch(200, { party: { id: 99 } });
+    const { addPartyAddress } = await import("../src/tools/parties.js");
+    await addPartyAddress({ partyId: 99, city: "Brno", country: "USA" });
+    const body = JSON.parse(
+      (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string,
+    );
+    // Capsule will normalise 'USA' → 'United States' on its own.
+    expect(body.party.addresses).toEqual([{ city: "Brno", country: "USA" }]);
+  });
+
+  it("remove_party_address_by_id PUTs the destroy entry", async () => {
+    mockFetch(200, { party: { id: 99 } });
+    const { removePartyAddressById } = await import("../src/tools/parties.js");
+    await removePartyAddressById({ partyId: 99, addressId: 7 });
+    const body = JSON.parse(
+      (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string,
+    );
+    expect(body.party.addresses).toEqual([{ id: 7, _destroy: true }]);
+  });
+
+  it("add_party_website rejects unknown service values at schema layer", async () => {
+    const { addPartyWebsiteSchema } = await import("../src/tools/parties.js");
+    expect(
+      addPartyWebsiteSchema.safeParse({
+        partyId: 1,
+        address: "https://x.test",
+        service: "PIGEON_POST",
+      }).success,
+    ).toBe(false);
+    expect(
+      addPartyWebsiteSchema.safeParse({
+        partyId: 1,
+        address: "@anton",
+        service: "BLUESKY",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("add_party_website PUTs one website with the documented shape", async () => {
+    mockFetch(200, { party: { id: 99 } });
+    const { addPartyWebsite } = await import("../src/tools/parties.js");
+    await addPartyWebsite({
+      partyId: 99,
+      address: "@anton",
+      service: "TWITTER",
+    });
+    const body = JSON.parse(
+      (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string,
+    );
+    expect(body.party.websites).toEqual([
+      { address: "@anton", service: "TWITTER" },
+    ]);
+  });
+
+  it("remove_party_website_by_id PUTs the destroy entry", async () => {
+    mockFetch(200, { party: { id: 99 } });
+    const { removePartyWebsiteById } = await import("../src/tools/parties.js");
+    await removePartyWebsiteById({ partyId: 99, websiteId: 4 });
+    const body = JSON.parse(
+      (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string,
+    );
+    expect(body.party.websites).toEqual([{ id: 4, _destroy: true }]);
+  });
+});
+
 describe("createParty", () => {
   it("posts to /parties and returns the created party", async () => {
     const created = { party: { id: 99, type: "person", firstName: "Bob" } };

@@ -11,6 +11,14 @@ import {
   createPartySchema, createParty,
   updatePartySchema, updateParty,
   deletePartySchema, deleteParty,
+  addPartyEmailAddressSchema, addPartyEmailAddress,
+  removePartyEmailAddressByIdSchema, removePartyEmailAddressById,
+  addPartyPhoneNumberSchema, addPartyPhoneNumber,
+  removePartyPhoneNumberByIdSchema, removePartyPhoneNumberById,
+  addPartyAddressSchema, addPartyAddress,
+  removePartyAddressByIdSchema, removePartyAddressById,
+  addPartyWebsiteSchema, addPartyWebsite,
+  removePartyWebsiteByIdSchema, removePartyWebsiteById,
 } from "./tools/parties.js";
 
 import {
@@ -239,7 +247,7 @@ export function createCapsuleMcpServer(): McpServer {
 
     server.tool(
       "update_party",
-      "Update fields on an existing party. Only the fields you provide are changed.",
+      "Update top-level fields on an existing party (about, firstName/lastName/name/title/jobTitle, ownerId). Only the fields you provide are changed. Child arrays (emailAddresses / phoneNumbers / addresses / websites) on this tool are APPEND-ONLY: items are merged into the existing list, not replaced. For surgical changes — replacing one email, removing one phone number, fixing the type on one address — use the dedicated atomic tools: add_party_email_address / remove_party_email_address_by_id (and the phone/address/website equivalents).",
       updatePartySchema.shape,
       async (input) => {
         const result = await updateParty(input);
@@ -253,6 +261,87 @@ export function createCapsuleMcpServer(): McpServer {
       deletePartySchema.shape,
       async (input) => {
         const result = await deleteParty(input);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      },
+    );
+
+    // ── Atomic child-array operations (avoid append-only surprises) ─────
+    server.tool(
+      "add_party_email_address",
+      "Append a single email address to a party. Atomic — one PUT to Capsule. Use this instead of update_party.emailAddresses when you want to add exactly one entry; the bulk array on update_party is append-only and won't replace.",
+      addPartyEmailAddressSchema.shape,
+      async (input) => {
+        const result = await addPartyEmailAddress(input);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      },
+    );
+
+    server.tool(
+      "remove_party_email_address_by_id",
+      "Remove one email-address entry from a party by its row id. Atomic. Discover the id via get_party — each entry in the emailAddresses array carries one. Use this to replace an existing entry: remove the old id, then call add_party_email_address with the new value (any associated server-side metadata on the old row is discarded along with the row).",
+      removePartyEmailAddressByIdSchema.shape,
+      async (input) => {
+        const result = await removePartyEmailAddressById(input);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      },
+    );
+
+    server.tool(
+      "add_party_phone_number",
+      "Append a single phone number to a party. Atomic — one PUT to Capsule. Use this instead of update_party.phoneNumbers for single-entry adds.",
+      addPartyPhoneNumberSchema.shape,
+      async (input) => {
+        const result = await addPartyPhoneNumber(input);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      },
+    );
+
+    server.tool(
+      "remove_party_phone_number_by_id",
+      "Remove one phone-number entry from a party by its row id. Atomic. Discover the id via get_party.",
+      removePartyPhoneNumberByIdSchema.shape,
+      async (input) => {
+        const result = await removePartyPhoneNumberById(input);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      },
+    );
+
+    server.tool(
+      "add_party_address",
+      "Append a single postal address to a party. Atomic — one PUT to Capsule. Use this instead of update_party.addresses for single-entry adds.",
+      addPartyAddressSchema.shape,
+      async (input) => {
+        const result = await addPartyAddress(input);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      },
+    );
+
+    server.tool(
+      "remove_party_address_by_id",
+      "Remove one address entry from a party by its row id. Atomic. Discover the id via get_party.",
+      removePartyAddressByIdSchema.shape,
+      async (input) => {
+        const result = await removePartyAddressById(input);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      },
+    );
+
+    server.tool(
+      "add_party_website",
+      "Append a single website / social handle to a party. Atomic — one PUT to Capsule. Use this instead of update_party.websites for single-entry adds. The 'address' field is a URL when service='URL' or a handle (e.g. '@anton') for social services.",
+      addPartyWebsiteSchema.shape,
+      async (input) => {
+        const result = await addPartyWebsite(input);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      },
+    );
+
+    server.tool(
+      "remove_party_website_by_id",
+      "Remove one website entry from a party by its row id. Atomic. Discover the id via get_party.",
+      removePartyWebsiteByIdSchema.shape,
+      async (input) => {
+        const result = await removePartyWebsiteById(input);
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       },
     );

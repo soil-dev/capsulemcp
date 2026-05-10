@@ -2,7 +2,7 @@
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server for [Capsule CRM](https://capsulecrm.com). Connect Claude (Desktop, Code, or web Projects via Custom Connector) to your CRM and let it answer natural-language questions across the full record graph: contacts, organisations, opportunities, projects, tasks, and timeline activity. Beyond the basics it covers structured filters with field/operator conditions, saved searches with sort, workflow tracks (templates and instances), file attachments (read + write), audit of deleted records, and batch fetches up to 10 records per call.
 
-- **71 tools** across the Capsule resource graph (49 in read-only mode) — full read coverage plus careful, confirm-gated writes
+- **79 tools** across the Capsule resource graph (49 in read-only mode) — full read coverage plus careful, confirm-gated writes
 - **Two transports**: stdio for local installs (Claude Desktop / Code), HTTP+OAuth for hosted Custom Connectors
 - **Read-only mode** as a one-env-var flag; works alongside read-scoped Capsule tokens
 - **Apache 2.0**
@@ -49,7 +49,7 @@ That's it. The first launch takes ~30 seconds while npx clones and builds; subse
 
 | Group | Read | Write |
 |---|---|---|
-| Parties (people/orgs) | `search_parties`, `filter_parties`, `get_party`, `get_parties`, `list_employees`, `list_party_opportunities`, `list_party_projects`, `list_party_entries` | `create_party`, `update_party`, `delete_party` |
+| Parties (people/orgs) | `search_parties`, `filter_parties`, `get_party`, `get_parties`, `list_employees`, `list_party_opportunities`, `list_party_projects`, `list_party_entries` | `create_party`, `update_party`, `delete_party`, `add_party_email_address`, `remove_party_email_address_by_id`, `add_party_phone_number`, `remove_party_phone_number_by_id`, `add_party_address`, `remove_party_address_by_id`, `add_party_website`, `remove_party_website_by_id` |
 | Opportunities | `search_opportunities`, `filter_opportunities`, `get_opportunity`, `get_opportunities`, `list_opportunity_entries`, `list_associated_projects` | `create_opportunity`, `update_opportunity`, `delete_opportunity` |
 | Projects (cases) | `list_projects`, `filter_projects`, `get_project`, `get_projects`, `list_project_entries` | `create_project`, `update_project`, `delete_project` |
 | Additional parties (multi-party deals) | `list_additional_parties` | `add_additional_party`, `remove_additional_party` |
