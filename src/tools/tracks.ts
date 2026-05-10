@@ -109,7 +109,9 @@ export async function applyTrack(input: z.infer<typeof applyTrackSchema>) {
 export const updateTrackSchema = z.object({
   trackId: z.number().int().positive(),
   fields: z
-    .record(z.unknown())
+    // zod 4: z.record requires an explicit key schema (was implicit
+    // string in zod 3). Capsule field names are strings.
+    .record(z.string(), z.unknown())
     .describe(
       "Object of fields to update on the track. Capsule's PUT semantics are partial — only the fields you provide are changed. Common: { complete: true } to mark a track completed. Capsule rejects unknown keys; consult Capsule's docs for the full updatable set.",
     ),
