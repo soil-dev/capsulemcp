@@ -11,6 +11,25 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.0.0-alpha.6] — 2026-05-10
+
+### Security
+
+- Authenticate `/mcp` requests **before** parsing the JSON body
+  (#9). The 35 MB JSON body parser was previously installed as
+  global middleware, which meant any unauthenticated caller could
+  POST a 35 MB `Content-Type: application/json` body to `/mcp` and
+  make Express buffer + parse it before bearer auth could reject
+  the request. That's free DoS leverage. The parser now lives on
+  the `POST /mcp` route chain, **after** `requireBearerAuth`, so
+  malformed or oversized unauthenticated bodies get a 401
+  immediately without any parsing work. The OAuth endpoints
+  (`/authorize`, `/token`, `/register`) keep working because the
+  MCP SDK installs its own per-endpoint parsers with default
+  ~100 KB limits — those are unaffected. Regression test asserts
+  POST /mcp with a malformed body and no bearer returns 401 (proves
+  the parser doesn't run pre-auth — would otherwise return 400).
+
 ## [1.0.0-alpha.5] — 2026-05-10
 
 ### Fixed
