@@ -11,6 +11,17 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.0.0-alpha.1] — 2026-05-10
+
+First pre-release candidate for v1.0.0. Tagged for dry-run testing
+before the final tag. Identical content to what would otherwise be
+v1.0.0; release notes are listed below.
+
+### Stats
+
+- 71 tools (49 in read-only mode). 236/236 tests passing across
+  26 test files.
+
 ### Added
 
 - `get_current_user` tool wraps `GET /users/current`. Earlier
