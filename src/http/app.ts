@@ -60,7 +60,6 @@ export function createApp(opts: AppOptions): express.Express {
   // MUST be set before mcpAuthRouter so the rate-limit middleware
   // inside the SDK's auth router sees the configured trust setting.
   app.set("trust proxy", trustProxy);
-  app.use(express.json({ limit: jsonLimit }));
 
   app.use(
     mcpAuthRouter({
@@ -96,6 +95,7 @@ export function createApp(opts: AppOptions): express.Express {
       verifier: oauthProvider,
       resourceMetadataUrl: mcpResourceMetadataUrl,
     }),
+    express.json({ limit: jsonLimit }),
     async (req, res) => {
       try {
         const server = createCapsuleMcpServer();

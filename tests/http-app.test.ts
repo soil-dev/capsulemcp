@@ -135,6 +135,15 @@ describe("Negative auth surface on /mcp", () => {
     expect(wwwAuth).toContain("/.well-known/oauth-protected-resource/mcp");
   });
 
+  it("POST /mcp authenticates before parsing the JSON body", async () => {
+    const res = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{",
+    });
+    expect(res.status).toBe(401);
+  });
+
   it("POST /mcp with a forged bearer returns 401", async () => {
     const res = await fetch(`${baseUrl}/mcp`, {
       method: "POST",
