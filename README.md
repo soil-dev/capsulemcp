@@ -2,7 +2,7 @@
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server for [Capsule CRM](https://capsulecrm.com). Connect Claude (Desktop, Code, or web Projects via Custom Connector) to your CRM and let it read or update parties, opportunities, projects, tasks, and timeline entries with natural-language prompts.
 
-- **68 tools** across the Capsule resource graph (47 in read-only mode) — full read coverage plus careful, confirm-gated writes
+- **70 tools** across the Capsule resource graph (48 in read-only mode) — full read coverage plus careful, confirm-gated writes
 - **Two transports**: stdio for local installs (Claude Desktop / Code), HTTP+OAuth for hosted Custom Connectors
 - **Read-only mode** as a one-env-var flag; works alongside read-scoped Capsule tokens
 - **Apache 2.0**
@@ -28,7 +28,7 @@ For most individual users the install is a single JSON snippet pasted into Claud
      "mcpServers": {
        "capsule": {
          "command": "npx",
-         "args": ["-y", "github:arapov/capsulemcp#v0.5.2"],
+         "args": ["-y", "github:arapov/capsulemcp#v0.6.0"],
          "env": {
            "CAPSULE_API_TOKEN": "<paste token here>",
            "CAPSULE_MCP_READONLY": "1"
@@ -52,6 +52,7 @@ That's it. The first launch takes ~30 seconds while npx clones and builds; subse
 | Additional parties (multi-party deals) | `list_additional_parties` | `add_additional_party`, `remove_additional_party` |
 | Tasks | `list_tasks`, `get_task`, `get_tasks` | `create_task`, `update_task`, `complete_task`, `delete_task` |
 | Entries (notes / captured emails) | `get_entry`, `list_entries` | `add_note`, `update_entry`, `delete_entry` |
+| Attachments (file upload / download) | `get_attachment` | `upload_attachment` |
 | Audit (deleted records) | `list_deleted_parties`, `list_deleted_opportunities`, `list_deleted_projects` | — |
 | Pipelines & milestones (opportunities) | `list_pipelines`, `list_milestones` | — |
 | Boards & stages (projects) | `list_boards`, `list_stages` | — |

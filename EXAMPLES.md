@@ -116,6 +116,16 @@ The placeholders are just to keep the examples concrete.
 - Run our "Newest first" saved filter and show me the top 10.
 - Are there any saved filters for deals worth running today?
 
+## Files / attachments
+
+- Show me the attachment with id NNN. (image attachments are
+  rendered inline; text files are decoded; PDFs and other binaries
+  return as metadata + base64 for downstream tools.)
+- Read the screenshot attached to the most recent note on $COMPANY.
+- Upload this PDF as a note on $COMPANY. (paste base64 contents
+  along with filename and content type, or attach the file in the
+  chat composer if your client supports it.)
+
 ## Quick diagnostics
 
 - Is the CRM connector working? Which account am I connected to?
@@ -146,8 +156,5 @@ The placeholders are just to keep the examples concrete.
   filters (sort gets configured once when you create the filter in
   Capsule's web UI). For ranked reports you run repeatedly, set up a
   saved filter once.
-- **Read attachments.** Files attached to notes (PDFs, images) are
-  not yet exposed through the connector. Open the record in
-  Capsule's web UI to see them.
 - **Edit settings.** Pipelines, stages, custom fields, tags, teams —
   these are admin-managed in Capsule's web UI, not from chat.

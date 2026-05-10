@@ -22,7 +22,7 @@ Paste this into the file (merge with existing `mcpServers` if you have other con
   "mcpServers": {
     "capsule": {
       "command": "npx",
-      "args": ["-y", "github:arapov/capsulemcp#v0.5.2"],
+      "args": ["-y", "github:arapov/capsulemcp#v0.6.0"],
       "env": {
         "CAPSULE_API_TOKEN": "<your read-scoped capsule token>",
         "CAPSULE_MCP_READONLY": "1"
@@ -39,7 +39,7 @@ Restart Claude Desktop. The Capsule tools appear in the tool picker.
 ## Path 2 — Claude Code
 
 ```sh
-claude mcp add capsule --env CAPSULE_API_TOKEN=<your token> -- npx -y github:arapov/capsulemcp#v0.5.2
+claude mcp add capsule --env CAPSULE_API_TOKEN=<your token> -- npx -y github:arapov/capsulemcp#v0.6.0
 ```
 
 This writes the entry to Claude Code's MCP config (`~/.claude.json`). Same `env` model as Claude Desktop's JSON — no shell-export needed.
@@ -48,7 +48,7 @@ If you'd rather not have the token in `~/.claude.json`, omit the `--env` flag an
 
 ```sh
 export CAPSULE_API_TOKEN=<your token>
-claude mcp add capsule -- npx -y github:arapov/capsulemcp#v0.5.2
+claude mcp add capsule -- npx -y github:arapov/capsulemcp#v0.6.0
 ```
 
 ## Path 3 — Manual install (for development)
@@ -100,7 +100,7 @@ If Claude says it has no Capsule tools available, see Troubleshooting below.
 
 The `npx` install caches per-spec, so it does **not** auto-update from `master`. Two ways to upgrade:
 
-1. **Bump the version in your config**: change `#v0.5.2` to a newer tag and restart.
+1. **Bump the version in your config**: change `#v0.6.0` to a newer tag and restart.
 2. **Clear the npx cache**: `rm -rf ~/.npm/_npx` and restart Claude Desktop. Re-fetches whatever spec your config points at.
 
 For "live tip of trunk" use `github:arapov/capsulemcp` (no version pin) plus the cache-clear approach. For predictable production-grade pinning use a specific tag.
