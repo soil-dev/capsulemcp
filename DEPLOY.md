@@ -201,8 +201,8 @@ Anyone in the org now opens that Project, starts a chat, and the Capsule tools +
 ```
 ┌─────────┐  OAuth flow → Bearer <signed access token>  ┌──────────┐
 │ Claude  │ ──────────────────────────────────────────▶ │ Cloud Run│
-│         │                                              │   /mcp   │
-└─────────┘                                              └──────────┘
+│         │                                             │   /mcp   │
+└─────────┘                                             └──────────┘
                                                               │
                             Authorization: Bearer <CAPSULE_API_TOKEN>
                                                               │
