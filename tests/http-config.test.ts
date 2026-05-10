@@ -66,6 +66,19 @@ describe("selectMode", () => {
     }
   });
 
+  it("errors when MCP_OAUTH_REDIRECT_URIS contains a malformed URL", () => {
+    const result = selectMode({
+      MCP_OAUTH_CLIENT_ID: "abc",
+      MCP_OAUTH_CLIENT_SECRET: "secret",
+      MCP_OAUTH_REDIRECT_URIS: "https://ok.example/cb,not-a-url",
+    });
+    expect("error" in result).toBe(true);
+    if ("error" in result) {
+      expect(result.error).toContain("malformed URL");
+      expect(result.error).toContain("not-a-url");
+    }
+  });
+
   it("errors when only client id is set (not secret)", () => {
     const result = selectMode({
       MCP_OAUTH_CLIENT_ID: "abc",
@@ -187,6 +200,83 @@ describe("resolveBaseConfig", () => {
     const result = resolveBaseConfig({
       PUBLIC_BASE_URL: "https://example.run.app",
       MCP_OAUTH_SIGNING_KEY: "tooshort",
+    });
+    expect("error" in result).toBe(true);
+  });
+
+  it("errors when PUBLIC_BASE_URL is not a valid URL", () => {
+    const result = resolveBaseConfig({
+      PUBLIC_BASE_URL: "not a url",
+      MCP_OAUTH_SIGNING_KEY: VALID_KEY,
+    });
+    expect("error" in result).toBe(true);
+    if ("error" in result) {
+      expect(result.error).toContain("not a valid URL");
+    }
+  });
+
+  it("rejects http:// PUBLIC_BASE_URL for non-localhost hosts", () => {
+    const result = resolveBaseConfig({
+      PUBLIC_BASE_URL: "http://example.run.app",
+      MCP_OAUTH_SIGNING_KEY: VALID_KEY,
+    });
+    expect("error" in result).toBe(true);
+    if ("error" in result) {
+      expect(result.error).toContain("https://");
+    }
+  });
+
+  it("accepts http:// PUBLIC_BASE_URL for localhost (development)", () => {
+    const result = resolveBaseConfig({
+      PUBLIC_BASE_URL: "http://localhost:3000",
+      MCP_OAUTH_SIGNING_KEY: VALID_KEY,
+    });
+    expect("ok" in result).toBe(true);
+  });
+
+  it("accepts http:// PUBLIC_BASE_URL for 127.0.0.1 (development)", () => {
+    const result = resolveBaseConfig({
+      PUBLIC_BASE_URL: "http://127.0.0.1:3000",
+      MCP_OAUTH_SIGNING_KEY: VALID_KEY,
+    });
+    expect("ok" in result).toBe(true);
+  });
+
+  it("errors when PORT is not numeric", () => {
+    const result = resolveBaseConfig({
+      PUBLIC_BASE_URL: "https://example.run.app",
+      MCP_OAUTH_SIGNING_KEY: VALID_KEY,
+      PORT: "abc",
+    });
+    expect("error" in result).toBe(true);
+    if ("error" in result) {
+      expect(result.error).toContain("PORT must be an integer");
+    }
+  });
+
+  it("errors when PORT is 0 (out of range)", () => {
+    const result = resolveBaseConfig({
+      PUBLIC_BASE_URL: "https://example.run.app",
+      MCP_OAUTH_SIGNING_KEY: VALID_KEY,
+      PORT: "0",
+    });
+    expect("error" in result).toBe(true);
+  });
+
+  it("errors when PORT is above 65535", () => {
+    const result = resolveBaseConfig({
+      PUBLIC_BASE_URL: "https://example.run.app",
+      MCP_OAUTH_SIGNING_KEY: VALID_KEY,
+      PORT: "70000",
+    });
+    expect("error" in result).toBe(true);
+  });
+
+  it("errors when PORT is a non-integer like 80.5", () => {
+    const result = resolveBaseConfig({
+      PUBLIC_BASE_URL: "https://example.run.app",
+      MCP_OAUTH_SIGNING_KEY: VALID_KEY,
+      PORT: "80.5",
     });
     expect("error" in result).toBe(true);
   });

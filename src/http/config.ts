@@ -43,6 +43,15 @@ export function selectMode(env: NodeJS.ProcessEnv = process.env): SelectModeResu
         error: "MCP_OAUTH_REDIRECT_URIS was set but contained no usable URIs",
       };
     }
+    // Reject malformed URIs early — Express OAuth handlers would
+    // otherwise crash deep in the SDK at request time with an
+    // unhelpful trace.
+    const bad = redirectUris.find((u) => !URL.canParse(u));
+    if (bad) {
+      return {
+        error: `MCP_OAUTH_REDIRECT_URIS contains a malformed URL: ${bad}`,
+      };
+    }
     return {
       ok: {
         kind: "static-client",
@@ -97,6 +106,30 @@ export function resolveBaseConfig(env: NodeJS.ProcessEnv = process.env): BaseCon
         "PUBLIC_BASE_URL is not set. It must be the public origin of this server (e.g. https://example.run.app), used to build OAuth metadata and authorization redirect URLs.",
     };
   }
+  // Validate URL syntax up front. Without this check, the URL
+  // constructor in src/http.ts throws an unhelpful TypeError at
+  // startup; with it, the operator sees a clear config error.
+  if (!URL.canParse(publicBaseUrl)) {
+    return {
+      error: `PUBLIC_BASE_URL is not a valid URL: ${publicBaseUrl}`,
+    };
+  }
+  const parsedBaseUrl = new URL(publicBaseUrl);
+  // Require https in production. Allow http only for localhost /
+  // 127.0.0.1 / ::1 so local development still works. OAuth over
+  // plaintext on a public URL is a security mistake worth blocking
+  // at startup rather than catching in code review.
+  const isLocal =
+    parsedBaseUrl.hostname === "localhost" ||
+    parsedBaseUrl.hostname === "127.0.0.1" ||
+    parsedBaseUrl.hostname === "[::1]" ||
+    parsedBaseUrl.hostname === "::1";
+  if (parsedBaseUrl.protocol !== "https:" && !isLocal) {
+    return {
+      error: `PUBLIC_BASE_URL must use https:// for non-localhost hosts (got ${parsedBaseUrl.protocol}//${parsedBaseUrl.hostname}). OAuth flows over plaintext on a public URL would expose tokens.`,
+    };
+  }
+
   const signingKey = env["MCP_OAUTH_SIGNING_KEY"];
   if (!signingKey || signingKey.length < 16) {
     return {
@@ -104,7 +137,15 @@ export function resolveBaseConfig(env: NodeJS.ProcessEnv = process.env): BaseCon
         "MCP_OAUTH_SIGNING_KEY must be set and at least 16 chars long. It is the HMAC key used to sign OAuth access tokens; rotating it invalidates all outstanding tokens.",
     };
   }
-  const port = parseInt(env["PORT"] ?? "8080", 10);
+
+  const portRaw = env["PORT"] ?? "8080";
+  const port = Number(portRaw);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    return {
+      error: `PORT must be an integer in 1..65535 (got ${JSON.stringify(portRaw)}).`,
+    };
+  }
+
   const jsonLimit = env["MCP_HTTP_JSON_LIMIT"] ?? "35mb";
   return { ok: { publicBaseUrl, signingKey, port, jsonLimit } };
 }
