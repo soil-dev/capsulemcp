@@ -11,6 +11,19 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.0.0-alpha.2] — 2026-05-10
+
+### Fixed
+
+- Container failed to start on `node:20-slim`: undici 8.2.0 calls
+  `webidl.util.markAsUncloneable` (used by its `CacheStorage`
+  initializer), which only exists in Node ≥ 22. Bumped the runtime
+  base image to `node:22-slim`, the tsup target to `node22`, and
+  the `package.json` engines field to `>=22`. Caught by the
+  `v1.0.0-alpha.1` deploy on Cloud Run — local dev was on Node 24
+  so the issue never showed up in tests or the build. Exactly the
+  class of bug a dry-run pre-release exists to catch.
+
 ## [1.0.0-alpha.1] — 2026-05-10
 
 First pre-release candidate for v1.0.0. Tagged for dry-run testing

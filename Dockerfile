@@ -2,10 +2,10 @@
 #   1. builder: install dev+prod deps, run tsup
 #   2. runtime: copy dist + production-only deps
 #
-# Resulting image is ~150MB on top of node:20-slim. Designed for
+# Resulting image is ~150MB on top of node:22-slim. Designed for
 # Cloud Run, but works on any container platform.
 
-FROM node:20-slim AS builder
+FROM node:22-slim AS builder
 WORKDIR /app
 
 # Install all deps (incl. devDependencies — tsup, typescript)
@@ -19,7 +19,7 @@ RUN npx tsup
 
 # ─────────────────────────────────────────────────────────────────────────────
 
-FROM node:20-slim
+FROM node:22-slim
 WORKDIR /app
 
 ENV NODE_ENV=production

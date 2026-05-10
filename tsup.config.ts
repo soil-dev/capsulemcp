@@ -9,7 +9,7 @@ export default defineConfig([
   {
     entry: ["src/index.ts"],
     format: ["esm"],
-    target: "node20",
+    target: "node22",
     outDir: "dist",
     clean: true,
     banner: {
@@ -19,7 +19,7 @@ export default defineConfig([
   {
     entry: ["src/http.ts"],
     format: ["esm"],
-    target: "node20",
+    target: "node22",
     outDir: "dist",
     // First config already cleaned; don't clean again or we'd wipe its output.
     clean: false,
