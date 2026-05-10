@@ -30,6 +30,10 @@
  * Optional env:
  *   PORT                  Listen port (default 8080; Cloud Run injects)
  *   CAPSULE_MCP_READONLY  Same semantics as the stdio server
+ *   MCP_HTTP_JSON_LIMIT   Body size cap for inbound JSON (default 35mb;
+ *                         needs to fit a 25MB attachment base64-encoded
+ *                         in the upload_attachment tool call. Express
+ *                         accepts shorthand like '50mb' or raw bytes.)
  */
 
 import express from "express";
@@ -141,8 +145,15 @@ const oauthProvider =
 
 // ── Express app ─────────────────────────────────────────────────────────────
 
+// Inbound JSON body limit. Default 35MB so a 25MB attachment fits with
+// base64 expansion (25MB × 4/3 ≈ 33.3MB) plus surrounding JSON. Without
+// this, upload_attachment fails with PayloadTooLargeError on anything
+// non-trivial. Override via MCP_HTTP_JSON_LIMIT if your deployment
+// needs to support larger files.
+const JSON_LIMIT = process.env["MCP_HTTP_JSON_LIMIT"] ?? "35mb";
+
 const app = express();
-app.use(express.json({ limit: "1mb" }));
+app.use(express.json({ limit: JSON_LIMIT }));
 
 app.use(
   mcpAuthRouter({
