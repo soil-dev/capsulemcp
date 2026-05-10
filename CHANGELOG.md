@@ -11,6 +11,60 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Fixed
+
+- `update_party` (and `create_party`) child-array tools now
+  document the append-only semantics. Capsule's `PUT /parties/{id}`
+  treats `emailAddresses`, `phoneNumbers`, `addresses`, and
+  `websites` as merge-not-replace: every item in the array is added
+  on top of the existing list. Passing the same item twice creates
+  a duplicate; passing `[]` is a silent no-op (does not clear and
+  does not advance `updatedAt`). Removal requires Capsule's
+  `_destroy: true` shape, which this connector does not yet expose.
+  The schema descriptions on each of the four arrays now state this
+  explicitly so callers don't expect "set" semantics that don't
+  exist. (Caller-facing fix only; the underlying behaviour is
+  Capsule's. A real "replace" path will need either a
+  `replaceArrays: true` opt-in flag, or dedicated add/remove tools.)
+- `websites.service` is now a zod enum with Capsule's full set:
+  `URL, SKYPE, TWITTER, LINKED_IN, FACEBOOK, XING, FEED,
+  GOOGLE_PLUS, FLICKR, GITHUB, YOUTUBE, INSTAGRAM, PINTEREST,
+  TIKTOK, THREADS, BLUESKY, SNAPCHAT`. Previously a free-form
+  string, so typos like `PIGEON_POST` made it all the way to
+  Capsule before being rejected with 422. Caught in production
+  write-mode testing.
+- `phoneNumbers[].number` rejects empty strings at the schema
+  layer (`min(1)`), matching `emailAddresses[].address` behaviour.
+  Capsule rejects `""` with `phoneNumber.number: number is
+  required`; now caught pre-call.
+- Task status enums in `update_task` and `list_tasks` no longer
+  expose `PENDING`. Capsule rejects direct sets with `cannot set
+  task status to PENDING` (the status is internal to the track
+  machinery; only `OPEN` and `COMPLETED` are settable). The
+  `update_task.status` description explains this and notes that
+  setting `OPEN` on an already-open task is a true no-op.
+
+### Changed
+
+- `create_party` description rewritten to explain the silently-dropped
+  cross-type fields: for `type='person'`, `name` is ignored
+  (firstName/lastName are used); for `type='organisation'`,
+  firstName/lastName/title/jobTitle are ignored (`name` is used).
+  Also documents the misleading 404 when `organisationId` points
+  at a non-organisation party (Capsule filters lookups by type).
+- `update_opportunity.probability` description now warns that it
+  cannot be set in the same call as a closing milestone (Won/Lost):
+  Capsule processes the milestone change first, the opportunity
+  becomes closed, then the probability update is rejected with 422
+  `probability can be updated only for open opportunity`. To close,
+  leave `probability` out — it auto-snaps to 100% (Won) / 0%
+  (Lost). On open milestones, `probability` is a true override of
+  the milestone default.
+
+3 new regression tests (websites.service enum, phoneNumber.number
+empty-string rejection, task-status PENDING rejection). 254 → 257
+tests.
+
 ## [1.0.0-alpha.6] — 2026-05-10
 
 ### Security

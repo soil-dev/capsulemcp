@@ -9,7 +9,10 @@ const EmailAddressSchema = z.object({
 });
 
 const PhoneNumberSchema = z.object({
-  number: z.string(),
+  // Capsule rejects empty strings with `phoneNumber.number: number is
+  // required`. Enforce at the schema layer to catch typos pre-call,
+  // matching how EmailAddressSchema's address field behaves.
+  number: z.string().min(1),
   type: z.string().optional(),
 });
 
@@ -34,11 +37,36 @@ const WebsiteSchema = z.object({
     .describe(
       "The website address. A URL when service='URL', or a handle (e.g. '@anton') for social services like 'TWITTER', 'INSTAGRAM'. Capsule names this field `address` regardless of service type.",
     ),
+  // Capsule's complete service list, copied verbatim from a 422
+  // response body for a `PIGEON_POST` test:
+  //   "options are: URL, SKYPE, TWITTER, LINKED_IN, FACEBOOK, XING,
+  //    FEED, GOOGLE_PLUS, FLICKR, GITHUB, YOUTUBE, INSTAGRAM,
+  //    PINTEREST, TIKTOK, THREADS, BLUESKY, SNAPCHAT"
+  // Locked at the schema layer so typos surface before any HTTP
+  // round-trip. If Capsule adds new services, the 422 will tell us.
   service: z
-    .string()
+    .enum([
+      "URL",
+      "SKYPE",
+      "TWITTER",
+      "LINKED_IN",
+      "FACEBOOK",
+      "XING",
+      "FEED",
+      "GOOGLE_PLUS",
+      "FLICKR",
+      "GITHUB",
+      "YOUTUBE",
+      "INSTAGRAM",
+      "PINTEREST",
+      "TIKTOK",
+      "THREADS",
+      "BLUESKY",
+      "SNAPCHAT",
+    ])
     .optional()
     .describe(
-      "Service type, e.g. 'URL', 'TWITTER', 'INSTAGRAM', 'LINKED_IN'. Defaults to 'URL' if omitted.",
+      "Service type. One of: URL, SKYPE, TWITTER, LINKED_IN, FACEBOOK, XING, FEED, GOOGLE_PLUS, FLICKR, GITHUB, YOUTUBE, INSTAGRAM, PINTEREST, TIKTOK, THREADS, BLUESKY, SNAPCHAT. Defaults to 'URL' if omitted.",
     ),
 });
 
@@ -138,12 +166,41 @@ export async function listPartyProjects(
 
 // ───────────────────────────────────────────────────────────────────────────
 
+// IMPORTANT: child arrays (emailAddresses, phoneNumbers, addresses,
+// websites) are APPEND-ONLY in Capsule's PUT semantics. Sending an
+// array does NOT replace the existing items — every item you pass is
+// added on top. Passing the same item twice creates a duplicate;
+// passing `[]` is a no-op (the existing list is unchanged and
+// `updatedAt` is not even advanced). Removal of an existing item
+// requires the v2 API's `_destroy: true` shape, which this connector
+// does not yet expose. Plan accordingly: read the party, decide what
+// to add, and call update_party with only the new items.
 const PartyWriteBaseSchema = {
   about: z.string().optional(),
-  emailAddresses: z.array(EmailAddressSchema).optional(),
-  phoneNumbers: z.array(PhoneNumberSchema).optional(),
-  addresses: z.array(AddressSchema).optional(),
-  websites: z.array(WebsiteSchema).optional(),
+  emailAddresses: z
+    .array(EmailAddressSchema)
+    .optional()
+    .describe(
+      "APPEND-ONLY: items are added to the existing list, NOT replaced. Passing the same address twice creates a duplicate. Passing `[]` is a silent no-op (does not clear the list and does not advance updatedAt). Removing an entry requires Capsule's _destroy semantics which this connector does not yet expose.",
+    ),
+  phoneNumbers: z
+    .array(PhoneNumberSchema)
+    .optional()
+    .describe(
+      "APPEND-ONLY: items are added to the existing list, NOT replaced. Passing the same number twice creates a duplicate. Passing `[]` is a silent no-op.",
+    ),
+  addresses: z
+    .array(AddressSchema)
+    .optional()
+    .describe(
+      "APPEND-ONLY: items are added to the existing list, NOT replaced. Capsule canonicalises the `country` field through its country dictionary (e.g. 'USA' is stored as 'United States') — this is normalisation, not rejection. Passing `[]` is a silent no-op.",
+    ),
+  websites: z
+    .array(WebsiteSchema)
+    .optional()
+    .describe(
+      "APPEND-ONLY: items are added to the existing list, NOT replaced. Passing the same address twice creates a duplicate. Passing `[]` is a silent no-op.",
+    ),
   ownerId: z.number().int().positive().optional().describe("Assign to user ID"),
 };
 

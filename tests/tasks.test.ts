@@ -95,6 +95,27 @@ describe("updateTask", () => {
     expect(body.task.owner).toEqual({ id: 9 });
     expect(body.task.ownerId).toBeUndefined();
   });
+
+  it("rejects status: 'PENDING' at the schema layer (Capsule rejects on direct set)", async () => {
+    // Production write-mode test caught: enum included PENDING but
+    // Capsule responds 422 'cannot set task status to PENDING' — that
+    // status is reachable only via track machinery. Schema now
+    // restricts to the two values that are actually settable.
+    const { updateTaskSchema, listTasksSchema } = await import(
+      "../src/tools/tasks.js"
+    );
+    expect(updateTaskSchema.safeParse({ id: 1, status: "PENDING" }).success).toBe(
+      false,
+    );
+    expect(updateTaskSchema.safeParse({ id: 1, status: "OPEN" }).success).toBe(
+      true,
+    );
+    expect(updateTaskSchema.safeParse({ id: 1, status: "COMPLETED" }).success).toBe(
+      true,
+    );
+    // listTasks shares the same enum gap.
+    expect(listTasksSchema.safeParse({ status: "PENDING" }).success).toBe(false);
+  });
 });
 
 describe("deleteTask", () => {

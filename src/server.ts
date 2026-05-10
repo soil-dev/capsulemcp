@@ -229,7 +229,7 @@ export function createCapsuleMcpServer(): McpServer {
   if (!readOnly) {
     server.tool(
       "create_party",
-      "Create a new person or organisation in Capsule CRM.",
+      "Create a new person or organisation in Capsule CRM. For type='person', firstName or lastName is required (one suffices); the `name` field is silently ignored. For type='organisation', `name` is required and firstName/lastName/title/jobTitle are silently ignored. Passing organisationId pointing at a non-organisation party (e.g. another person's id) returns 404 'organisation not found' — Capsule filters lookups by type.",
       createPartySchema.shape,
       async (input) => {
         const result = await createParty(input);

@@ -114,6 +114,38 @@ describe("createParty", () => {
     expect(rightShape.success).toBe(true);
   });
 
+  it("rejects unknown websites.service values at the schema layer", async () => {
+    // Production write-mode test caught: schema previously accepted any
+    // string and let Capsule 422 with the full enum list. Now locked
+    // to Capsule's documented set so typos surface pre-call.
+    const { createPartySchema } = await import("../src/tools/parties.js");
+    const bad = createPartySchema.safeParse({
+      type: "person",
+      firstName: "X",
+      websites: [{ address: "https://x.test/", service: "PIGEON_POST" }],
+    });
+    expect(bad.success).toBe(false);
+
+    const ok = createPartySchema.safeParse({
+      type: "person",
+      firstName: "X",
+      websites: [{ address: "@anton", service: "BLUESKY" }],
+    });
+    expect(ok.success).toBe(true);
+  });
+
+  it("rejects empty phoneNumbers[].number at the schema layer", async () => {
+    // Production write-mode test caught: empty string went to Capsule
+    // and got 422. Schema now matches EmailAddressSchema's behaviour.
+    const { createPartySchema } = await import("../src/tools/parties.js");
+    const bad = createPartySchema.safeParse({
+      type: "person",
+      firstName: "X",
+      phoneNumbers: [{ number: "", type: "Work" }],
+    });
+    expect(bad.success).toBe(false);
+  });
+
   it("forwards `address` verbatim to Capsule (no key rewriting)", async () => {
     mockFetch(201, { party: { id: 1, type: "person" } });
     const { createParty } = await import("../src/tools/parties.js");

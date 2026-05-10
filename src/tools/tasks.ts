@@ -4,11 +4,17 @@ import { capsuleDelete, capsuleGet, capsulePost, capsulePut } from "../capsule/c
 // ── Read ────────────────────────────────────────────────────────────────────
 
 export const listTasksSchema = z.object({
+  // Note: Capsule has a third internal status `PENDING` (a task that's
+  // part of an active track but not yet "open"), but it can only be
+  // reached via track machinery — it is NOT directly settable by
+  // /tasks PUT, and a list filter for it returns the same as OPEN
+  // anyway. We expose only the two values that are actually filterable
+  // by the v2 API.
   status: z
-    .enum(["OPEN", "COMPLETED", "PENDING"])
+    .enum(["OPEN", "COMPLETED"])
     .optional()
     .describe(
-      "Defaults to OPEN-only when omitted. Pass COMPLETED or PENDING to broaden, or 'OPEN' explicitly.",
+      "Defaults to OPEN when omitted. Pass COMPLETED to filter to completed tasks, or 'OPEN' explicitly.",
     ),
   ownerId: z.number().int().positive().optional().describe("Filter to tasks owned by this user ID"),
   page: z.number().int().positive().optional().default(1),
@@ -97,7 +103,15 @@ export const updateTaskSchema = z.object({
   dueOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("YYYY-MM-DD"),
   dueTime: z.string().regex(/^\d{2}:\d{2}$/).optional().describe("HH:MM in user's timezone"),
   detail: z.string().optional(),
-  status: z.enum(["OPEN", "COMPLETED", "PENDING"]).optional(),
+  // Capsule rejects direct sets of `PENDING` (which is a track-machinery
+  // internal state) with 422 "cannot set task status to PENDING".
+  // Only OPEN and COMPLETED are settable here.
+  status: z
+    .enum(["OPEN", "COMPLETED"])
+    .optional()
+    .describe(
+      "Set to OPEN or COMPLETED. (PENDING exists internally for track-driven tasks but cannot be set directly via this tool — Capsule rejects it.) Setting status: OPEN on an already-open task is a true no-op (does not advance updatedAt).",
+    ),
   ownerId: z.number().int().positive().optional(),
 });
 

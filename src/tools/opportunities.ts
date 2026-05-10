@@ -111,7 +111,15 @@ export const updateOpportunitySchema = z.object({
   description: z.string().optional(),
   value: OpportunityValueSchema.optional(),
   expectedCloseOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  probability: z.number().int().min(0).max(100).optional(),
+  probability: z
+    .number()
+    .int()
+    .min(0)
+    .max(100)
+    .optional()
+    .describe(
+      "Win probability 0–100. On an open milestone this overrides the milestone's default probability. CANNOT be set in the same call as a closing milestone (Won/Lost) — Capsule processes the milestone change first, the opportunity becomes closed, then the probability update is rejected as edit-on-closed-opp with 422 'probability can be updated only for open opportunity'. To close an opportunity, leave probability out of the call: it auto-snaps to 100% (Won) or 0% (Lost).",
+    ),
   ownerId: z.number().int().positive().optional(),
 });
 
