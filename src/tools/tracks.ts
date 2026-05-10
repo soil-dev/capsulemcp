@@ -90,8 +90,13 @@ export async function applyTrack(input: z.infer<typeof applyTrackSchema>) {
   const target =
     input.entity === "opportunities" ? "opportunity" : "kase";
 
+  // Capsule's POST /tracks body expects `definition`, not `trackDefinition`,
+  // even though the docs (in some places) say otherwise and the GET
+  // response uses `trackDefinition` as the key. Verified live: sending
+  // `trackDefinition` returns 422 "track definition is required" with
+  // field=definition. Sending `definition` works.
   const track: Record<string, unknown> = {
-    trackDefinition: { id: input.trackDefinitionId },
+    definition: { id: input.trackDefinitionId },
     [target]: { id: input.entityId },
   };
   if (input.startDate !== undefined) track["startDate"] = input.startDate;

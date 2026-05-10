@@ -13,6 +13,12 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ### Fixed
 
+- `apply_track` was sending `{trackDefinition: {id}}` in the request
+  body, which Capsule rejects with 422 "track definition is required;
+  field=definition". The correct field name is `definition`. The GET
+  response uses `trackDefinition`, but the POST body uses
+  `definition` — a Capsule API asymmetry. Verified live during the
+  v1.0.0 functional sweep; sent + verified the fix end-to-end.
 - `get_attachment` was comparing Content-Type with `===
   "application/json"`, which missed `application/json; charset=UTF-8`
   (a real shape Capsule returns). Now strips Content-Type parameters

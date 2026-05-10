@@ -44,7 +44,7 @@ describe("showTrack", () => {
 });
 
 describe("applyTrack", () => {
-  it("POSTs to /tracks with the body wrapped in {track: {...}} mapping kases→kase", async () => {
+  it("POSTs to /tracks with body wrapped as {track: {definition, kase}} (kases→kase)", async () => {
     mockFetch(200, { track: { id: 1 } });
     const { applyTrack } = await import("../src/tools/tracks.js");
     await applyTrack({
@@ -56,9 +56,12 @@ describe("applyTrack", () => {
     expect(url).toMatch(/\/tracks($|\?)/);
     const i = init as { method: string; body: string };
     expect(i.method).toBe("POST");
+    // Capsule expects `definition`, not `trackDefinition` —
+    // sending the latter returns 422 even though some docs suggest
+    // otherwise. Verified live during the v1.0.0 sweep.
     expect(JSON.parse(i.body)).toEqual({
       track: {
-        trackDefinition: { id: 147602 },
+        definition: { id: 147602 },
         kase: { id: 99 },
       },
     });
@@ -76,6 +79,9 @@ describe("applyTrack", () => {
     const body = JSON.parse((init as { body: string }).body);
     expect(body.track.opportunity).toEqual({ id: 42 });
     expect(body.track.kase).toBeUndefined();
+    // definition (not trackDefinition) is what Capsule accepts.
+    expect(body.track.definition).toEqual({ id: 147602 });
+    expect(body.track.trackDefinition).toBeUndefined();
   });
 
   it("includes startDate when provided", async () => {
