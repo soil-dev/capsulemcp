@@ -11,6 +11,23 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.0.0-alpha.7] — 2026-05-10
+
+Combines the previously-tagged-but-never-deployed alpha.6
+(`/mcp` pre-auth DoS hardening, #9) with PR #10 (MCP standards
+compliance — RFC 8707 resource indicators, Origin guard,
+MCP-Protocol-Version guard, SDK 1.12 → 1.29) and the production
+write-mode bug-report fixes (schema tightening + 8 new atomic
+child-array tools).
+
+> **Token-invalidation on deploy.** With PR #10 in, the OAuth
+> provider now binds tokens to `<PUBLIC_BASE_URL>/mcp` via the
+> `resource` claim. Tokens issued by earlier alphas don't carry
+> the claim and will be rejected immediately after this deploy
+> rolls. Anthropic's connector silently re-runs the OAuth dance
+> once; users see no UI change. Effectively a forced rotation,
+> equivalent to a `MCP_OAUTH_SIGNING_KEY` rotation.
+
 ### Added
 
 - 8 new atomic child-array tools on parties, giving callers
