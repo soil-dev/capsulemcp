@@ -124,9 +124,16 @@ export function resolveBaseConfig(env: NodeJS.ProcessEnv = process.env): BaseCon
     parsedBaseUrl.hostname === "127.0.0.1" ||
     parsedBaseUrl.hostname === "[::1]" ||
     parsedBaseUrl.hostname === "::1";
-  if (parsedBaseUrl.protocol !== "https:" && !isLocal) {
+  // Allowed combinations:
+  //   - https:// anywhere
+  //   - http://  only for localhost / 127.0.0.1 / ::1
+  // Anything else (ftp://, ws://, schemeless 'localhost:3000' which
+  // URL.canParse accepts as protocol="localhost:", etc.) is rejected.
+  const isHttps = parsedBaseUrl.protocol === "https:";
+  const isHttpLocal = parsedBaseUrl.protocol === "http:" && isLocal;
+  if (!isHttps && !isHttpLocal) {
     return {
-      error: `PUBLIC_BASE_URL must use https:// for non-localhost hosts (got ${parsedBaseUrl.protocol}//${parsedBaseUrl.hostname}). OAuth flows over plaintext on a public URL would expose tokens.`,
+      error: `PUBLIC_BASE_URL must be https://… (or http://localhost for development); got ${parsedBaseUrl.protocol}//${parsedBaseUrl.hostname}.`,
     };
   }
 

@@ -234,6 +234,30 @@ describe("resolveBaseConfig", () => {
     expect("ok" in result).toBe(true);
   });
 
+  it("rejects ftp:// PUBLIC_BASE_URL even on localhost", () => {
+    const result = resolveBaseConfig({
+      PUBLIC_BASE_URL: "ftp://localhost:3000",
+      MCP_OAUTH_SIGNING_KEY: VALID_KEY,
+    });
+    expect("error" in result).toBe(true);
+  });
+
+  it("rejects ws:// PUBLIC_BASE_URL even on localhost", () => {
+    const result = resolveBaseConfig({
+      PUBLIC_BASE_URL: "ws://localhost:3000",
+      MCP_OAUTH_SIGNING_KEY: VALID_KEY,
+    });
+    expect("error" in result).toBe(true);
+  });
+
+  it("rejects schemeless 'localhost:3000' (parses as protocol=localhost:)", () => {
+    const result = resolveBaseConfig({
+      PUBLIC_BASE_URL: "localhost:3000",
+      MCP_OAUTH_SIGNING_KEY: VALID_KEY,
+    });
+    expect("error" in result).toBe(true);
+  });
+
   it("accepts http:// PUBLIC_BASE_URL for 127.0.0.1 (development)", () => {
     const result = resolveBaseConfig({
       PUBLIC_BASE_URL: "http://127.0.0.1:3000",
