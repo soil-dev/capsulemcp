@@ -33,6 +33,8 @@ npm run build
 
 Produces `dist/index.js` (stdio entry, ~78 KB, with `#!/usr/bin/env node` shebang and the executable bit set) and `dist/http.js` (HTTP entry, ~89 KB, no shebang). Each is fully self-contained — tsup runs as two separate configs so the stdio entry can be invoked directly via npx while the HTTP entry isn't a CLI. tsup target is Node 20.
 
+`npm run build` also chains `npm run build:icon` (`scripts/build-icon.mjs`), which regenerates `src/icon.ts` from the canonical `assets/icon.svg`. The TypeScript file is committed (so typecheck works without a build step) but is **generated** — edit the SVG, then run the build. A drift-guard test (`tests/icon-source.test.ts`) fails CI if the two ever fall out of sync.
+
 ## Run the stdio server locally
 
 For testing the stdio path interactively (e.g. with [`mcp-inspector`](https://github.com/modelcontextprotocol/inspector)):

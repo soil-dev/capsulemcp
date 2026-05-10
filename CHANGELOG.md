@@ -124,14 +124,18 @@ versions adhere to [Semantic Versioning](https://semver.org).
   initialize handshake, calls `tools/list`, asserts the
   read-only-mode catalogue. Catches regressions in the post-build
   bundle that no other test layer would see.
-- Removed unused `assets/icon.svg` — it was nominally the canonical
-  source per a comment in `src/icon.ts`, but nothing imported it at
-  runtime and the comment was a hand-sync hazard.
+- `assets/icon.svg` is now genuinely the canonical source. New
+  `scripts/build-icon.mjs` regenerates `src/icon.ts` from the SVG;
+  `npm run build` chains it. The generated file carries a
+  "do-not-edit" header. New `tests/icon-source.test.ts` fails CI if
+  the SVG and TypeScript drift apart, so the hand-sync hazard is
+  closed (briefly removed in an earlier commit, now restored
+  properly).
 - `AutoApproveOAuthProvider` annotated as `@deprecated since v1.0.0`
   in source. Kept as an alias for backwards compatibility; future
   major release may remove it.
 
-Suite now 212/212 passing across 24 test files.
+Suite now 215/215 passing across 25 test files.
 
 ## [0.6.0] — 2026-05-10
 

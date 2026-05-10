@@ -24,13 +24,14 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup",
+    "build:icon": "node scripts/build-icon.mjs",
+    "build": "npm run build:icon && tsup",
     "dev": "tsup --watch",
     "start": "node dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "prepare": "tsup"
+    "prepare": "npm run build:icon && tsup"
   },
   "repository": {
     "type": "git",
