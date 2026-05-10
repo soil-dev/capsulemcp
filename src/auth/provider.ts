@@ -314,19 +314,3 @@ export class OAuthProvider implements OAuthServerProvider {
   }
 }
 
-// ── Backwards-compat alias ──────────────────────────────────────────────────
-//
-// v0.2.0 exported `AutoApproveOAuthProvider`. Kept as an alias so any
-// external code importing it by name keeps working. New code should
-// construct `OAuthProvider` directly with `new InMemoryClientsStore()`
-// when auto-approve mode is wanted; this class will likely be dropped
-// in a future major release.
-//
-// @deprecated since v1.0.0 — prefer `new OAuthProvider({clientsStore:
-// new InMemoryClientsStore(), signingKey})`.
-
-export class AutoApproveOAuthProvider extends OAuthProvider {
-  constructor(signingKey: string) {
-    super({ clientsStore: new InMemoryClientsStore(), signingKey });
-  }
-}

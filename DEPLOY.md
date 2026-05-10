@@ -40,7 +40,7 @@ If neither is configured, the server **refuses to start**. There's no path to de
 |---|---|---|
 | `CAPSULE_API_TOKEN` | yes | Capsule PAT used for outbound API calls; read-scoped recommended |
 | `PUBLIC_BASE_URL` | yes | Public origin where the server is reachable, e.g. `https://capsulemcp-...run.app`. Used to build OAuth metadata URLs |
-| `MCP_OAUTH_SIGNING_KEY` | yes | HMAC key for OAuth tokens. ≥ 16 chars, stable across instances. Falls back to `MCP_SHARED_SECRET` for v0.1.0 compat |
+| `MCP_OAUTH_SIGNING_KEY` | yes | HMAC key for OAuth tokens. ≥ 16 chars, stable across instances |
 | `MCP_OAUTH_CLIENT_ID` | yes for static-client mode | The one allowed OAuth client_id. Pasted into Anthropic's connector config |
 | `MCP_OAUTH_CLIENT_SECRET` | yes for static-client mode | Matching client_secret; ≥ 16 chars. The real auth gate |
 | `MCP_OAUTH_REDIRECT_URIS` | optional | Comma-separated allow-list. Defaults to Anthropic's known callbacks (`https://claude.ai/api/mcp/auth_callback`, `https://claude.ai/api/oauth/callback`, `https://claude.ai/oauth/callback`) |

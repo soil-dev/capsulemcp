@@ -84,10 +84,9 @@ export type BaseConfigResult = { ok: BaseConfig } | { error: string };
  * Validate the env vars required regardless of OAuth mode.
  *
  * - PUBLIC_BASE_URL: required.
- * - MCP_OAUTH_SIGNING_KEY (or its v0.1.0-era alias MCP_SHARED_SECRET):
- *   required, ≥16 chars.
- * - PORT: optional, defaults to 8080 (Cloud Run injects).
- * - MCP_HTTP_JSON_LIMIT: optional, defaults to '35mb' (fits a 25MB
+ * - MCP_OAUTH_SIGNING_KEY: required, ≥16 chars.
+ * - PORT: optional, default 8080.
+ * - MCP_HTTP_JSON_LIMIT: optional, default '35mb' (fits a 25MB
  *   attachment base64-encoded in upload_attachment).
  */
 export function resolveBaseConfig(env: NodeJS.ProcessEnv = process.env): BaseConfigResult {
@@ -98,11 +97,11 @@ export function resolveBaseConfig(env: NodeJS.ProcessEnv = process.env): BaseCon
         "PUBLIC_BASE_URL is not set. It must be the public origin of this server (e.g. https://example.run.app), used to build OAuth metadata and authorization redirect URLs.",
     };
   }
-  const signingKey = env["MCP_OAUTH_SIGNING_KEY"] ?? env["MCP_SHARED_SECRET"];
+  const signingKey = env["MCP_OAUTH_SIGNING_KEY"];
   if (!signingKey || signingKey.length < 16) {
     return {
       error:
-        "MCP_OAUTH_SIGNING_KEY (or MCP_SHARED_SECRET) must be set and at least 16 chars long. It is the HMAC key used to sign OAuth access tokens; rotating it invalidates all outstanding tokens.",
+        "MCP_OAUTH_SIGNING_KEY must be set and at least 16 chars long. It is the HMAC key used to sign OAuth access tokens; rotating it invalidates all outstanding tokens.",
     };
   }
   const port = parseInt(env["PORT"] ?? "8080", 10);

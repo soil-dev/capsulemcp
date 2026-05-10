@@ -131,11 +131,22 @@ versions adhere to [Semantic Versioning](https://semver.org).
   the SVG and TypeScript drift apart, so the hand-sync hazard is
   closed (briefly removed in an earlier commit, now restored
   properly).
-- `AutoApproveOAuthProvider` annotated as `@deprecated since v1.0.0`
-  in source. Kept as an alias for backwards compatibility; future
-  major release may remove it.
+- `AutoApproveOAuthProvider` removed entirely. It was a v0.2.0-era
+  alias for `new OAuthProvider({clientsStore: new
+  InMemoryClientsStore(), signingKey})`; with no external consumers
+  yet (capsulemcp is a new project that pre-1.0 had no API
+  stability promise), there's nothing to maintain compatibility
+  with. Tests migrated to construct `OAuthProvider` directly via a
+  small `autoApproveProvider()` helper.
+- `MCP_SHARED_SECRET` env-var fallback for `MCP_OAUTH_SIGNING_KEY`
+  removed. It was carrying compatibility for v0.1.0-era deployments
+  that don't exist outside of OpenSSL's (which already migrated to
+  `MCP_OAUTH_SIGNING_KEY` long ago). Error message and DEPLOY.md
+  table updated to drop the fallback reference.
 
-Suite now 215/215 passing across 25 test files.
+Suite now 213/213 passing across 25 test files (215 minus the two
+v0.1.0-compat tests that became unreachable when `MCP_SHARED_SECRET`
+was removed).
 
 ## [0.6.0] — 2026-05-10
 

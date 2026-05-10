@@ -6,11 +6,19 @@ import {
   TokenExpiredError,
 } from "../src/auth/tokens.js";
 import {
-  AutoApproveOAuthProvider,
   FixedClientStore,
   InMemoryClientsStore,
   OAuthProvider,
 } from "../src/auth/provider.js";
+
+// Helper: matches the auto-approve mode (open DCR + InMemoryClientsStore).
+// Used by the tests below so each one isn't repeating the construction.
+function autoApproveProvider(signingKey: string): OAuthProvider {
+  return new OAuthProvider({
+    clientsStore: new InMemoryClientsStore(),
+    signingKey,
+  });
+}
 
 const KEY = "0123456789abcdef0123456789abcdef";
 
@@ -69,13 +77,13 @@ describe("issueToken / verifyToken", () => {
 
 // ── Provider ────────────────────────────────────────────────────────────────
 
-describe("AutoApproveOAuthProvider", () => {
+describe("OAuthProvider in auto-approve mode (open DCR)", () => {
   it("rejects too-short signing keys", () => {
-    expect(() => new AutoApproveOAuthProvider("short")).toThrow(/at least 16/);
+    expect(() => autoApproveProvider("short")).toThrow(/at least 16/);
   });
 
   it("clientsStore registers and retrieves clients", async () => {
-    const p = new AutoApproveOAuthProvider(KEY);
+    const p = autoApproveProvider(KEY);
     const c = await p.clientsStore.registerClient!({
       redirect_uris: ["http://localhost/cb"],
     });
@@ -87,7 +95,7 @@ describe("AutoApproveOAuthProvider", () => {
   });
 
   it("authorize -> exchangeAuthorizationCode -> verifyAccessToken roundtrip", async () => {
-    const p = new AutoApproveOAuthProvider(KEY);
+    const p = autoApproveProvider(KEY);
     const client = await p.clientsStore.registerClient!({
       redirect_uris: ["http://localhost/cb"],
     });
@@ -132,7 +140,7 @@ describe("AutoApproveOAuthProvider", () => {
   });
 
   it("rejects re-use of a consumed authorization code", async () => {
-    const p = new AutoApproveOAuthProvider(KEY);
+    const p = autoApproveProvider(KEY);
     const client = await p.clientsStore.registerClient!({ redirect_uris: ["http://x/cb"] });
     let redirected: string | undefined;
     await p.authorize(
@@ -148,7 +156,7 @@ describe("AutoApproveOAuthProvider", () => {
   });
 
   it("rejects refresh tokens from a different client", async () => {
-    const p = new AutoApproveOAuthProvider(KEY);
+    const p = autoApproveProvider(KEY);
     const a = await p.clientsStore.registerClient!({ redirect_uris: ["http://a/cb"] });
     const b = await p.clientsStore.registerClient!({ redirect_uris: ["http://b/cb"] });
 
@@ -167,7 +175,7 @@ describe("AutoApproveOAuthProvider", () => {
   });
 
   it("verifyAccessToken rejects refresh tokens (wrong type)", async () => {
-    const p = new AutoApproveOAuthProvider(KEY);
+    const p = autoApproveProvider(KEY);
     const client = await p.clientsStore.registerClient!({ redirect_uris: ["http://x/cb"] });
     let redirected: string | undefined;
     await p.authorize(

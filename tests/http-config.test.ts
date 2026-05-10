@@ -145,31 +145,6 @@ describe("resolveBaseConfig", () => {
     });
   });
 
-  it("falls back to MCP_SHARED_SECRET when MCP_OAUTH_SIGNING_KEY is unset (v0.1.0 compat)", () => {
-    const result = resolveBaseConfig({
-      PUBLIC_BASE_URL: "https://example.run.app",
-      MCP_SHARED_SECRET: VALID_KEY,
-    });
-    expect("ok" in result).toBe(true);
-    if ("ok" in result) {
-      expect(result.ok.signingKey).toBe(VALID_KEY);
-    }
-  });
-
-  it("MCP_OAUTH_SIGNING_KEY wins over MCP_SHARED_SECRET when both are set", () => {
-    const newer = "x".repeat(32);
-    const older = "y".repeat(32);
-    const result = resolveBaseConfig({
-      PUBLIC_BASE_URL: "https://example.run.app",
-      MCP_OAUTH_SIGNING_KEY: newer,
-      MCP_SHARED_SECRET: older,
-    });
-    expect("ok" in result).toBe(true);
-    if ("ok" in result) {
-      expect(result.ok.signingKey).toBe(newer);
-    }
-  });
-
   it("uses PORT env when set", () => {
     const result = resolveBaseConfig({
       PUBLIC_BASE_URL: "https://example.run.app",

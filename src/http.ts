@@ -25,7 +25,7 @@
  *   CAPSULE_API_TOKEN     Capsule Personal Access Token (read-scoped)
  *   PUBLIC_BASE_URL       Public origin where this server is reachable
  *   MCP_OAUTH_SIGNING_KEY HMAC key for OAuth tokens (>=16 chars; stable
- *                         across instances; falls back to MCP_SHARED_SECRET)
+ *                         across instances)
  *
  * Optional env:
  *   PORT                  Listen port (default 8080; Cloud Run injects)
