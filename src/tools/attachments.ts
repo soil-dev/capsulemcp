@@ -63,19 +63,19 @@ export interface AttachmentResult {
 export async function getAttachment(
   input: z.infer<typeof getAttachmentSchema>,
 ): Promise<AttachmentResult> {
-  const { contentType, buffer } = await capsuleGetBinary(
-    `/attachments/${input.id}`,
-  );
   const cap = input.maxSizeBytes ?? DEFAULT_MAX_SIZE_BYTES;
-  if (buffer.length > cap) {
-    return {
-      contentType,
-      buffer: Buffer.alloc(0),
-      truncated: true,
-      sizeBytes: buffer.length,
-    };
+  // Push the cap into the HTTP layer so we never buffer more than `cap`
+  // bytes into memory — a malicious or buggy upstream sending a 5 GB
+  // response would be aborted mid-stream rather than fully buffered
+  // first and rejected after.
+  const { contentType, buffer, truncated, sizeBytes } = await capsuleGetBinary(
+    `/attachments/${input.id}`,
+    cap,
+  );
+  if (truncated) {
+    return { contentType, buffer: Buffer.alloc(0), truncated: true, sizeBytes };
   }
-  return { contentType, buffer, sizeBytes: buffer.length };
+  return { contentType, buffer, sizeBytes };
 }
 
 // ── Upload + attach as new note ─────────────────────────────────────────────

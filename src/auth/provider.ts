@@ -29,7 +29,7 @@
  * memory; they're consumed within seconds so this is fine.
  */
 
-import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import type { Response } from "express";
 import type { OAuthRegisteredClientsStore } from "@modelcontextprotocol/sdk/server/auth/clients.js";
 import type {
@@ -53,9 +53,24 @@ import {
   type SignedTokenClaims,
 } from "./tokens.js";
 
-const ACCESS_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
-const REFRESH_TOKEN_TTL_MS = 365 * 24 * 60 * 60 * 1000; // 365 days
+// TTLs are short enough that a leaked token has a bounded lifetime.
+// There is no per-token revocation list (the design choice is stateless
+// HMAC tokens so Cloud Run instances can come and go without sharing
+// state); the kill switch for a compromised token is rotating
+// MCP_OAUTH_SIGNING_KEY, which invalidates EVERY outstanding token at
+// once. Documented in DEPLOY.md under Rotation.
+const ACCESS_TOKEN_TTL_MS = 1 * 24 * 60 * 60 * 1000; // 1 day
+const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const AUTH_CODE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+// Cap on the in-memory authorization-code map. /authorize is rate-limited
+// by the SDK upstream, but a sustained low-rate flood (codes never
+// exchanged at /token) would still grow the map unboundedly otherwise.
+// 10k entries × ~200 bytes ≈ 2 MB worst-case — fits trivially in any
+// instance class. Oldest entries are dropped when the cap is reached.
+const AUTH_CODE_MAX_ENTRIES = 10_000;
+// Sweep expired entries on this cadence even if no new codes are issued.
+const AUTH_CODE_GC_INTERVAL_MS = 60 * 1000;
 
 interface AuthCodeState {
   clientId: string;
@@ -102,7 +117,6 @@ export class InMemoryClientsStore implements OAuthRegisteredClientsStore {
  */
 export class FixedClientStore implements OAuthRegisteredClientsStore {
   private readonly client: OAuthClientInformationFull;
-  private readonly secretBuffer: Buffer;
 
   constructor(args: {
     clientId: string;
@@ -131,7 +145,6 @@ export class FixedClientStore implements OAuthRegisteredClientsStore {
       token_endpoint_auth_method: "client_secret_post",
       ...(args.clientName ? { client_name: args.clientName } : {}),
     };
-    this.secretBuffer = Buffer.from(args.clientSecret);
   }
 
   getClient(clientId: string): OAuthClientInformationFull | undefined {
@@ -139,18 +152,6 @@ export class FixedClientStore implements OAuthRegisteredClientsStore {
     return this.client;
   }
 
-  /**
-   * Constant-time check that a presented client_secret matches the one
-   * configured at startup. Used by the auth router during /token grant
-   * validation. The router calls clientsStore.getClient(id) and then
-   * compares secrets itself, but providing this helper keeps the
-   * comparison logic in one place if the SDK shape ever changes.
-   */
-  verifyClientSecret(presented: string): boolean {
-    const a = Buffer.from(presented);
-    if (a.length !== this.secretBuffer.length) return false;
-    return timingSafeEqual(a, this.secretBuffer);
-  }
 }
 
 // ── Provider ────────────────────────────────────────────────────────────────
@@ -159,16 +160,33 @@ export class OAuthProvider implements OAuthServerProvider {
   readonly clientsStore: OAuthRegisteredClientsStore;
   private readonly authCodes = new Map<string, AuthCodeState>();
   private readonly signingKey: string;
+  private readonly gcTimer: NodeJS.Timeout | undefined;
 
   constructor(args: {
     clientsStore: OAuthRegisteredClientsStore;
     signingKey: string;
+    /**
+     * Schedule a periodic sweep of expired authorization codes. Defaults
+     * to true; set to false in tests so they don't keep the Node event
+     * loop alive past assertion time.
+     */
+    enableAuthCodeGc?: boolean;
   }) {
     if (!args.signingKey || args.signingKey.length < 16) {
       throw new Error("OAuthProvider: signing key must be at least 16 chars long");
     }
     this.clientsStore = args.clientsStore;
     this.signingKey = args.signingKey;
+    if (args.enableAuthCodeGc ?? true) {
+      this.gcTimer = setInterval(() => this.gcAuthCodes(), AUTH_CODE_GC_INTERVAL_MS);
+      // Don't keep the process alive on the GC alone.
+      this.gcTimer.unref();
+    }
+  }
+
+  /** Stop the GC timer (used in tests + graceful shutdown). */
+  shutdown(): void {
+    if (this.gcTimer) clearInterval(this.gcTimer);
   }
 
   /**
@@ -190,6 +208,15 @@ export class OAuthProvider implements OAuthServerProvider {
     });
 
     this.gcAuthCodes();
+    // Hard cap as a defence against sustained /authorize floods that
+    // never proceed to /token (so codes never get consumed). Map
+    // iteration order is insertion order, so the first key is the
+    // oldest entry — drop those first.
+    while (this.authCodes.size > AUTH_CODE_MAX_ENTRIES) {
+      const oldest = this.authCodes.keys().next().value;
+      if (oldest === undefined) break;
+      this.authCodes.delete(oldest);
+    }
 
     const url = new URL(params.redirectUri);
     url.searchParams.set("code", code);

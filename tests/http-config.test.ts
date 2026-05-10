@@ -96,20 +96,57 @@ describe("selectMode", () => {
     expect("error" in result).toBe(true);
   });
 
-  it("returns insecure-auto-approve mode when MCP_OAUTH_INSECURE_AUTO_APPROVE=1", () => {
-    const result = selectMode({
-      MCP_OAUTH_INSECURE_AUTO_APPROVE: "1",
-    });
+  it("returns insecure-auto-approve when MCP_OAUTH_INSECURE_AUTO_APPROVE=1 and PUBLIC_BASE_URL is localhost", () => {
+    const result = selectMode(
+      { MCP_OAUTH_INSECURE_AUTO_APPROVE: "1" },
+      "http://localhost:3000",
+    );
     expect(result).toEqual({ ok: { kind: "insecure-auto-approve" } });
   });
 
-  it("accepts 'true' (any case) for MCP_OAUTH_INSECURE_AUTO_APPROVE", () => {
-    expect(selectMode({ MCP_OAUTH_INSECURE_AUTO_APPROVE: "true" })).toEqual({
-      ok: { kind: "insecure-auto-approve" },
-    });
-    expect(selectMode({ MCP_OAUTH_INSECURE_AUTO_APPROVE: "TRUE" })).toEqual({
-      ok: { kind: "insecure-auto-approve" },
-    });
+  it("accepts 'true' (any case) for MCP_OAUTH_INSECURE_AUTO_APPROVE on localhost", () => {
+    expect(
+      selectMode(
+        { MCP_OAUTH_INSECURE_AUTO_APPROVE: "true" },
+        "http://localhost:3000",
+      ),
+    ).toEqual({ ok: { kind: "insecure-auto-approve" } });
+    expect(
+      selectMode(
+        { MCP_OAUTH_INSECURE_AUTO_APPROVE: "TRUE" },
+        "http://127.0.0.1:3000",
+      ),
+    ).toEqual({ ok: { kind: "insecure-auto-approve" } });
+  });
+
+  it("REFUSES insecure-auto-approve when PUBLIC_BASE_URL is not localhost", () => {
+    const result = selectMode(
+      { MCP_OAUTH_INSECURE_AUTO_APPROVE: "1" },
+      "https://example.run.app",
+    );
+    expect("error" in result).toBe(true);
+    if ("error" in result) {
+      expect(result.error).toContain("not a localhost address");
+      expect(result.error).toContain("MCP_OAUTH_I_KNOW_WHAT_IM_DOING");
+    }
+  });
+
+  it("permits insecure-auto-approve on a public host when MCP_OAUTH_I_KNOW_WHAT_IM_DOING=yes", () => {
+    const result = selectMode(
+      {
+        MCP_OAUTH_INSECURE_AUTO_APPROVE: "1",
+        MCP_OAUTH_I_KNOW_WHAT_IM_DOING: "yes",
+      },
+      "https://example.run.app",
+    );
+    expect(result).toEqual({ ok: { kind: "insecure-auto-approve" } });
+  });
+
+  it("REFUSES insecure-auto-approve when no PUBLIC_BASE_URL is provided (defaults to non-local)", () => {
+    // Calling without publicBaseUrl is the conservative path — without
+    // proof the URL is local, refuse unless explicitly acknowledged.
+    const result = selectMode({ MCP_OAUTH_INSECURE_AUTO_APPROVE: "1" });
+    expect("error" in result).toBe(true);
   });
 
   it("does NOT accept random truthy strings for MCP_OAUTH_INSECURE_AUTO_APPROVE", () => {

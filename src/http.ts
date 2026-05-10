@@ -56,7 +56,10 @@ const baseResult = resolveBaseConfig();
 if ("error" in baseResult) fatal(baseResult.error);
 const { publicBaseUrl, signingKey, port, jsonLimit } = baseResult.ok;
 
-const modeResult = selectMode();
+// Pass publicBaseUrl so selectMode can refuse insecure-auto-approve mode
+// for non-loopback hostnames (defence-in-depth for misconfigured public
+// deployments).
+const modeResult = selectMode(process.env, publicBaseUrl);
 if ("error" in modeResult) fatal(modeResult.error);
 const mode = modeResult.ok;
 

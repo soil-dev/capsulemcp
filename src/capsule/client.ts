@@ -6,9 +6,32 @@ const DEFAULT_BASE_URL = "https://api.capsulecrm.com/api/v2";
  * The Capsule API base URL. Defaults to the production endpoint;
  * override with `CAPSULE_API_BASE_URL` for testing or self-hosted
  * instances. Read at call time so tests can stub it.
+ *
+ * Validation: the override MUST be either https:// or http:// pointed
+ * at a loopback host. Sending the bearer token to an arbitrary http://
+ * host (e.g. via a typo or a hostile env) would exfiltrate it; the
+ * validation here is defence-in-depth on top of operator hygiene.
  */
 function baseUrl(): string {
-  return process.env["CAPSULE_API_BASE_URL"] ?? DEFAULT_BASE_URL;
+  const override = process.env["CAPSULE_API_BASE_URL"];
+  if (!override) return DEFAULT_BASE_URL;
+  if (!URL.canParse(override)) {
+    throw new CapsuleAuthError(
+      `CAPSULE_API_BASE_URL is not a valid URL: ${JSON.stringify(override)}`,
+    );
+  }
+  const u = new URL(override);
+  const isLocal =
+    u.hostname === "localhost" ||
+    u.hostname === "127.0.0.1" ||
+    u.hostname === "[::1]" ||
+    u.hostname === "::1";
+  if (u.protocol !== "https:" && !(u.protocol === "http:" && isLocal)) {
+    throw new CapsuleAuthError(
+      `CAPSULE_API_BASE_URL must be https:// (or http:// on localhost); got ${u.protocol}//${u.hostname}. Sending the Capsule API token to that URL would expose it.`,
+    );
+  }
+  return override;
 }
 
 /**
@@ -279,19 +302,87 @@ export async function capsulePut<T>(path: string, body: unknown): Promise<T> {
  * GET binary content. Returns the raw bytes plus the response's
  * Content-Type header. Used for attachment downloads — every other
  * read returns JSON, this is the exception.
+ *
+ * If `maxBytes` is provided, the response is rejected before any bytes
+ * are buffered when the server-advertised `Content-Length` exceeds it,
+ * AND the streaming read aborts as soon as accumulated bytes exceed
+ * the cap. Without this, a malicious or buggy upstream could buffer
+ * an arbitrarily large response into memory before any size check ran.
+ *
+ * Returns `{truncated: true, sizeBytes}` (with an empty buffer) when
+ * the cap is exceeded; the caller decides how to surface that to the
+ * MCP layer.
  */
+export interface BinaryResult {
+  contentType: string;
+  buffer: Buffer;
+  truncated?: boolean;
+  sizeBytes: number;
+}
+
 export async function capsuleGetBinary(
   path: string,
-): Promise<{ contentType: string; buffer: Buffer }> {
+  maxBytes?: number,
+): Promise<BinaryResult> {
   const token = getToken();
   const url = buildUrl(path);
   const res = await doFetch(url, { headers: baseHeaders(token) });
   await throwForStatus(res);
-  const arrayBuffer = await res.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
   const contentType =
     res.headers.get("Content-Type") ?? "application/octet-stream";
-  return { contentType, buffer };
+
+  // Pre-buffer cap check. If Content-Length is advertised and exceeds
+  // the cap, refuse to read the body at all.
+  const declared = res.headers.get("Content-Length");
+  const declaredBytes = declared ? Number(declared) : NaN;
+  if (
+    maxBytes !== undefined &&
+    Number.isFinite(declaredBytes) &&
+    declaredBytes > maxBytes
+  ) {
+    // Drain (cancel) the body so the connection can be released.
+    if (res.body) await res.body.cancel().catch(() => {});
+    return {
+      contentType,
+      buffer: Buffer.alloc(0),
+      truncated: true,
+      sizeBytes: declaredBytes,
+    };
+  }
+
+  // Streaming cap check. Even when Content-Length is absent or honest,
+  // abort the read once we've accumulated more than the cap.
+  if (maxBytes !== undefined && res.body) {
+    const reader = res.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    let truncated = false;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        truncated = true;
+        await reader.cancel().catch(() => {});
+        break;
+      }
+      chunks.push(value);
+    }
+    if (truncated) {
+      return {
+        contentType,
+        buffer: Buffer.alloc(0),
+        truncated: true,
+        sizeBytes: total,
+      };
+    }
+    const buffer = Buffer.concat(chunks.map((c) => Buffer.from(c)));
+    return { contentType, buffer, sizeBytes: buffer.length };
+  }
+
+  const arrayBuffer = await res.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+  return { contentType, buffer, sizeBytes: buffer.length };
 }
 
 /**

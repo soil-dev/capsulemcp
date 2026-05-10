@@ -46,7 +46,13 @@ function mockBinary(
   vi.mocked(fetch).mockResolvedValueOnce({
     status,
     ok: status >= 200 && status < 300,
-    headers: new Headers({ "Content-Type": contentType }),
+    // Real Capsule responses carry Content-Length; the client uses it
+    // for its pre-buffer size cap (defence-in-depth against an
+    // upstream sending 5 GB into a 5 MB cap).
+    headers: new Headers({
+      "Content-Type": contentType,
+      "Content-Length": String(buffer.byteLength),
+    }),
     arrayBuffer: async () =>
       buffer.buffer.slice(
         buffer.byteOffset,

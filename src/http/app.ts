@@ -109,10 +109,15 @@ export function createApp(opts: AppOptions): express.Express {
         await server.connect(transport);
         await transport.handleRequest(req, res, req.body);
       } catch (err) {
+        // Log the full error to stderr (operator-visible) but return only
+        // a generic shape to the caller. The message can include Capsule
+        // response bodies / internal paths; even though the caller is
+        // authenticated, we don't want to echo upstream content into the
+        // MCP response unnecessarily.
         const message = err instanceof Error ? err.message : String(err);
         console.error(`[capsulemcp] /mcp error: ${message}`);
         if (!res.headersSent) {
-          res.status(500).json({ error: "internal_error", message });
+          res.status(500).json({ error: "internal_error" });
         }
       }
     },

@@ -17,6 +17,9 @@ function autoApproveProvider(signingKey: string): OAuthProvider {
   return new OAuthProvider({
     clientsStore: new InMemoryClientsStore(),
     signingKey,
+    // Tests don't want the periodic GC timer keeping the event loop
+    // alive past assertion time.
+    enableAuthCodeGc: false,
   });
 }
 
@@ -228,13 +231,40 @@ describe("FixedClientStore", () => {
     expect((store as { registerClient?: unknown }).registerClient).toBeUndefined();
   });
 
-  it("verifyClientSecret uses constant-time comparison", () => {
-    const store = new FixedClientStore(baseArgs);
-    expect(store.verifyClientSecret(baseArgs.clientSecret)).toBe(true);
-    expect(store.verifyClientSecret("short")).toBe(false);
-    expect(
-      store.verifyClientSecret("ffffffffffffffffffffffffffffffff"),
-    ).toBe(false);
+  // verifyClientSecret was previously exposed but never called by the
+  // MCP SDK's auth router (which compares secrets itself), so it was
+  // dead code and the misleading "constant-time defense-in-depth" comment
+  // was removed in the post-pre-1.0 audit cleanup.
+});
+
+describe("OAuthProvider authCodes cap (DoS hardening)", () => {
+  it("caps the in-memory authorization-code map at 10k entries", async () => {
+    // Sustained /authorize flood with no /token follow-up would
+    // otherwise grow the Map unbounded. The cap drops the oldest entry
+    // each insert past 10k.
+    const p = autoApproveProvider(KEY);
+    const client = await p.clientsStore.registerClient!({
+      redirect_uris: ["http://localhost/cb"],
+    });
+    const fakeRes = { redirect: () => {} };
+
+    // Push 10100 codes through. We don't need to verify any of them —
+    // just check the internal Map didn't grow past the cap.
+    for (let i = 0; i < 10100; i++) {
+      await p.authorize(
+        client,
+        {
+          codeChallenge: `c${i}`,
+          redirectUri: "http://localhost/cb",
+          state: `s${i}`,
+        },
+        fakeRes as never,
+      );
+    }
+    const size = (p as unknown as { authCodes: Map<string, unknown> }).authCodes
+      .size;
+    expect(size).toBeLessThanOrEqual(10_000);
+    p.shutdown();
   });
 });
 
@@ -252,6 +282,7 @@ describe("OAuthProvider + FixedClientStore", () => {
         redirectUris: ["http://x/cb"],
       }),
       signingKey: KEY_LOCAL,
+      enableAuthCodeGc: false,
     });
   }
 

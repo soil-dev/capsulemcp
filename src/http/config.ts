@@ -13,6 +13,22 @@ export const DEFAULT_ANTHROPIC_REDIRECT_URIS = [
   "https://claude.ai/oauth/callback",
 ];
 
+/** Hostname matches loopback (localhost / 127.0.0.1 / ::1). */
+export function isLocalHostname(hostname: string): boolean {
+  return (
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "[::1]" ||
+    hostname === "::1"
+  );
+}
+
+/** True iff the URL parses and its hostname is loopback. */
+export function isLocalhostUrl(url: string): boolean {
+  if (!URL.canParse(url)) return false;
+  return isLocalHostname(new URL(url).hostname);
+}
+
 // ── Mode selection ──────────────────────────────────────────────────────────
 
 export type Mode =
@@ -25,8 +41,18 @@ export type SelectModeResult = { ok: Mode } | { error: string };
  * Decide which OAuth mode to run in based on env. Pure — never throws,
  * never exits the process. The HTTP entry wraps this with fatal() on
  * error.
+ *
+ * `publicBaseUrl` (already validated by `resolveBaseConfig`) is used to
+ * gate insecure-auto-approve mode against non-loopback hostnames —
+ * accidentally deploying that mode to the public internet would let
+ * anyone register a client and use the shared Capsule token. The mode
+ * must be either pointed at localhost / 127.0.0.1 / ::1, OR explicitly
+ * confirmed via `MCP_OAUTH_I_KNOW_WHAT_IM_DOING=yes`.
  */
-export function selectMode(env: NodeJS.ProcessEnv = process.env): SelectModeResult {
+export function selectMode(
+  env: NodeJS.ProcessEnv = process.env,
+  publicBaseUrl?: string,
+): SelectModeResult {
   const CLIENT_ID = env["MCP_OAUTH_CLIENT_ID"];
   const CLIENT_SECRET = env["MCP_OAUTH_CLIENT_SECRET"];
   const REDIRECT_URIS_ENV = env["MCP_OAUTH_REDIRECT_URIS"];
@@ -68,6 +94,24 @@ export function selectMode(env: NodeJS.ProcessEnv = process.env): SelectModeResu
     };
   }
   if (insecureAutoApprove) {
+    // Loud guard. Open DCR + auto-approve = anyone who can reach the URL
+    // gets in and uses the shared Capsule token. Fine on a laptop,
+    // disastrous on a public origin. Accept if the public base URL
+    // points at loopback OR the operator explicitly confirms via
+    // MCP_OAUTH_I_KNOW_WHAT_IM_DOING=yes.
+    const isLocal = publicBaseUrl !== undefined && isLocalhostUrl(publicBaseUrl);
+    const acknowledged =
+      env["MCP_OAUTH_I_KNOW_WHAT_IM_DOING"]?.toLowerCase() === "yes";
+    if (!isLocal && !acknowledged) {
+      return {
+        error:
+          "MCP_OAUTH_INSECURE_AUTO_APPROVE is set but PUBLIC_BASE_URL is not a localhost address. " +
+          "This mode lets anyone who can reach the URL register an OAuth client and use the shared " +
+          "Capsule token; it must not be exposed publicly. Either:\n" +
+          "  - Point PUBLIC_BASE_URL at http://localhost / 127.0.0.1 / ::1 (recommended), or\n" +
+          "  - Set MCP_OAUTH_I_KNOW_WHAT_IM_DOING=yes to acknowledge the risk (only do this on a private network).",
+      };
+    }
     return { ok: { kind: "insecure-auto-approve" } };
   }
   return {
@@ -119,11 +163,7 @@ export function resolveBaseConfig(env: NodeJS.ProcessEnv = process.env): BaseCon
   // 127.0.0.1 / ::1 so local development still works. OAuth over
   // plaintext on a public URL is a security mistake worth blocking
   // at startup rather than catching in code review.
-  const isLocal =
-    parsedBaseUrl.hostname === "localhost" ||
-    parsedBaseUrl.hostname === "127.0.0.1" ||
-    parsedBaseUrl.hostname === "[::1]" ||
-    parsedBaseUrl.hostname === "::1";
+  const isLocal = isLocalHostname(parsedBaseUrl.hostname);
   // Allowed combinations:
   //   - https:// anywhere
   //   - http://  only for localhost / 127.0.0.1 / ::1

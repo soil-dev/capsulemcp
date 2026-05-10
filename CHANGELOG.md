@@ -89,6 +89,49 @@ versions adhere to [Semantic Versioning](https://semver.org).
   with `URL.canParse`. `PORT` must be an integer in 1..65535. Bad
   values produce clear startup errors instead of late stack traces
   or broken OAuth metadata. (Issues #6 + #7.)
+- **Pre-1.0 security audit hardening (one pass over every line of
+  the HTTP / OAuth / Capsule-client surface):**
+  - `/mcp` 500 responses no longer echo the caught error message
+    to the client. The full error is logged to stderr; the body
+    is now `{"error":"internal_error"}` only. Closes a future
+    leakage path where a Capsule API error body could surface
+    upstream content into authenticated MCP responses.
+  - OAuth refresh-token TTL shortened from 365 days to 30 days;
+    access-token TTL shortened from 30 days to 1 day. Tokens are
+    stateless HMAC blobs (no per-token revocation by design — Cloud
+    Run instances must come and go without sharing state); the
+    kill switch for a compromised token is rotating
+    `MCP_OAUTH_SIGNING_KEY`, which invalidates EVERY outstanding
+    token at once. The shorter window bounds the leak window.
+  - In-memory authorization-code map is now hard-capped at 10 000
+    entries (oldest dropped) and swept by a 60-second
+    `setInterval` (in addition to the per-issue sweep), so a
+    sustained `/authorize` flood that never proceeds to `/token`
+    cannot exhaust process memory. The GC timer is `unref()`ed so
+    it doesn't keep the event loop alive.
+  - `MCP_OAUTH_INSECURE_AUTO_APPROVE` is now refused at startup
+    when `PUBLIC_BASE_URL` is not a loopback host, unless the
+    operator explicitly sets `MCP_OAUTH_I_KNOW_WHAT_IM_DOING=yes`.
+    Open DCR + auto-approve was always documented as
+    "private-network only" — now the runtime enforces it.
+  - `CAPSULE_API_BASE_URL` overrides are now validated at first
+    use: must be a parseable URL, must be `https://` (or `http://`
+    on loopback). A typo'd or hostile env value previously sent
+    the bearer token in the `Authorization` header to the
+    misconfigured origin; now the override is rejected with a
+    clear error and no HTTP call is made.
+  - Attachment download (`get_attachment`) now caps the response
+    BEFORE buffering the bytes. The `maxBytes` limit is plumbed
+    into `capsuleGetBinary`, which (1) refuses to read the body
+    at all if `Content-Length` exceeds the cap and (2) aborts
+    streaming once accumulated bytes pass the cap. Previously
+    `arrayBuffer()` consumed the full response before the size
+    check ran — a malicious or buggy upstream sending 5 GB into
+    a 5 MB cap would have buffered the lot.
+  - Dead `FixedClientStore.verifyClientSecret` removed. The MCP
+    SDK's auth router compares secrets internally; our
+    constant-time helper was never wired in. The misleading
+    "defence-in-depth" comment is gone with it.
 
 ### Changed
 
