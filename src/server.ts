@@ -897,7 +897,7 @@ export function createCapsuleMcpServer(): McpServer {
 
   server.tool(
     "get_site",
-    "Return the Capsule account this connector is currently authenticated against (subdomain, display name, URL). Diagnostic — Capsule v2 has no /users/me endpoint, so this is the closest 'where am I?' check.",
+    "Return the Capsule account this connector is currently authenticated against (subdomain, display name, URL). Diagnostic for 'which Capsule account is this?'. For the PAT owner's user identity, use get_current_user.",
     getSiteSchema.shape,
     async (input) => {
       const result = await getSite(input);

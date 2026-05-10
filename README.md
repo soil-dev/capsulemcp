@@ -2,7 +2,7 @@
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server for [Capsule CRM](https://capsulecrm.com). Connect Claude (Desktop, Code, or web Projects via Custom Connector) to your CRM and let it answer natural-language questions across the full record graph: contacts, organisations, opportunities, projects, tasks, and timeline activity. Beyond the basics it covers structured filters with field/operator conditions, saved searches with sort, workflow tracks (templates and instances), file attachments (read + write), audit of deleted records, and batch fetches up to 10 records per call.
 
-- **70 tools** across the Capsule resource graph (48 in read-only mode) — full read coverage plus careful, confirm-gated writes
+- **71 tools** across the Capsule resource graph (49 in read-only mode) — full read coverage plus careful, confirm-gated writes
 - **Two transports**: stdio for local installs (Claude Desktop / Code), HTTP+OAuth for hosted Custom Connectors
 - **Read-only mode** as a one-env-var flag; works alongside read-scoped Capsule tokens
 - **Apache 2.0**
@@ -63,10 +63,10 @@ That's it. The first launch takes ~30 seconds while npx clones and builds; subse
 | Saved filters | `list_saved_filters`, `run_saved_filter` | — |
 | Custom fields (schema) | `list_custom_fields`, `get_custom_field` | — |
 | Tags | `list_tags` | — |
-| Users & teams | `list_users`, `list_teams` | — |
+| Users & teams | `list_users`, `get_current_user`, `list_teams` | — |
 | Reference metadata | `list_lostreasons`, `list_activitytypes`, `list_categories`, `list_goals`, `get_site` | — |
 
-All paginated tools default `perPage=25` (max 100) and return a `nextPage` cursor when more results exist. Many GET tools accept an `embed` parameter (e.g. `tags,fields`) — see Capsule's API docs for the full list per resource.
+Most record-list tools default `perPage=25`; reference-data tools default `perPage=100` so small accounts usually fit in one response. All paginated tools cap `perPage` at 100 and return a `nextPage` cursor when more results exist. Many GET tools accept an `embed` parameter (e.g. `tags,fields`) — see Capsule's API docs for the full list per resource.
 
 The `filter_*` tools wrap Capsule's structured filter endpoint (`POST /<entity>/filters/results`) and accept an array of `{field, operator, value}` conditions ANDed together. Capsule's API does not support ad-hoc sort, so for "most recent X" questions filter by a date condition (e.g. `addedOn is within last 7`) and pick the highest id from the result — Capsule's numeric IDs are monotonically incrementing.
 

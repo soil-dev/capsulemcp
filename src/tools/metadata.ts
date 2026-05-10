@@ -71,8 +71,8 @@ export async function listActivityTypes(
 //
 // Returns the Capsule account this connector is currently connected to:
 // subdomain, display name, URL. Useful as a "which Capsule am I talking
-// to?" diagnostic — Capsule v2 does not expose a /users/me endpoint, so
-// /site is the closest equivalent for "who/where am I authenticated as".
+// to?" diagnostic. For the PAT owner's user identity, use get_current_user
+// (GET /users/current) instead.
 // Singular response, no pagination.
 
 export const getSiteSchema = z.object({});
