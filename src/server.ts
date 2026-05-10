@@ -93,6 +93,10 @@ import {
   removeTrackSchema, removeTrack,
 } from "./tools/tracks.js";
 import {
+  getAttachmentSchema, getAttachment,
+  uploadAttachmentSchema, uploadAttachment,
+} from "./tools/attachments.js";
+import {
   listSavedFiltersSchema, listSavedFilters,
   runSavedFilterSchema, runSavedFilter,
 } from "./tools/saved-filters.js";
@@ -111,7 +115,7 @@ export function createCapsuleMcpServer(): McpServer {
   const readOnly = isReadOnly();
   const server = new McpServer({
     name: "capsulemcp",
-    version: "0.5.2",
+    version: "0.6.0",
     description: "Read and (optionally) modify Capsule CRM data — parties, opportunities, projects, tasks, timeline entries, pipelines, tags.",
     websiteUrl: "https://github.com/arapov/capsulemcp",
     icons: ICONS,
@@ -619,6 +623,96 @@ export function createCapsuleMcpServer(): McpServer {
     },
   );
 
+  server.tool(
+    "get_attachment",
+    "Download an attachment by id. Returns image content for image/* types (Claude can describe it natively); decoded text for text/* and application/json (small files); JSON metadata + base64 payload for other binary types (PDF, Office docs, etc.). Files exceeding maxSizeBytes (default 5MB) return metadata only with a `truncated: true` flag.",
+    getAttachmentSchema.shape,
+    async (input) => {
+      const result = await getAttachment(input);
+
+      // Truncated: return metadata only.
+      if (result.truncated) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                {
+                  id: input.id,
+                  contentType: result.contentType,
+                  sizeBytes: result.sizeBytes,
+                  truncated: true,
+                  message: `File exceeds the size cap (${input.maxSizeBytes ?? "default"} bytes). Increase maxSizeBytes if you need the bytes; max is 25MB.`,
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      }
+
+      // Image: return as MCP image content so Claude can see it.
+      if (result.contentType.startsWith("image/")) {
+        return {
+          content: [
+            {
+              type: "image",
+              data: result.buffer.toString("base64"),
+              mimeType: result.contentType,
+            },
+          ],
+        };
+      }
+
+      // Text-ish: decode as UTF-8 alongside metadata.
+      const isText =
+        result.contentType.startsWith("text/") ||
+        result.contentType === "application/json" ||
+        result.contentType === "application/xml";
+      if (isText) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                {
+                  id: input.id,
+                  contentType: result.contentType,
+                  sizeBytes: result.sizeBytes,
+                },
+                null,
+                2,
+              ),
+            },
+            { type: "text", text: result.buffer.toString("utf8") },
+          ],
+        };
+      }
+
+      // Other binary (PDF, Office, archive): metadata + base64 payload
+      // for downstream tools (Claude itself can't read PDF bytes
+      // directly, but can pass the base64 to other tools).
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                id: input.id,
+                contentType: result.contentType,
+                sizeBytes: result.sizeBytes,
+                base64: result.buffer.toString("base64"),
+              },
+              null,
+              2,
+            ),
+          },
+        ],
+      };
+    },
+  );
+
   if (!readOnly) {
     server.tool(
       "add_note",
@@ -636,6 +730,16 @@ export function createCapsuleMcpServer(): McpServer {
       updateEntrySchema.shape,
       async (input) => {
         const result = await updateEntry(input);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      },
+    );
+
+    server.tool(
+      "upload_attachment",
+      "Upload a file as a new note attachment, linked to a party, opportunity, or project. Provide the file as base64-encoded `dataBase64` along with `filename` and `contentType` (MIME). Also provide exactly one of partyId / opportunityId / projectId to anchor the note. Optionally pass `content` to set the note body (defaults to '[attachment]'). Two-step orchestration server-side: bytes upload → token → note creation. Adding to an existing entry is not supported.",
+      uploadAttachmentSchema.shape,
+      async (input) => {
+        const result = await uploadAttachment(input);
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       },
     );
