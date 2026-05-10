@@ -68,10 +68,23 @@ export const createProjectSchema = z.object({
     .optional()
     .describe("Defaults to OPEN when omitted."),
   ownerId: z.number().int().positive().optional(),
+  stageId: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      "Stage (board column) to place the project on. Discover IDs via list_stages — each stage belongs to one Board, so picking a stageId implicitly picks the board. If omitted, the project is created with no stage assignment (and won't appear on any board).",
+    ),
+  expectedCloseOn: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional()
+    .describe("YYYY-MM-DD"),
 });
 
 export async function createProject(input: z.infer<typeof createProjectSchema>) {
-  const { partyId, ownerId, status, ...rest } = input;
+  const { partyId, ownerId, status, stageId, ...rest } = input;
 
   // Default applied here (not via zod's .default()) so the inferred
   // input type keeps `status` optional. Same pattern as listTasks.
@@ -81,6 +94,10 @@ export async function createProject(input: z.infer<typeof createProjectSchema>) 
     party: { id: partyId },
   };
   if (ownerId) body["owner"] = { id: ownerId };
+  // Capsule's create-case body uses `stage: <integer>` per the docs
+  // example. The GET response uses the object form `stage: {id, name}`,
+  // but we follow the documented request shape on the way in.
+  if (stageId) body["stage"] = stageId;
 
   return capsulePost<{ kase: unknown }>("/kases", { kase: body });
 }
@@ -93,17 +110,26 @@ export const updateProjectSchema = z.object({
   description: z.string().optional(),
   status: z.enum(["OPEN", "CLOSED"]).optional(),
   ownerId: z.number().int().positive().optional(),
+  stageId: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      "Move the project to this stage (board column). Discover IDs via list_stages.",
+    ),
   expectedCloseOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("YYYY-MM-DD"),
 });
 
 export async function updateProject(input: z.infer<typeof updateProjectSchema>) {
-  const { id, ownerId, ...rest } = input;
+  const { id, ownerId, stageId, ...rest } = input;
 
   const body: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(rest)) {
     if (v !== undefined) body[k] = v;
   }
   if (ownerId) body["owner"] = { id: ownerId };
+  if (stageId) body["stage"] = stageId;
 
   return capsulePut<{ kase: unknown }>(`/kases/${id}`, { kase: body });
 }

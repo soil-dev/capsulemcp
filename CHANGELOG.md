@@ -11,6 +11,27 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.0.0-alpha.4] — 2026-05-10
+
+### Added
+
+- `create_project` and `update_project` now accept an optional
+  `stageId` parameter. Capsule projects (kases) live on Boards with
+  Stages (board columns); without this, every project created via
+  the connector landed unassigned to any board, and there was no
+  way to move a project across its lifecycle stages — which is most
+  of what projects are for in the CRM. The body field name on the
+  Capsule side is `stage: <integer>` (per Capsule's docs); the
+  user-facing parameter follows our `<resource>Id` convention to
+  match `partyId` / `ownerId`. Discover stage IDs via the existing
+  `list_stages` tool.
+
+  Stage implies board (each stage belongs to exactly one Board), so
+  the schema deliberately exposes only `stageId` and not a separate
+  `boardId` — picking the stage already picks the board. Caught by
+  the same production write-mode dry run that surfaced the
+  websites schema bug.
+
 ## [1.0.0-alpha.3] — 2026-05-10
 
 ### Fixed

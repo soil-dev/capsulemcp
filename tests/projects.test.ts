@@ -62,6 +62,23 @@ describe("createProject", () => {
     expect(url).toContain("/kases");
     const body = JSON.parse((options as RequestInit).body as string);
     expect(body.kase.party).toEqual({ id: 5 });
+    // No stage when stageId is omitted — Capsule will leave the project
+    // unassigned to any board.
+    expect(body.kase.stage).toBeUndefined();
+  });
+
+  it("maps stageId → stage:<integer> in the request body", async () => {
+    mockFetch(201, { kase: { id: 10, stage: { id: 42, name: "Discovery" } } });
+
+    const { createProject } = await import("../src/tools/projects.js");
+    await createProject({ name: "Onboarding", partyId: 5, stageId: 42 });
+
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse((options as RequestInit).body as string);
+    // Capsule's create-case body uses bare integer per docs example.
+    expect(body.kase.stage).toBe(42);
+    // The user-facing stageId field doesn't leak into the API body.
+    expect(body.kase.stageId).toBeUndefined();
   });
 });
 
@@ -109,6 +126,18 @@ describe("updateProject", () => {
     const body = JSON.parse((options as RequestInit).body as string);
     expect(body.kase.owner).toEqual({ id: 7 });
     expect(body.kase.ownerId).toBeUndefined();
+  });
+
+  it("maps stageId → stage:<integer> for moving a project across stages", async () => {
+    mockFetch(200, { kase: { id: 10, stage: { id: 99, name: "Live" } } });
+
+    const { updateProject } = await import("../src/tools/projects.js");
+    await updateProject({ id: 10, stageId: 99 });
+
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.kase.stage).toBe(99);
+    expect(body.kase.stageId).toBeUndefined();
   });
 });
 
