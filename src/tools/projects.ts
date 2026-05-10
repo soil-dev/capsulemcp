@@ -63,15 +63,21 @@ export const createProjectSchema = z.object({
   name: z.string().min(1),
   partyId: z.number().int().positive().describe("ID of the party linked to this project"),
   description: z.string().optional(),
-  status: z.enum(["OPEN", "CLOSED"]).optional().default("OPEN"),
+  status: z
+    .enum(["OPEN", "CLOSED"])
+    .optional()
+    .describe("Defaults to OPEN when omitted."),
   ownerId: z.number().int().positive().optional(),
 });
 
 export async function createProject(input: z.infer<typeof createProjectSchema>) {
-  const { partyId, ownerId, ...rest } = input;
+  const { partyId, ownerId, status, ...rest } = input;
 
+  // Default applied here (not via zod's .default()) so the inferred
+  // input type keeps `status` optional. Same pattern as listTasks.
   const body: Record<string, unknown> = {
     ...rest,
+    status: status ?? "OPEN",
     party: { id: partyId },
   };
   if (ownerId) body["owner"] = { id: ownerId };
