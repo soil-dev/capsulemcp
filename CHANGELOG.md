@@ -127,7 +127,7 @@ versions adhere to [Semantic Versioning](https://semver.org).
   prevention (gives up after one retry), 5-second default when
   Retry-After is missing, 60-second clamp on absurdly large values,
   pass-through of non-429 errors, no retry on 401.
-- `tests/http-app.test.ts` (15 tests): `/.well-known/*` metadata
+- `tests/http-app.test.ts` (16 tests): `/.well-known/*` metadata
   shapes, DCR disabled in static-client mode (`POST /register` →
   404), bearer-required gates on `/mcp` (401 without bearer, 401 on
   forged token, 405 on GET/DELETE with valid bearer), `/authorize`
@@ -159,7 +159,7 @@ versions adhere to [Semantic Versioning](https://semver.org).
   `MCP_OAUTH_SIGNING_KEY` long ago). Error message and DEPLOY.md
   table updated to drop the fallback reference.
 
-Suite now 214/214 passing across 25 test files.
+Suite now 227/227 passing across 25 test files.
 
 ## [0.6.0] — 2026-05-10
 

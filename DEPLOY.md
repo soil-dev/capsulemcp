@@ -162,7 +162,7 @@ URL=https://<your-service-url>
 
 # 1. Discovery returns 200 with the OAuth metadata
 curl -s "$URL/.well-known/oauth-authorization-server" | head
-curl -s "$URL/.well-known/oauth-protected-resource" | head
+curl -s "$URL/.well-known/oauth-protected-resource/mcp" | head
 
 # 2. /mcp without a token returns 401 with WWW-Authenticate header (proves the gate is in place)
 curl -i -X POST "$URL/mcp" -H "Content-Type: application/json" -d '{}' | head -5
@@ -182,7 +182,7 @@ In Claude.ai admin → **Settings → Connectors → Custom Connectors → Add c
 | Client ID | `MCP_OAUTH_CLIENT_ID` you set during deploy |
 | Client Secret | `MCP_OAUTH_CLIENT_SECRET` you set during deploy |
 
-Save. Anthropic walks the OAuth dance silently; on success the connector page shows the tools (~17 if `CAPSULE_MCP_READONLY=1`, ~27 if not).
+Save. Anthropic walks the OAuth dance silently; on success the connector page shows the tools (49 if `CAPSULE_MCP_READONLY=1`, 71 if not).
 
 ## Wire up a shared Project
 
