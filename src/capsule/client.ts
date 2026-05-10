@@ -255,6 +255,55 @@ export async function capsulePut<T>(path: string, body: unknown): Promise<T> {
 }
 
 /**
+ * GET binary content. Returns the raw bytes plus the response's
+ * Content-Type header. Used for attachment downloads — every other
+ * read returns JSON, this is the exception.
+ */
+export async function capsuleGetBinary(
+  path: string,
+): Promise<{ contentType: string; buffer: Buffer }> {
+  const token = getToken();
+  const url = buildUrl(path);
+  const res = await doFetch(url, { headers: baseHeaders(token) });
+  await throwForStatus(res);
+  const arrayBuffer = await res.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+  const contentType =
+    res.headers.get("Content-Type") ?? "application/octet-stream";
+  return { contentType, buffer };
+}
+
+/**
+ * POST raw binary as the request body. Capsule's attachment-upload
+ * endpoint takes the file content directly (NOT multipart/form-data),
+ * with three required headers — Content-Type, Content-Length, and
+ * `X-Attachment-Filename` (URL-encoded).
+ *
+ * Read-only mode refuses this (it is a write).
+ */
+export async function capsulePostBinary<T>(
+  path: string,
+  body: Buffer,
+  contentType: string,
+  filename: string,
+): Promise<T> {
+  if (isReadOnly()) throw new CapsuleReadOnlyError("POST");
+  const token = getToken();
+  const url = buildUrl(path);
+  const res = await doFetch(url, {
+    method: "POST",
+    headers: {
+      ...baseHeaders(token),
+      "Content-Type": contentType,
+      "Content-Length": String(body.length),
+      "X-Attachment-Filename": encodeURIComponent(filename),
+    },
+    body,
+  });
+  return handleResponse<T>(res);
+}
+
+/**
  * DELETE /<path>. Capsule returns 204 No Content on success — no body
  * to parse. Errors flow through the same `throwForStatus` helper as
  * GET/POST/PUT.
