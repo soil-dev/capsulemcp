@@ -117,6 +117,20 @@ export const uploadAttachmentSchema = z.object({
   projectId: z.number().int().positive().optional(),
 });
 
+// Capsule's API decodes whatever bytes we send. If the caller passes
+// invalid base64, `Buffer.from(x, "base64")` silently produces garbage
+// (Node's tolerant base64 parser drops invalid characters), Capsule
+// happily stores those bytes, and the user later finds the file is
+// corrupted. Validate up-front so the error surfaces before upload.
+function isValidBase64(s: string): boolean {
+  // Strip optional padding then check the alphabet. Length must be a
+  // multiple of 4 once padding is restored.
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(s)) return false;
+  const len = s.length;
+  if (len % 4 !== 0) return false;
+  return true;
+}
+
 export async function uploadAttachment(
   input: z.infer<typeof uploadAttachmentSchema>,
 ) {
@@ -126,6 +140,11 @@ export async function uploadAttachment(
   if (linked.length !== 1) {
     throw new Error(
       "upload_attachment: provide exactly one of partyId, opportunityId, or projectId",
+    );
+  }
+  if (!isValidBase64(input.dataBase64)) {
+    throw new Error(
+      "upload_attachment: dataBase64 is not valid base64 — Node's tolerant decoder would silently produce corrupt bytes. Verify the encoding (RFC 4648, padded with '=' to a multiple of 4 chars).",
     );
   }
 

@@ -201,4 +201,47 @@ describe("uploadAttachment", () => {
     ).rejects.toThrow(/read-only mode/);
     expect(vi.mocked(fetch)).not.toHaveBeenCalled();
   });
+
+  it("rejects invalid base64 input before making any HTTP call", async () => {
+    const { uploadAttachment } = await import("../src/tools/attachments.js");
+    // Contains characters outside the base64 alphabet.
+    await expect(
+      uploadAttachment({
+        filename: "x.txt",
+        contentType: "text/plain",
+        dataBase64: "this is not base64!",
+        partyId: 1,
+      }),
+    ).rejects.toThrow(/not valid base64/);
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+  });
+
+  it("rejects base64 with wrong padding length", async () => {
+    const { uploadAttachment } = await import("../src/tools/attachments.js");
+    // Length 5 is not a multiple of 4.
+    await expect(
+      uploadAttachment({
+        filename: "x.txt",
+        contentType: "text/plain",
+        dataBase64: "aGVsb",
+        partyId: 1,
+      }),
+    ).rejects.toThrow(/not valid base64/);
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+  });
+
+  it("accepts valid base64 (with padding)", async () => {
+    mockJson(200, { upload: { token: "t" } });
+    mockJson(200, { entry: { id: 1 } });
+
+    const { uploadAttachment } = await import("../src/tools/attachments.js");
+    await expect(
+      uploadAttachment({
+        filename: "x.txt",
+        contentType: "text/plain",
+        dataBase64: "aGVsbG8=", // "hello"
+        partyId: 1,
+      }),
+    ).resolves.toBeDefined();
+  });
 });
