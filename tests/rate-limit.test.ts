@@ -1,13 +1,16 @@
 /**
  * Rate-limit retry path coverage. The capsule client retries 429
- * responses once after honouring Retry-After, and gives up if the
- * second attempt also 429s. Critical to test because:
+ * responses once after honouring Capsule's X-RateLimit-Reset
+ * (preferred) or Retry-After (defensive fallback), and gives up if
+ * the second attempt also 429s. Critical to test because:
  *
  * - A regression that loops forever would thrash Capsule.
  * - A regression that fails fast would crash on every transient
  *   rate-limit hit.
- * - Retry-After accepts both integer-seconds and HTTP-date formats;
- *   only the integer path was exercised by other tests.
+ * - Capsule's actual signal is X-RateLimit-Reset (UTC epoch seconds),
+ *   not Retry-After. Honouring the wrong header means we'd retry on
+ *   a default 5s loop instead of waiting for the hourly window to
+ *   roll over, getting 429s for many minutes.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -32,14 +35,21 @@ function makeResponse(
 
 beforeEach(() => {
   process.env["CAPSULE_API_TOKEN"] = "test-token";
-  // Speed up tests — the retry waits parseRetryAfter ms; default is
-  // 5s but we want sub-second test runs. Mock setTimeout via vitest's
-  // fake timers? Simpler: just tolerate the wait when tests pass a
-  // small Retry-After value.
+  // Defensive: ensure each test starts with real timers. Earlier
+  // tests in the file use vi.useFakeTimers(); if any of them ever
+  // forget the matching useRealTimers() in a finally block, a
+  // real-timer-dependent test that follows would hang forever
+  // because its setTimeout would never fire.
+  vi.useRealTimers();
 });
 
 afterEach(() => {
-  vi.clearAllMocks();
+  vi.useRealTimers();
+  // resetAllMocks (not clearAllMocks) — clearAllMocks keeps queued
+  // mockResolvedValueOnce values, which can leak between tests if a
+  // test queues more mocks than it consumes. resetAllMocks fully
+  // drains the queue and removes implementations.
+  vi.resetAllMocks();
   delete process.env["CAPSULE_API_TOKEN"];
 });
 
@@ -153,6 +163,110 @@ describe("doFetch retry-on-429", () => {
     const { capsuleGet } = await import("../src/capsule/client.js");
     await expect(capsuleGet("/parties")).rejects.toThrow(/Capsule API error 500/);
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1); // No retry
+  });
+
+  it("honours Capsule's X-RateLimit-Reset (epoch seconds) over Retry-After", async () => {
+    // Capsule's actual signal: X-RateLimit-Reset = UTC epoch seconds.
+    // Reset 1 second from now → retry should wait ~1s, not the 5s
+    // default and not the X-RateLimit-Limit (4000).
+    const oneSecondFromNow = Math.floor((Date.now() + 1000) / 1000);
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        makeResponse(429, { error: "rate limit reached" }, {
+          "X-RateLimit-Limit": "4000",
+          "X-RateLimit-Remaining": "0",
+          "X-RateLimit-Reset": String(oneSecondFromNow),
+        }),
+      )
+      .mockResolvedValueOnce(makeResponse(200, { ok: true }));
+
+    const { capsuleGet } = await import("../src/capsule/client.js");
+    const start = Date.now();
+    const result = await capsuleGet<{ ok: boolean }>("/test");
+    const elapsed = Date.now() - start;
+
+    // Should be ~1s, not the 5s default fallback.
+    expect(elapsed).toBeLessThan(2000);
+    expect(elapsed).toBeGreaterThanOrEqual(900);
+    expect(result.data).toEqual({ ok: true });
+  });
+
+  it("X-RateLimit-Reset takes precedence over Retry-After", async () => {
+    // If Capsule ever sends both, the Capsule-specific header wins.
+    // Reset = 1s out, Retry-After = 30s — wait should be 1s, not 30s.
+    // Fake timers so we don't sleep 1s of wall clock.
+    vi.useFakeTimers();
+    try {
+      const oneSecondFromNow = Math.floor((Date.now() + 1000) / 1000);
+      vi.mocked(fetch)
+        .mockResolvedValueOnce(
+          makeResponse(429, { error: "rate limit reached" }, {
+            "X-RateLimit-Reset": String(oneSecondFromNow),
+            "Retry-After": "30",
+          }),
+        )
+        .mockResolvedValueOnce(makeResponse(200, { ok: true }));
+
+      const { capsuleGet } = await import("../src/capsule/client.js");
+      const promise = capsuleGet<{ ok: boolean }>("/test");
+
+      // Advance 1.5s — past the X-RateLimit-Reset's 1s, well short of
+      // the 30s Retry-After. Retry should have fired.
+      await vi.advanceTimersByTimeAsync(1_500);
+      const result = await promise;
+
+      expect(result.data).toEqual({ ok: true });
+      expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("clamps a far-future X-RateLimit-Reset to 60s (Cloud Run timeout safety)", async () => {
+    // Capsule's hour-bucket can mean a reset 50 minutes out. We can't
+    // block a Cloud Run request that long; clamp at 60s and let the
+    // 429 propagate after one retry.
+    const fiftyMinFromNow = Math.floor((Date.now() + 50 * 60 * 1000) / 1000);
+    vi.useFakeTimers();
+    try {
+      vi.mocked(fetch)
+        .mockResolvedValueOnce(
+          makeResponse(429, {}, { "X-RateLimit-Reset": String(fiftyMinFromNow) }),
+        )
+        .mockResolvedValueOnce(makeResponse(200, { ok: true }));
+
+      const { capsuleGet } = await import("../src/capsule/client.js");
+      const promise = capsuleGet<{ ok: boolean }>("/test");
+      // Advance 60s + 1ms — the clamped wait should fire by now.
+      await vi.advanceTimersByTimeAsync(60_001);
+      const result = await promise;
+      expect(result.data).toEqual({ ok: true });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("falls back gracefully when X-RateLimit-Reset is in the past", async () => {
+    // Clock skew or a window that rolled over between Capsule's
+    // response and our parse. Don't sleep negative time; retry quickly.
+    const pastEpochSec = Math.floor((Date.now() - 60_000) / 1000);
+    vi.useFakeTimers();
+    try {
+      vi.mocked(fetch)
+        .mockResolvedValueOnce(
+          makeResponse(429, {}, { "X-RateLimit-Reset": String(pastEpochSec) }),
+        )
+        .mockResolvedValueOnce(makeResponse(200, { ok: true }));
+
+      const { capsuleGet } = await import("../src/capsule/client.js");
+      const promise = capsuleGet<{ ok: boolean }>("/test");
+      // Should retry within the 5s default fallback.
+      await vi.advanceTimersByTimeAsync(5_001);
+      const result = await promise;
+      expect(result.data).toEqual({ ok: true });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("does NOT retry on 401 (auth error surfaces immediately)", async () => {

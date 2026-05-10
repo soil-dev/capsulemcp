@@ -11,6 +11,25 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.0.0-alpha.5] — 2026-05-10
+
+### Fixed
+
+- 429 retry now honours Capsule's actual rate-limit reset signal.
+  Capsule does NOT use the standard `Retry-After` header — its
+  response carries `X-RateLimit-Reset` (UTC epoch seconds) instead.
+  Our retry path was reading `Retry-After` only, falling back to a
+  5-second default on every 429 (since Capsule never sent it),
+  which meant we'd hit Capsule again with an empty hourly quota
+  and 429 immediately. New `parseRateLimitDelay()` reads
+  `X-RateLimit-Reset` first, `Retry-After` second, defaults to 5s.
+  Still clamped at 60s so a far-future reset (Capsule's bucket is
+  hourly — reset can be 50 minutes out) doesn't block a Cloud Run
+  request indefinitely. Added 4 regression tests covering the
+  Capsule-specific path, header precedence, future-clamp, and
+  past-reset edge cases. Documented as
+  `NOTES-ON-CAPSULE-API.md` §17.
+
 ## [1.0.0-alpha.4] — 2026-05-10
 
 ### Added

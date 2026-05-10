@@ -449,6 +449,58 @@ debuggable against Capsule's docs.
 
 ---
 
+## 17. Rate-limit reset is signalled via `X-RateLimit-Reset`, not `Retry-After`
+
+Capsule's API uses an hourly bucket (4,000 requests per user per
+hour with Bearer Token auth). When a caller exhausts the bucket the
+response is `429 Too Many Requests` with body
+`{"error":"rate limit reached"}`, and three headers tell the caller
+exactly when to resume:
+
+```
+X-RateLimit-Limit:     4000
+X-RateLimit-Remaining: 0
+X-RateLimit-Reset:     <UTC epoch seconds — when the window resets>
+```
+
+There is **no `Retry-After` header**, the standard RFC 7231 signal —
+clients that only honour `Retry-After` will fall back to whatever
+default they have (likely tens of seconds), retry against an empty
+quota, and either burn cycles in a tight loop or wait far longer
+than necessary. The same `X-RateLimit-*` headers are also returned
+on every successful response, so a careful client can throttle
+proactively before hitting 429.
+
+**Where in our code:** [`src/capsule/client.ts`](src/capsule/client.ts)
+`parseRateLimitDelay()` honours `X-RateLimit-Reset` first, falls
+back to `Retry-After` defensively, then to a 5-second default. The
+delay is clamped at 60 seconds so a far-future reset can't block a
+Cloud Run request indefinitely; if Capsule says "wait 50 minutes"
+we surface the 429 and let the caller decide rather than holding
+the connection open.
+
+**Quote** — Capsule's response-handling docs at
+<https://developer.capsulecrm.com/v2/overview/handling-api-responses>:
+
+> Each Capsule user can make up to 4,000 requests per hour.
+>
+> ```
+> HTTP/1.1 429 Too Many Requests
+> X-RateLimit-Limit: 4000
+> X-RateLimit-Remaining: 0
+> X-RateLimit-Reset: 1434037662
+>
+> {
+>   "error":"rate limit reached"
+> }
+> ```
+>
+> [The client should] wait until the time inside the
+> `X-RateLimit-Reset` header before it makes any other API requests
+> for the specific user.
+
+---
+
 ## How to add to this file
 
 When you discover a new Capsule API quirk:

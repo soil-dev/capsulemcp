@@ -103,27 +103,56 @@ function parseNextPage(linkHeader: string | null): number | undefined {
 }
 
 /**
- * Parse a Retry-After header value into a millisecond delay.
- * RFC 7231 allows either an integer-seconds value or an HTTP-date.
- * Falls back to 5 seconds if the value is missing or unparseable.
+ * Decide how long to wait before retrying a 429.
+ *
+ * Capsule's API publishes its rate-limit reset time via
+ * `X-RateLimit-Reset` (UTC epoch seconds), NOT the standard
+ * `Retry-After` header. See:
+ *   https://developer.capsulecrm.com/v2/overview/handling-api-responses
+ *   "wait until the time inside the X-RateLimit-Reset header before
+ *    it makes any other API requests for the specific user"
+ *
+ * The hourly window means the reset can be many minutes out. We cap
+ * the wait at 60 seconds so a long-quota-exhaustion doesn't block a
+ * Cloud Run request indefinitely; if Capsule says wait longer than
+ * that, we surface the 429 and let the caller decide.
+ *
+ * Honour `X-RateLimit-Reset` first, then `Retry-After` as a
+ * defensive fallback (in case Capsule ever standardises), then a
+ * 5-second default if neither is present or parseable.
  */
-function parseRetryAfter(value: string | null): number {
+function parseRateLimitDelay(res: Response): number {
   const DEFAULT_MS = 5_000;
-  if (!value) return DEFAULT_MS;
+  const MAX_WAIT_MS = 60_000;
 
-  // Try integer-seconds first.
-  const seconds = Number(value);
-  if (Number.isFinite(seconds) && seconds >= 0) {
-    return Math.min(seconds * 1000, 60_000);
+  // 1. Capsule-specific: X-RateLimit-Reset (UTC epoch seconds).
+  const resetRaw = res.headers.get("X-RateLimit-Reset");
+  if (resetRaw) {
+    const resetEpochSec = Number(resetRaw);
+    if (Number.isFinite(resetEpochSec) && resetEpochSec > 0) {
+      const delta = resetEpochSec * 1000 - Date.now();
+      // Reset already in the past (clock skew, or window just rolled
+      // over): retry quickly.
+      if (delta <= 0) return DEFAULT_MS;
+      return Math.min(delta, MAX_WAIT_MS);
+    }
   }
 
-  // Fall back to HTTP-date.
-  const dateMs = Date.parse(value);
-  if (Number.isFinite(dateMs)) {
-    const delta = dateMs - Date.now();
-    return delta > 0 ? Math.min(delta, 60_000) : DEFAULT_MS;
+  // 2. RFC 7231 fallback: Retry-After (integer-seconds or HTTP-date).
+  const retryAfter = res.headers.get("Retry-After");
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds) && seconds >= 0) {
+      return Math.min(seconds * 1000, MAX_WAIT_MS);
+    }
+    const dateMs = Date.parse(retryAfter);
+    if (Number.isFinite(dateMs)) {
+      const delta = dateMs - Date.now();
+      return delta > 0 ? Math.min(delta, MAX_WAIT_MS) : DEFAULT_MS;
+    }
   }
 
+  // 3. No usable hint — wait a conservative default.
   return DEFAULT_MS;
 }
 
@@ -166,7 +195,7 @@ async function doFetch(
   const res = await fetch(url, options);
 
   if (res.status === 429) {
-    const delay = parseRetryAfter(res.headers.get("Retry-After"));
+    const delay = parseRateLimitDelay(res);
     await new Promise((resolve) => setTimeout(resolve, delay));
 
     const retried = await fetch(url, options);
