@@ -1,9 +1,17 @@
 import { z } from "zod";
 import { capsuleDelete, capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
 
+// Capsule rejects {amount} without a currency on opportunity create/update
+// (422 Validation Failed). Make currency required at the schema layer so
+// the error surfaces before the HTTP call.
 const OpportunityValueSchema = z.object({
   amount: z.number().nonnegative(),
-  currency: z.string().length(3).optional().describe("ISO 4217 currency code, e.g. 'GBP'"),
+  currency: z
+    .string()
+    .length(3)
+    .describe(
+      "ISO 4217 currency code (3 letters), e.g. 'GBP', 'USD', 'EUR'. Required when amount is set.",
+    ),
 });
 
 // ── Read ────────────────────────────────────────────────────────────────────
