@@ -501,7 +501,7 @@ export function createCapsuleMcpServer(): McpServer {
 
   server.tool(
     "list_tasks",
-    "List tasks in Capsule CRM, optionally filtered by status, assigned user, or due date.",
+    "List tasks in Capsule CRM. Defaults to OPEN tasks; pass status to broaden. Optionally filter to a specific owner via ownerId. Capsule does not expose a due-date filter on this endpoint — for that use filter_* tools elsewhere or iterate.",
     listTasksSchema.shape,
     async (input) => {
       const result = await listTasks(input);
@@ -652,8 +652,16 @@ export function createCapsuleMcpServer(): McpServer {
         };
       }
 
+      // Strip any Content-Type parameters (e.g. "; charset=UTF-8") before
+      // comparing — Capsule routinely returns "image/png; charset=UTF-8"
+      // and "application/json; charset=UTF-8". Without this, the
+      // application/json branch would miss the charset variant and the
+      // file would fall through to the binary base64 branch, which Claude
+      // can't read directly.
+      const baseType = result.contentType.split(";")[0]!.trim().toLowerCase();
+
       // Image: return as MCP image content so Claude can see it.
-      if (result.contentType.startsWith("image/")) {
+      if (baseType.startsWith("image/")) {
         return {
           content: [
             {
@@ -667,9 +675,9 @@ export function createCapsuleMcpServer(): McpServer {
 
       // Text-ish: decode as UTF-8 alongside metadata.
       const isText =
-        result.contentType.startsWith("text/") ||
-        result.contentType === "application/json" ||
-        result.contentType === "application/xml";
+        baseType.startsWith("text/") ||
+        baseType === "application/json" ||
+        baseType === "application/xml";
       if (isText) {
         return {
           content: [
