@@ -83,24 +83,25 @@ request body example:
 
 > ```json
 > {
->   "track": {
->     "description": "Complaint Process (Important)",
->     "trackDateOn": "2016-01-01",
->     "kase": 4,
->     "definition": 1
+>   "track" : {
+>     "description" : "Complaint Process (Important)",
+>     "trackDateOn" : "2016-01-01",
+>     "kase" : 4,
+>     "definition" : 1
 >   }
 > }
 > ```
 
-> The field referencing the track definition is named `"definition"`
-> (not `trackDefinition`).
+The field referencing the track definition is named `"definition"`
+(not `trackDefinition`). On the response side Capsule notes:
 
-The corresponding response uses `trackDefinition`:
+> Some of the properties used when applying the track are "write-only"
+> and will not be included in the response.
 
-> The response omits the `"definition"` field — it's write-only. The
-> entity reference (`kase`, `party`, or `opportunity`) also doesn't
-> appear in the response, only the generated track with its ID and
-> associated tasks.
+In practice the omitted properties are `"definition"` and the entity
+reference (`kase`, `party`, or `opportunity`); the response carries
+only the generated track with its ID and associated tasks. Capsule's
+prose is generic, hence the explicit list here.
 
 ---
 
@@ -196,9 +197,11 @@ added the real one after re-reading the docs more carefully.)
 **Quote** — Capsule's User docs at
 <https://developer.capsulecrm.com/v2/operations/User>:
 
-> Show current user: `GET https://api.capsulecrm.com/api/v2/users/current`
-> retrieves details of the user associated with the provided access
-> token.
+> `GET https://api.capsulecrm.com/api/v2/users/current`
+>
+> Shows the details of the user the provided access token is associated
+> with. In most cases this will be the user who approved your
+> application.
 
 ---
 
@@ -384,10 +387,8 @@ makes the parameter required at the schema layer.
 > List Deleted Parties:
 > `GET https://api.capsulecrm.com/api/v2/parties/deleted`
 >
-> Since Parameter: Required. "The since date is required to return
-> only entities that have been deleted after this date."
->
-> Format Requirement: Must be in ISO8601 format.
+> The since date is required to return only entities that have been
+> deleted after this date. Must be in ISO8601 format.
 
 ---
 
