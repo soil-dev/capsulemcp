@@ -25,7 +25,7 @@ npm run test:watch
 npm run build
 ```
 
-Produces `dist/index.js` (stdio entry, ~600 B), `dist/http.js` (HTTP entry, ~13 KB), and a shared `dist/chunk-*.js` (~34 KB) holding the tools and SDK code. tsup target is Node 20.
+Produces `dist/index.js` (stdio entry, ~78 KB, with `#!/usr/bin/env node` shebang and the executable bit set) and `dist/http.js` (HTTP entry, ~89 KB, no shebang). Each is fully self-contained — tsup runs as two separate configs so the stdio entry can be invoked directly via npx while the HTTP entry isn't a CLI. tsup target is Node 20.
 
 ## Run the stdio server locally
 
