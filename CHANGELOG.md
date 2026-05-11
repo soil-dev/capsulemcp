@@ -11,6 +11,29 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`update_project` RMW now carries `stage` forward too.** When the
+  caller supplies `ownerId` without `teamId` the connector reads
+  the current project for the RMW; alpha.20 only captured `team`
+  from that read, but the same Capsule PUT semantic that would
+  clear an absent `team` could plausibly clear an absent `stage`
+  too (it was never directly tested either way). One extra
+  integer in the body, no extra HTTP call, defensive against a
+  silent stage-clear regression. Explicit `stageId` on the same
+  call still wins — the RMW only fills in `stage` when the
+  caller didn't supply one.
+
+### Documented
+
+- **`CustomFieldWriteSchema.value`** description gains a one-line
+  audit-log note: sending `value: null` on a field that's already
+  empty is accepted but still bumps the parent entity's
+  `updatedAt`. Read via `embed='fields'` first if `updatedAt` is
+  being used as a "last meaningful change" signal. Closes a §12
+  audit-noise observation that hadn't made it into the schema
+  text.
+
 ## [1.0.0-alpha.20] — 2026-05-11
 
 The alpha.19-R re-verification against the production tenant
