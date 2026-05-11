@@ -229,34 +229,21 @@ git push origin vX.Y.Z
 
 # 5. GitHub Release with notes
 gh release create vX.Y.Z --title "vX.Y.Z — title" --notes "<release notes>"
-
-# 6. Build the container image (separate repo: openssl/images workflow).
-#    The workflow clones soil-dev/capsulemcp at the supplied ref and pushes
-#    europe-docker.pkg.dev/.../capsulemcp:<tag> + :latest to GAR.
-gh workflow run "Build container image" \
-   --repo openssl/images \
-   -f directory=capsulemcp \
-   -f tag=vX.Y.Z
-gh run watch <run-id> --repo openssl/images --exit-status
-
-# 7. Deploy via Pulumi (separate repo: openssl/infra).
-#    Pulumi resolves the latest :latest digest at deploy-time via skopeo.
-cd /path/to/openssl/infra
-./pulumi.sh -C /mnt/GCP/capsulemcp up --yes --stack production
 ```
 
 The `npx -y github:soil-dev/capsulemcp#vX.Y.Z` install path picks up the new tag immediately. Users on `#vX.Y.(Z-1)` keep using the old tag until they bump.
+
+If you also publish a container image and deploy from it, do the image-build + IaC-apply *after* the tag is on GitHub — the tag is the authoritative ref the image build clones from. See [DEPLOY.md](DEPLOY.md) for one worked example (Cloud Run from source) and adapt to your platform.
 
 ### Pre-release sanity checklist
 
 Easy things to forget that have bitten us before:
 
-- [ ] **`package-lock.json` root version matches `package.json`.** Bumping the two source-of-truth files (package.json + server.ts) doesn't touch the lockfile root — it drifts silently. `npm install --package-lock-only --ignore-scripts` after the bump keeps it honest. (See the trail of fixes from alpha.6 → alpha.17.)
+- [ ] **`package-lock.json` root version matches `package.json`.** Bumping the two source-of-truth files (package.json + server.ts) doesn't touch the lockfile root — it drifts silently. `npm install --package-lock-only --ignore-scripts` after the bump keeps it honest.
 - [ ] **Three places all match**: `package.json`, `src/server.ts`, `package-lock.json` (root + `packages[""]`).
 - [ ] **CHANGELOG `[Unreleased]` is empty** after the cut — its content should now live under `[vX.Y.Z]`.
 - [ ] **HOWTO test count and bundle sizes** reflect reality (greppable: `npm test 2>&1 | tail -3` and `npm run build 2>&1 | tail -5`).
-- [ ] **No drift between tag and image**: the image build workflow takes a git ref (`tag=vX.Y.Z`), so the tag must exist on GitHub before you trigger the build.
-- [ ] **Pulumi container auth** (only on a fresh shell): `gcloud auth print-access-token | podman login -u oauth2accesstoken --password-stdin europe-docker.pkg.dev`. The pulumi.sh wrapper pulls its own runner image from GAR and fails fast if the registry credential is missing.
+- [ ] **Tag exists before triggering downstream builds**: any image-build pipeline that takes a git ref expects the tag to already be on GitHub.
 
 Versioning convention:
 
