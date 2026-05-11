@@ -11,25 +11,50 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+The alpha.19-R re-verification against the production tenant
+with **board automations disabled** materially recasts four
+releases worth of project-ownership findings. The bulk of what
+we'd been treating as Capsule API quirks (Bug 17, the
+"board-default team" behaviour, the create-time owner-drop on
+`ownerId + stageId`) were tenant-specific board automation
+rules, not Capsule API behaviours. Capsule's API itself
+preserves whatever you POST.
+
+### Reverted
+
+- **#14 schema-level rejection of `create_project { ownerId,
+  stageId }` rolled back.** The rejection was based on Bug 17,
+  which we now know was board automation in the test tenant.
+  Capsule's API preserves both fields cleanly when the
+  automation is off. Generic connectors shouldn't bake in
+  tenant-specific automation assumptions, so the `superRefine`
+  is gone. Issue #14 reopened-and-reclosed with an explanatory
+  comment.
+
 ### Documented
 
-- **`update_project.stageId` description and NOTES §27**
-  corrected after the alpha.19 verification report. The alpha.19
-  description still warned about Capsule's PUT clearing `owner`
-  whenever `stage` is in the body — but alpha.19 verification
-  against the live tenant couldn't reproduce that. Both
-  stage-only and stage+other PUT calls preserved owner. The
-  "Rule B" PUT-side framing was unreproducible (possibly
-  state-dependent on the alpha.18 path, possibly an upstream
-  shift, possibly a misobservation). Description and NOTES now
-  reflect the runtime: stage-only updates preserve owner and
-  team; only the POST-side Rule B (create-time owner-drop when
-  `stage` is in the body) is still real and is guarded at the
-  schema level (#14).
-- **Both two-call workflows** (stage-first, owner-first) now
-  documented as equivalent for reaching `owner + team + stage`.
-  The alpha.18 description had claimed only stage-first worked;
-  alpha.19 verification confirmed owner-first works too.
+- **NOTES §27 rewritten (sixth pass).** The "Rule B (POST
+  drops owner)" framing is struck — it was automation, not the
+  API. Rule A (PUT owner-in-body clears team) stays, and the
+  RMW that mitigates it stays. A new "tenant board automation"
+  paragraph spells out the failure mode (board automations can
+  mutate owner/team independently of the API, indistinguishable
+  from an API quirk from the caller's perspective). Wrong-
+  framings list extended with the alpha.{17,18,19} Bug 17
+  framings.
+- **NOTES §28 corrected.** Projects default to **API-token
+  owner**, same as the other entity types — not `null` as
+  earlier versions of this file claimed. The "null" reading was
+  an automation artifact.
+- **`create_project.ownerId` / `teamId` / `stageId`** descriptions
+  rewritten to drop the Bug-17-era warnings and replace them
+  with a "tenant board automation may mutate these fields on
+  creation" caveat. Soft-pedal rather than claim an API rule
+  the API doesn't actually have.
+- **`update_project.stageId`** description (already corrected
+  in the previous batch after alpha.19 verification) stays —
+  the runtime behaviour it describes (owner preserved across
+  stage-only PUTs) is real, not automation-dependent.
 
 ## [1.0.0-alpha.19] — 2026-05-11
 
