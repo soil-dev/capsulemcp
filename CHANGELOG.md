@@ -11,6 +11,16 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.0.0-alpha.17] — 2026-05-11
+
+Project-ownership write surface fix. The §15-supplementary
+production verification re-diagnosed Bugs 16 and 17 (the
+alpha.16 framing was wrong) and identified the underlying rule:
+Capsule's PUT on /kases rewrites the (owner, team) pair
+atomically — the absent half is cleared. The connector now
+exposes `teamId` and explicit `null` unassign so callers can
+express every reachable shape.
+
 ### Added
 
 - **`teamId` parameter on `create_project` and `update_project`.**
