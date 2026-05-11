@@ -13,7 +13,7 @@ import {
   CustomFieldWriteSchema,
   fieldsArrayDescriptor,
   mapFieldsForBody,
-} from "./_custom-fields.js";
+} from "./custom-field-helpers.js";
 
 // ── Shared sub-schemas ──────────────────────────────────────────────────────
 
@@ -251,8 +251,8 @@ export async function createParty(input: z.infer<typeof createPartySchema>) {
 // ───────────────────────────────────────────────────────────────────────────
 
 // Custom-field write schema, descriptor, and body-mapper all live in
-// _custom-fields.ts (shared across update_party / update_opportunity /
-// update_project).
+// custom-field-helpers.ts (shared across update_party /
+// update_opportunity / update_project).
 
 export const updatePartySchema = z.object({
   id: z.number().int().positive(),
@@ -321,8 +321,8 @@ export async function deleteParty(input: z.infer<typeof deletePartySchema>) {
 // `{id, _delete: true}` entry — Capsule removes that specific item
 // and returns the updated party. (Note: the field is `_delete`, NOT
 // the Rails-style `_destroy`. Capsule silently ignores `_destroy`,
-// returning 200 OK with the row still present — see Bug 9 in the
-// v1.0.0-alpha.7 verification report and NOTES-ON-CAPSULE-API.md §18.)
+// returning 200 OK with the row still present — see
+// NOTES-ON-CAPSULE-API.md §18.)
 // No `confirm: true` gate: removing one
 // email address is reversible (re-add the value); only whole-record
 // deletes (`delete_party`, `delete_opportunity`, ...) carry the

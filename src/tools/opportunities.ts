@@ -10,7 +10,7 @@ import {
   CustomFieldWriteSchema,
   fieldsArrayDescriptor,
   mapFieldsForBody,
-} from "./_custom-fields.js";
+} from "./custom-field-helpers.js";
 
 // Capsule rejects {amount} without a currency on opportunity create/update
 // (422 Validation Failed). Make currency required at the schema layer so

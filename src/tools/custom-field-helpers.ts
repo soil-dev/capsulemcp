@@ -15,11 +15,9 @@
  * resolves whether the value already exists for this entity and
  * updates or creates accordingly. To clear a value, pass `value:
  * null` — works for TEXT / NUMBER / DATE / LIST but not BOOLEAN
- * (Bug 12 from the alpha.10 verification; set BOOLEAN to false
- * instead).
+ * (Capsule rejects BOOLEAN-null with 422; set BOOLEAN to false
+ * instead — see NOTES-ON-CAPSULE-API.md §21).
  *
- * The filename is `_` prefixed so the dir listing groups shared
- * helpers ahead of resource modules.
  */
 
 import { z } from "zod";
