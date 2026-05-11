@@ -282,6 +282,26 @@ describe("tools/call (write tools)", () => {
     expect(result.content?.[0]?.text).toMatch(/not found/);
     expect(vi.mocked(fetch)).not.toHaveBeenCalled();
   });
+
+  it("enforces object-level schema refinements through the MCP layer", async () => {
+    const { client } = await spawn({ readOnly: false });
+
+    const result = (await client.callTool({
+      name: "create_project",
+      arguments: {
+        name: "Onboarding",
+        partyId: 5,
+        ownerId: 7,
+        stageId: 42,
+      },
+    })) as { isError?: boolean; content?: Array<{ text?: string }> };
+
+    expect(result.isError).toBe(true);
+    expect(result.content?.[0]?.text).toMatch(
+      /Cannot supply `ownerId` and `stageId` together/,
+    );
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+  });
 });
 
 // ── get_attachment content-type routing (server.ts handler logic) ───────────
