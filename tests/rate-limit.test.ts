@@ -269,6 +269,23 @@ describe("doFetch retry-on-429", () => {
     }
   });
 
+  it("converts AbortError (request timeout) into a clean CapsuleApiError 504", async () => {
+    // Bug 14 from the §11-12 verification: slow / stuck Capsule
+    // responses would hang the MCP client for its full 4-minute
+    // timeout. doFetch now imposes a 60-second AbortController-based
+    // timeout and turns the resulting AbortError into a recognisable
+    // 504 with actionable retry guidance.
+    vi.mocked(fetch).mockImplementationOnce(() => {
+      const err = new Error("The operation was aborted");
+      err.name = "AbortError";
+      return Promise.reject(err);
+    });
+    const { capsuleGet } = await import("../src/capsule/client.js");
+    await expect(capsuleGet("/test")).rejects.toThrow(
+      /Capsule API request timed out after 60s/,
+    );
+  });
+
   it("does NOT retry on 401 (auth error surfaces immediately)", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(
       makeResponse(401, { message: "Bad credentials" }),

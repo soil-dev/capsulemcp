@@ -82,7 +82,7 @@ export const applyTrackSchema = z.object({
     .string()
     .optional()
     .describe(
-      "Optional ISO-8601 date the track should start from (drives task due-date calculations). Defaults to today if omitted.",
+      "Optional ISO-8601 date (YYYY-MM-DD) the track should start from — drives task due-date calculations (each task's `dueOn` is computed as startDate + the track-definition's `daysAfter` offset). Defaults to today if omitted. Useful for scheduling a renewal-queue track against a future contract end-date, or backfilling tracks for historical projects.",
     ),
 });
 
@@ -95,11 +95,19 @@ export async function applyTrack(input: z.infer<typeof applyTrackSchema>) {
   // response uses `trackDefinition` as the key. Verified live: sending
   // `trackDefinition` returns 422 "track definition is required" with
   // field=definition. Sending `definition` works.
+  //
+  // The user-facing `startDate` parameter maps to Capsule's `trackDateOn`
+  // body field — same field, different name. Verified via NOTES-ON-
+  // CAPSULE-API.md §2 (Capsule's verbatim POST /tracks example uses
+  // `trackDateOn`). Sending `startDate` directly is silently ignored by
+  // Capsule (the field is dropped without error), which had `startDate`
+  // doing nothing in alpha.1 through alpha.11 — Bug 13 in the §11-12
+  // verification.
   const track: Record<string, unknown> = {
     definition: { id: input.trackDefinitionId },
     [target]: { id: input.entityId },
   };
-  if (input.startDate !== undefined) track["startDate"] = input.startDate;
+  if (input.startDate !== undefined) track["trackDateOn"] = input.startDate;
 
   return capsulePost<{ track: unknown }>("/tracks", { track });
 }

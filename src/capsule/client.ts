@@ -188,17 +188,78 @@ async function parseErrorBody(res: Response): Promise<string> {
   }
 }
 
+/**
+ * Per-request timeout for outbound Capsule HTTP calls. Picked so a
+ * slow / stuck Capsule response surfaces as a clean error in the MCP
+ * client well before the MCP transport's own 4-minute hang timeout.
+ *
+ * Reaches into the `signal` slot on the fetch options unless the
+ * caller already provided one. Tests that need to bypass the timeout
+ * (e.g. fake-timer tests that drive the 429-retry delay) can pass
+ * their own signal.
+ *
+ * Caught hangs observed under this:
+ *   - Bug 11 (alpha.10) — `remove_tag_by_id` transient hang
+ *   - Bug 14 (alpha.11) — `list_entity_tracks` transient hang
+ * Both shaped like "Capsule response slow → MCP client hangs the
+ * full 4-minute timeout". With this in place the connector errors
+ * out at REQUEST_TIMEOUT_MS instead.
+ */
+const REQUEST_TIMEOUT_MS = 60_000;
+
+function withTimeout(
+  options: Parameters<typeof fetch>[1],
+): { options: Parameters<typeof fetch>[1]; cleanup: () => void } {
+  if (options && (options as { signal?: AbortSignal }).signal !== undefined) {
+    // Caller-provided signal — respect it, don't double-bind.
+    return { options, cleanup: () => {} };
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  // Don't hold up Node process exit on a pending timer.
+  timer.unref();
+  return {
+    options: { ...(options ?? {}), signal: controller.signal },
+    cleanup: () => clearTimeout(timer),
+  };
+}
+
+async function fetchWithTimeout(
+  url: string,
+  options: Parameters<typeof fetch>[1],
+): Promise<Response> {
+  const { options: opts, cleanup } = withTimeout(options);
+  try {
+    return await fetch(url, opts);
+  } catch (err) {
+    // Convert AbortError into a recognizable, actionable error rather
+    // than a cryptic 'fetch failed' that the caller can't diagnose.
+    if (
+      err instanceof Error &&
+      (err.name === "AbortError" || /aborted/i.test(err.message))
+    ) {
+      throw new CapsuleApiError(
+        504,
+        `Capsule API request timed out after ${REQUEST_TIMEOUT_MS / 1000}s. The Capsule API may be slow or hung; retry after a short wait. If the failed call was a write/delete, read the entity first to see whether the change actually applied before retrying.`,
+      );
+    }
+    throw err;
+  } finally {
+    cleanup();
+  }
+}
+
 async function doFetch(
   url: string,
   options: Parameters<typeof fetch>[1],
 ): Promise<Response> {
-  const res = await fetch(url, options);
+  const res = await fetchWithTimeout(url, options);
 
   if (res.status === 429) {
     const delay = parseRateLimitDelay(res);
     await new Promise((resolve) => setTimeout(resolve, delay));
 
-    const retried = await fetch(url, options);
+    const retried = await fetchWithTimeout(url, options);
     if (retried.status === 429) {
       throw new CapsuleApiError(429, "Rate limit exceeded after one retry. Please slow down your requests.");
     }

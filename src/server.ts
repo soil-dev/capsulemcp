@@ -564,7 +564,7 @@ export function createCapsuleMcpServer(): McpServer {
 
     server.tool(
       "apply_track",
-      "Apply a track definition to an opportunity or project. This creates a track instance and auto-creates tasks per the track's task definitions. Use list_track_definitions to discover available templates.",
+      "Apply a track definition to an opportunity or project. Creates a track instance and auto-creates tasks per the track's task definitions; tasks' `dueOn` is computed from `startDate` (defaults to today) plus each task's `daysAfter` offset. Use list_track_definitions to discover available templates. NOT IDEMPOTENT — applying the same trackDefinitionId twice creates two independent track instances and two sets of auto-tasks (no de-duplication). If you want to apply only once, call list_entity_tracks first and check for an existing instance with the same trackDefinition.id (but mind that list_entity_tracks can include auto-applied tracks from board stage rules, not just manual applies).",
       applyTrackSchema.shape,
       async (input) => {
         const result = await applyTrack(input);
@@ -960,7 +960,7 @@ export function createCapsuleMcpServer(): McpServer {
 
   server.tool(
     "list_entity_tracks",
-    "List track INSTANCES on a specific record — i.e., which tracks have been applied to this opportunity / project / party. Distinct from list_track_definitions, which lists the templates.",
+    "List track INSTANCES on a specific record — i.e., which tracks have been applied to this opportunity / project / party. Distinct from list_track_definitions, which lists the templates. NOTE: some boards have stage-triggered automation that auto-applies tracks when an entity enters specific stages — tracks returned here may include BOTH manually-applied tracks (via apply_track) and auto-applied tracks from Capsule board rules. To distinguish, compare each track's `trackDefinition.id` against your application's apply_track call history.",
     listEntityTracksSchema.shape,
     async (input) => {
       const result = await listEntityTracks(input);

@@ -84,7 +84,14 @@ describe("applyTrack", () => {
     expect(body.track.trackDefinition).toBeUndefined();
   });
 
-  it("includes startDate when provided", async () => {
+  it("maps user-facing startDate → Capsule's trackDateOn body field", async () => {
+    // Bug 13 from the §11-12 verification: Capsule's API field is
+    // `trackDateOn`, not `startDate`. Sending `startDate` directly
+    // gets silently dropped by Capsule (the alpha.1-through-alpha.11
+    // behaviour) and tasks land at today + daysAfter instead of
+    // <startDate> + daysAfter. The user-facing parameter name stays
+    // `startDate` (more intuitive); the handler renames to
+    // `trackDateOn` on the way out.
     mockFetch(200, { track: { id: 1 } });
     const { applyTrack } = await import("../src/tools/tracks.js");
     await applyTrack({
@@ -94,9 +101,10 @@ describe("applyTrack", () => {
       startDate: "2026-06-01",
     });
     const [, init] = vi.mocked(fetch).mock.calls[0]!;
-    expect(JSON.parse((init as { body: string }).body).track.startDate).toBe(
-      "2026-06-01",
-    );
+    const body = JSON.parse((init as { body: string }).body);
+    expect(body.track.trackDateOn).toBe("2026-06-01");
+    // User-facing field name doesn't leak into the API body.
+    expect(body.track.startDate).toBeUndefined();
   });
 });
 

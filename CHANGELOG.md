@@ -11,6 +11,53 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Bug 13** — `apply_track.startDate` was silently ignored.
+  Capsule's POST /tracks body field is `trackDateOn` (per Capsule's
+  own example in our `NOTES-ON-CAPSULE-API.md` §2), not `startDate`.
+  The connector accepted the parameter and forwarded it as
+  `startDate`, which Capsule's API drops silently — the resulting
+  track always landed at today's date and auto-tasks computed
+  `dueOn` from today + the track's `daysAfter` offset, regardless
+  of what the caller passed. Renamed the body field on the way out
+  while keeping the user-facing parameter name `startDate` (more
+  intuitive). Backdating tracks for historical records and
+  scheduling tracks against future contract end-dates both work
+  now. Caught in the §11-12 production write-mode verification.
+- **Bug 14** — class-level fix for transient hangs in `remove_*` /
+  `list_*` tools. Outbound Capsule HTTP requests now carry a
+  60-second timeout via AbortController; an aborted request is
+  converted to `CapsuleApiError(504)` with retry guidance,
+  instead of leaving the MCP client to hang the full 4-minute
+  transport timeout. Same shape covers the alpha.10 transient
+  `remove_tag_by_id` hang (Bug 11) and the alpha.11
+  `list_entity_tracks` hang (Bug 14). The hangs aren't fixed
+  upstream (Capsule's side stays slow when it does), but the
+  connector no longer multiplies the wait — a 60s outbound budget
+  caps how long a single tool call can block.
+
+### Changed
+
+- `apply_track` description now warns explicitly that the tool is
+  **NOT idempotent**: applying the same trackDefinitionId twice
+  creates two independent track instances and two sets of
+  auto-tasks. To apply only once, call `list_entity_tracks` first
+  and check for an existing instance with the same
+  `trackDefinition.id`. Closes Bug 15 by documentation (option 1
+  from the §11-12 verification report — idempotency-by-default is
+  arguably wrong here, since applying the same track to start a new
+  cycle is a legitimate workflow).
+- `apply_track.startDate` description now explains the mechanic
+  more fully: `startDate` is added to each task definition's
+  `daysAfter` offset to compute its `dueOn`. Defaults to today.
+- `list_entity_tracks` description now notes that some boards have
+  stage-triggered automation that auto-applies tracks when an
+  entity enters specific stages — tracks returned here may include
+  BOTH manually-applied tracks AND auto-applied tracks from board
+  rules. Compare `trackDefinition.id` against your application's
+  `apply_track` call history to distinguish.
+
 ## [1.0.0-alpha.11] — 2026-05-11
 
 ### Changed
