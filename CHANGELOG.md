@@ -11,6 +11,12 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.0.0-beta.2] — 2026-05-11
+
+Long-tail housekeeping after the beta.1 production verification
+round. No behavioural changes; doc accuracy improvements on the
+two outstanding Capsule-API observations from the alpha tail.
+
 ### Closed (long-tail housekeeping)
 
 - **Bug 11 — `remove_tag_by_id` transient hang.** Observed once
