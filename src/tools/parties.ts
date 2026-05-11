@@ -280,8 +280,12 @@ export async function deleteParty(input: z.infer<typeof deletePartySchema>) {
 // appends and returns the updated party.
 //
 // Every remove_*_by_id tool issues a single PUT with one
-// `{id, _destroy: true}` entry — Capsule removes that specific item
-// and returns the updated party. No `confirm: true` gate: removing one
+// `{id, _delete: true}` entry — Capsule removes that specific item
+// and returns the updated party. (Note: the field is `_delete`, NOT
+// the Rails-style `_destroy`. Capsule silently ignores `_destroy`,
+// returning 200 OK with the row still present — see Bug 9 in the
+// v1.0.0-alpha.7 verification report and NOTES-ON-CAPSULE-API.md §18.)
+// No `confirm: true` gate: removing one
 // email address is reversible (re-add the value); only whole-record
 // deletes (`delete_party`, `delete_opportunity`, ...) carry the
 // confirm requirement.
@@ -321,7 +325,7 @@ export async function removePartyEmailAddressById(
 ) {
   const { partyId, emailAddressId } = input;
   return capsulePut<{ party: unknown }>(`/parties/${partyId}`, {
-    party: { emailAddresses: [{ id: emailAddressId, _destroy: true }] },
+    party: { emailAddresses: [{ id: emailAddressId, _delete: true }] },
   });
 }
 
@@ -360,7 +364,7 @@ export async function removePartyPhoneNumberById(
 ) {
   const { partyId, phoneNumberId } = input;
   return capsulePut<{ party: unknown }>(`/parties/${partyId}`, {
-    party: { phoneNumbers: [{ id: phoneNumberId, _destroy: true }] },
+    party: { phoneNumbers: [{ id: phoneNumberId, _delete: true }] },
   });
 }
 
@@ -410,7 +414,7 @@ export async function removePartyAddressById(
 ) {
   const { partyId, addressId } = input;
   return capsulePut<{ party: unknown }>(`/parties/${partyId}`, {
-    party: { addresses: [{ id: addressId, _destroy: true }] },
+    party: { addresses: [{ id: addressId, _delete: true }] },
   });
 }
 
@@ -475,6 +479,6 @@ export async function removePartyWebsiteById(
 ) {
   const { partyId, websiteId } = input;
   return capsulePut<{ party: unknown }>(`/parties/${partyId}`, {
-    party: { websites: [{ id: websiteId, _destroy: true }] },
+    party: { websites: [{ id: websiteId, _delete: true }] },
   });
 }

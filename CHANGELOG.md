@@ -11,6 +11,24 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Fixed
+
+- `remove_party_email_address_by_id`,
+  `remove_party_phone_number_by_id`,
+  `remove_party_address_by_id`, and
+  `remove_party_website_by_id` were silently failing to remove
+  rows in v1.0.0-alpha.7. Each tool sent a PUT with
+  `{id, _destroy: true}` (the Rails-style field name), which
+  Capsule silently ignores — the response was 200 OK with the row
+  still present. The correct field name is `_delete: true` (Capsule
+  uses Rails-ish `_<verb>` shape but spells it `_delete`, not
+  `_destroy`). All four handlers now send `{id, _delete: true}`,
+  and the unit tests' body-shape assertions are updated. The
+  regression was caught by a production write-mode verification
+  run against the alpha.7 deploy (Bug 9 in the verification
+  report). Documented as `NOTES-ON-CAPSULE-API.md` §18 so the
+  same trap doesn't catch the next person.
+
 ## [1.0.0-alpha.7] — 2026-05-10
 
 Combines the previously-tagged-but-never-deployed alpha.6
@@ -40,8 +58,11 @@ child-array tools).
   - `add_party_address`, `remove_party_address_by_id`
   - `add_party_website`, `remove_party_website_by_id`
   Each tool issues exactly one PUT to `/parties/{id}` with a single
-  item — adds carry no `id`/`_destroy` (Capsule appends), removes
-  carry `{id, _destroy: true}` (Capsule removes that specific row).
+  item — adds carry no `id`/`_delete` (Capsule appends), removes
+  carry `{id, _delete: true}` (Capsule removes that specific row).
+  *(As shipped in alpha.7 the remove tools sent `_destroy: true`
+  instead, which Capsule silently ignores — fixed in the followup
+  commit; see the Unreleased / Fixed entry above.)*
   No GET-then-PUT diff, no value-matching heuristic, no race
   window where concurrent edits could be silently dropped.
   "Replace one email" decomposes into
@@ -75,7 +96,7 @@ child-array tools).
   on top of the existing list. Passing the same item twice creates
   a duplicate; passing `[]` is a silent no-op (does not clear and
   does not advance `updatedAt`). Removal requires Capsule's
-  `_destroy: true` shape, which this connector does not yet expose.
+  `_delete: true` shape, which this connector does not yet expose.
   The schema descriptions on each of the four arrays now state this
   explicitly so callers don't expect "set" semantics that don't
   exist. (Caller-facing fix only; the underlying behaviour is

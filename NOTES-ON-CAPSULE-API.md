@@ -501,6 +501,76 @@ the connection open.
 
 ---
 
+## 18. Nested-collection delete uses `_delete: true`, not Rails-style `_destroy: true`
+
+Capsule's PUT for a Party (and Opportunity, Project, etc.) treats
+child-collection items via three rules baked into the request body
+shape:
+
+- Add: item without `id` → Capsule appends.
+- Update: item with `id` plus the fields being changed → Capsule
+  edits that row.
+- **Delete: item with `id` plus `"_delete": true` → Capsule removes
+  that row.**
+
+The leading-underscore convention is Rails-ish, but the field name
+is `_delete` (not `_destroy`). This is a real footgun: Rails apps
+overwhelmingly use `_destroy: true` for `accepts_nested_attributes_for`
+collections, so it's natural to assume Capsule does the same. It
+doesn't. Sending `{"id": 42, "_destroy": true}` returns 200 OK with
+the row still present — silent no-op. The server registers the PUT
+(for `addresses` we even saw `updatedAt` advance by 1 second) but
+the destroy flag is ignored.
+
+**Where in our code:** [`src/tools/parties.ts`](src/tools/parties.ts)
+`removePartyEmailAddressById`, `removePartyPhoneNumberById`,
+`removePartyAddressById`, `removePartyWebsiteById`. v1.0.0-alpha.7
+shipped with the wrong field (`_destroy`); fixed in the followup
+commit after the production verification run flagged all four
+tools as broken (Bug 9 in the alpha.7 verification report).
+
+**Quote** — Capsule's Party docs at
+<https://developer.capsulecrm.com/v2/operations/Party>:
+
+> To add a new entity: create an entity without an id.
+>
+> To update an existing entity: include the id and any attributes
+> that are being updated.
+>
+> To delete an existing entity: include the id and the following
+> JSON attribute `"_delete": true`.
+
+Example payload combining all three (verbatim from the same page):
+
+> ```json
+> {
+>   "party": {
+>     "phoneNumbers": [
+>       {
+>         "id": 12136,
+>         "_delete": true
+>       }
+>     ],
+>     "emailAddresses": [
+>       {
+>         "id": 12137,
+>         "type": "Home"
+>       },
+>       {
+>         "type": "Work",
+>         "address": "sales@homestyleshop.co"
+>       }
+>     ]
+>   }
+> }
+> ```
+
+The same rules apply uniformly to `addresses`, `phoneNumbers`,
+`websites`, `emailAddresses`, and custom `fields` on Party,
+Opportunity, and Project.
+
+---
+
 ## How to add to this file
 
 When you discover a new Capsule API quirk:

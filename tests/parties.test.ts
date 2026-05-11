@@ -79,10 +79,13 @@ describe("atomic child-array operations", () => {
   // Each tool must do EXACTLY one PUT to /parties/{id} with a single
   // item in the relevant array. No GET-then-PUT diff, no value-matching
   // heuristics. The body shape mirrors Capsule's documented "merge"
-  // contract: an entry without `_destroy` is added, an entry
-  // `{id, _destroy: true}` is removed.
+  // contract: an entry without `_delete` is added, an entry
+  // `{id, _delete: true}` is removed. (The field is `_delete`, NOT
+  // the Rails-style `_destroy` — Capsule silently ignores the latter.
+  // See NOTES-ON-CAPSULE-API.md §18 and the alpha.7 verification
+  // bug report, Bug 9.)
 
-  it("add_party_email_address PUTs one item with no id, no _destroy", async () => {
+  it("add_party_email_address PUTs one item with no id, no _delete", async () => {
     mockFetch(200, { party: { id: 99 } });
     const { addPartyEmailAddress } = await import("../src/tools/parties.js");
     await addPartyEmailAddress({ partyId: 99, address: "a@x.test", type: "Work" });
@@ -94,10 +97,10 @@ describe("atomic child-array operations", () => {
       { address: "a@x.test", type: "Work" },
     ]);
     expect(body.party.emailAddresses[0].id).toBeUndefined();
-    expect(body.party.emailAddresses[0]._destroy).toBeUndefined();
+    expect(body.party.emailAddresses[0]._delete).toBeUndefined();
   });
 
-  it("remove_party_email_address_by_id PUTs {id, _destroy:true} only", async () => {
+  it("remove_party_email_address_by_id PUTs {id, _delete:true} only", async () => {
     mockFetch(200, { party: { id: 99 } });
     const { removePartyEmailAddressById } = await import(
       "../src/tools/parties.js"
@@ -107,7 +110,7 @@ describe("atomic child-array operations", () => {
     expect(url).toContain("/parties/99");
     expect((opts as RequestInit).method).toBe("PUT");
     const body = JSON.parse((opts as RequestInit).body as string);
-    expect(body.party.emailAddresses).toEqual([{ id: 555, _destroy: true }]);
+    expect(body.party.emailAddresses).toEqual([{ id: 555, _delete: true }]);
   });
 
   it("add_party_phone_number PUTs one phone item with type", async () => {
@@ -140,7 +143,7 @@ describe("atomic child-array operations", () => {
     const body = JSON.parse(
       (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string,
     );
-    expect(body.party.phoneNumbers).toEqual([{ id: 12, _destroy: true }]);
+    expect(body.party.phoneNumbers).toEqual([{ id: 12, _delete: true }]);
   });
 
   it("add_party_address forwards only the provided sub-fields", async () => {
@@ -161,7 +164,7 @@ describe("atomic child-array operations", () => {
     const body = JSON.parse(
       (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string,
     );
-    expect(body.party.addresses).toEqual([{ id: 7, _destroy: true }]);
+    expect(body.party.addresses).toEqual([{ id: 7, _delete: true }]);
   });
 
   it("add_party_website rejects unknown service values at schema layer", async () => {
@@ -205,7 +208,7 @@ describe("atomic child-array operations", () => {
     const body = JSON.parse(
       (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string,
     );
-    expect(body.party.websites).toEqual([{ id: 4, _destroy: true }]);
+    expect(body.party.websites).toEqual([{ id: 4, _delete: true }]);
   });
 });
 
