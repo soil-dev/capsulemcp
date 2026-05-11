@@ -23,6 +23,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const DIST_INDEX = join(__dirname, "..", "dist", "index.js");
 
 let child: ChildProcessWithoutNullStreams;
+let stderrBuffer = "";
 
 // Send a JSON-RPC message and return the next response from the
 // child's stdout. MCP messages are newline-delimited JSON over stdio.
@@ -75,6 +76,11 @@ beforeAll(async () => {
       CAPSULE_MCP_READONLY: "1",
     },
     stdio: ["pipe", "pipe", "pipe"],
+  });
+
+  // Capture stderr from spawn-time so startup banners aren't lost.
+  child.stderr.on("data", (chunk: Buffer) => {
+    stderrBuffer += chunk.toString("utf8");
   });
 
   // Initialise handshake so the server is ready to accept tools/list.
@@ -143,19 +149,27 @@ describe("stdio entry — built bundle smoke test", () => {
     }
   });
 
-  it("logs read-only banner to stderr", async () => {
-    // Stderr was buffered during spawn; check it has the read-only line.
-    // We read whatever's there now — it's been a few seconds since spawn.
-    const stderr = await new Promise<string>((resolve) => {
-      let data = "";
-      child.stderr.on("data", (chunk: Buffer) => {
-        data += chunk.toString("utf8");
-      });
-      // Capture for 100ms then resolve — most logs land at startup.
-      setTimeout(() => resolve(data), 100);
+  it("logs read-only banner to stderr", () => {
+    // stderrBuffer is accumulated from the listener attached in beforeAll,
+    // so the startup banner is captured even though we read it later.
+    expect(stderrBuffer).toMatch(/read-only mode/);
+  });
+
+  it("fails fast with exit 1 when CAPSULE_API_TOKEN is missing", async () => {
+    const env = { ...process.env };
+    delete env["CAPSULE_API_TOKEN"];
+    const proc = spawn("node", [DIST_INDEX], {
+      env,
+      stdio: ["pipe", "pipe", "pipe"],
     });
-    // Initial startup logs are gone by now; this assertion is best-effort.
-    // The point is to not crash if no log was emitted.
-    expect(typeof stderr).toBe("string");
+    let stderr = "";
+    proc.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString("utf8");
+    });
+    const exitCode = await new Promise<number | null>((resolve) => {
+      proc.on("exit", (code) => resolve(code));
+    });
+    expect(exitCode).toBe(1);
+    expect(stderr).toMatch(/CAPSULE_API_TOKEN/);
   });
 });

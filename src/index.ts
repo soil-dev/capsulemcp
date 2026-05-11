@@ -2,6 +2,19 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { isReadOnly } from "./capsule/client.js";
 import { createCapsuleMcpServer } from "./server.js";
 
+// Fail fast on missing CAPSULE_API_TOKEN. Without this the server would
+// boot, register tools, and only error out on the first tool invocation —
+// a confusing UX in MCP-host UIs where the failure surfaces as "tool
+// errored" rather than "server failed to start." Matches the HTTP entry's
+// fail-fast pattern in src/http.ts.
+if (!process.env["CAPSULE_API_TOKEN"]) {
+  console.error(
+    "[capsulemcp] CAPSULE_API_TOKEN environment variable is not set. " +
+      "Generate a Personal Access Token via My Preferences → API Authentication Tokens in Capsule.",
+  );
+  process.exit(1);
+}
+
 const server = createCapsuleMcpServer();
 const transport = new StdioServerTransport();
 
