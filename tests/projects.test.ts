@@ -145,16 +145,40 @@ describe("updateProject", () => {
     expect(body.kase).toEqual({ status: "CLOSED" });
   });
 
-  it("maps ownerId to nested owner object", async () => {
-    mockFetch(200, { kase: { id: 10 } });
+  it("maps ownerId to nested owner object, preserving current team via read-modify-write", async () => {
+    // RMW: ownerId-touched + teamId-undefined → fetch current, include team.
+    mockFetch(200, { kase: { id: 10, team: { id: 42, name: "Ops" } } }); // GET
+    mockFetch(200, { kase: { id: 10 } }); // PUT
 
     const { updateProject } = await import("../src/tools/projects.js");
     await updateProject({ id: 10, ownerId: 7 });
 
-    const [, options] = vi.mocked(fetch).mock.calls[0]!;
-    const body = JSON.parse((options as RequestInit).body as string);
+    expect(vi.mocked(fetch).mock.calls).toHaveLength(2);
+    const [getUrl, getOptions] = vi.mocked(fetch).mock.calls[0]!;
+    expect(String(getUrl)).toMatch(/\/kases\/10($|\?)/);
+    expect((getOptions as RequestInit).method ?? "GET").toBe("GET");
+
+    const [putUrl, putOptions] = vi.mocked(fetch).mock.calls[1]!;
+    expect(String(putUrl)).toContain("/kases/10");
+    expect((putOptions as RequestInit).method).toBe("PUT");
+    const body = JSON.parse((putOptions as RequestInit).body as string);
     expect(body.kase.owner).toEqual({ id: 7 });
+    // Team preserved from the GET — closes Bug 16.
+    expect(body.kase.team).toEqual({ id: 42 });
     expect(body.kase.ownerId).toBeUndefined();
+  });
+
+  it("ownerId-only with currentTeam=null: PUT body omits team entirely (no spurious team:null)", async () => {
+    mockFetch(200, { kase: { id: 10, team: null } }); // GET — no team
+    mockFetch(200, { kase: { id: 10 } }); // PUT
+
+    const { updateProject } = await import("../src/tools/projects.js");
+    await updateProject({ id: 10, ownerId: 7 });
+
+    const [, putOptions] = vi.mocked(fetch).mock.calls[1]!;
+    const body = JSON.parse((putOptions as RequestInit).body as string);
+    expect(body.kase.owner).toEqual({ id: 7 });
+    expect(body.kase).not.toHaveProperty("team");
   });
 
   it("maps fields:[{definitionId,value}] → fields:[{definition:{id},value}]", async () => {
@@ -188,39 +212,60 @@ describe("updateProject", () => {
     expect(body.kase.stageId).toBeUndefined();
   });
 
-  it("maps teamId → team:{id} on update", async () => {
+  it("maps teamId → team:{id} on update (no RMW — Capsule preserves owner server-side)", async () => {
     mockFetch(200, { kase: { id: 10 } });
 
     const { updateProject } = await import("../src/tools/projects.js");
     await updateProject({ id: 10, teamId: 88 });
 
+    // teamId alone: single PUT, no preceding GET (Rule A's team-in-body
+    // path preserves owner without help).
+    expect(vi.mocked(fetch).mock.calls).toHaveLength(1);
     const [, options] = vi.mocked(fetch).mock.calls[0]!;
     const body = JSON.parse((options as RequestInit).body as string);
     expect(body.kase.team).toEqual({ id: 88 });
     expect(body.kase.teamId).toBeUndefined();
   });
 
-  it("sends both owner and team when ownerId+teamId supplied (Bug 16 fix — preserves team across owner change)", async () => {
+  it("ownerId + teamId together: no RMW (caller has expressed both intents)", async () => {
     mockFetch(200, { kase: { id: 10 } });
 
     const { updateProject } = await import("../src/tools/projects.js");
     await updateProject({ id: 10, ownerId: 7, teamId: 88 });
 
+    expect(vi.mocked(fetch).mock.calls).toHaveLength(1);
     const [, options] = vi.mocked(fetch).mock.calls[0]!;
     const body = JSON.parse((options as RequestInit).body as string);
     expect(body.kase.owner).toEqual({ id: 7 });
     expect(body.kase.team).toEqual({ id: 88 });
   });
 
-  it("sends owner:null when ownerId=null (unassign — matches UI 'Unassign' option)", async () => {
+  it("ownerId + teamId:null: no RMW, sends owner + team:null (clear team as part of owner change)", async () => {
     mockFetch(200, { kase: { id: 10 } });
+
+    const { updateProject } = await import("../src/tools/projects.js");
+    await updateProject({ id: 10, ownerId: 7, teamId: null });
+
+    expect(vi.mocked(fetch).mock.calls).toHaveLength(1);
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.kase.owner).toEqual({ id: 7 });
+    expect(body.kase).toHaveProperty("team", null);
+  });
+
+  it("sends owner:null + carries current team when ownerId=null (Unassign owner, keep team)", async () => {
+    mockFetch(200, { kase: { id: 10, team: { id: 42, name: "Ops" } } }); // GET
+    mockFetch(200, { kase: { id: 10 } }); // PUT
 
     const { updateProject } = await import("../src/tools/projects.js");
     await updateProject({ id: 10, ownerId: null });
 
-    const [, options] = vi.mocked(fetch).mock.calls[0]!;
-    const body = JSON.parse((options as RequestInit).body as string);
+    const [, putOptions] = vi.mocked(fetch).mock.calls[1]!;
+    const body = JSON.parse((putOptions as RequestInit).body as string);
     expect(body.kase).toHaveProperty("owner", null);
+    // Team carried through so the project doesn't end up with both null
+    // (which Capsule rejects with 422 'owner or team is required').
+    expect(body.kase.team).toEqual({ id: 42 });
   });
 
   it("sends team:null when teamId=null (unassign)", async () => {
