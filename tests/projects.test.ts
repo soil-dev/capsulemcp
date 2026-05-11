@@ -168,9 +168,14 @@ describe("updateProject", () => {
     expect(body.kase).toEqual({ status: "CLOSED" });
   });
 
-  it("maps ownerId to nested owner object, preserving current team via read-modify-write", async () => {
-    // RMW: ownerId-touched + teamId-undefined → fetch current, include team.
-    mockFetch(200, { kase: { id: 10, team: { id: 42, name: "Ops" } } }); // GET
+  it("maps ownerId to nested owner object, preserving current team AND stage via read-modify-write", async () => {
+    // RMW: ownerId-touched + teamId-undefined → fetch current, carry
+    // both team AND stage forward (alpha.20 verification flagged that
+    // stage may be silently cleared the same way team is, since both
+    // are absent-in-body fields on Capsule's PUT).
+    mockFetch(200, {
+      kase: { id: 10, team: { id: 42, name: "Ops" }, stage: { id: 99, name: "Live" } },
+    }); // GET
     mockFetch(200, { kase: { id: 10 } }); // PUT
 
     const { updateProject } = await import("../src/tools/projects.js");
@@ -186,13 +191,15 @@ describe("updateProject", () => {
     expect((putOptions as RequestInit).method).toBe("PUT");
     const body = JSON.parse((putOptions as RequestInit).body as string);
     expect(body.kase.owner).toEqual({ id: 7 });
-    // Team preserved from the GET — closes Bug 16.
+    // Team and stage both preserved from the GET.
     expect(body.kase.team).toEqual({ id: 42 });
+    expect(body.kase.stage).toBe(99);
     expect(body.kase.ownerId).toBeUndefined();
+    expect(body.kase.stageId).toBeUndefined();
   });
 
-  it("ownerId-only with currentTeam=null: PUT body omits team entirely (no spurious team:null)", async () => {
-    mockFetch(200, { kase: { id: 10, team: null } }); // GET — no team
+  it("ownerId-only with currentTeam=null AND currentStage=null: PUT body omits both (no spurious clears)", async () => {
+    mockFetch(200, { kase: { id: 10, team: null, stage: null } }); // GET
     mockFetch(200, { kase: { id: 10 } }); // PUT
 
     const { updateProject } = await import("../src/tools/projects.js");
@@ -202,6 +209,24 @@ describe("updateProject", () => {
     const body = JSON.parse((putOptions as RequestInit).body as string);
     expect(body.kase.owner).toEqual({ id: 7 });
     expect(body.kase).not.toHaveProperty("team");
+    expect(body.kase).not.toHaveProperty("stage");
+  });
+
+  it("ownerId + explicit stageId: explicit stageId wins, no current-stage carry from RMW", async () => {
+    // ownerId touched, teamId undefined → RMW fires for team. stageId
+    // is explicitly supplied, so the RMW shouldn't override it with the
+    // current value.
+    mockFetch(200, { kase: { id: 10, team: { id: 42 }, stage: { id: 99 } } });
+    mockFetch(200, { kase: { id: 10 } });
+
+    const { updateProject } = await import("../src/tools/projects.js");
+    await updateProject({ id: 10, ownerId: 7, stageId: 123 });
+
+    const [, putOptions] = vi.mocked(fetch).mock.calls[1]!;
+    const body = JSON.parse((putOptions as RequestInit).body as string);
+    expect(body.kase.owner).toEqual({ id: 7 });
+    expect(body.kase.team).toEqual({ id: 42 });
+    expect(body.kase.stage).toBe(123); // explicit, not the carried 99
   });
 
   it("maps fields:[{definitionId,value}] → fields:[{definition:{id},value}]", async () => {

@@ -197,30 +197,38 @@ export async function updateProject(input: z.infer<typeof updateProjectSchema>) 
   //   `team` in body           → Capsule preserves the existing `owner` (and validates owner ∈ team)
   //
   // To make `update_project { ownerId }` safe (so it doesn't accidentally
-  // clear an existing team), the connector reads the current team and
-  // includes it in the body whenever `ownerId` is being touched without an
-  // explicit `teamId`. The caller can override by passing `teamId: null`
-  // to clear team, or `teamId: <X>` to change it.
+  // clear an existing team — or, defensively, stage), the connector reads
+  // the current project and carries the existing `team` AND `stage` into
+  // the PUT body whenever `ownerId` is being touched without an explicit
+  // value for those fields. Carrying stage is defensive: alpha.20-era
+  // verification didn't directly probe whether owner-in-body PUTs clear
+  // stage the way they clear team, but the cost of a redundant
+  // `stage: <currentId>` is one extra integer in the body, so we err on
+  // the safe side rather than risk a silent stage clear.
   //
-  // `null` means "unassign" on either field (matches Capsule's UI
+  // `null` means "unassign" on either owner/team (matches Capsule's UI
   // "Unassign" option); `undefined` means "don't touch this field".
   let resolvedTeamId: number | null | undefined = teamId;
+  let resolvedStageId: number | undefined = stageId;
   if (ownerId !== undefined && teamId === undefined) {
-    const { data } = await capsuleGet<{ kase: { team?: { id: number } | null } }>(
-      `/kases/${id}`,
-    );
-    // Only carry the team forward when the project actually has one; if
-    // current team is null, leave team out of the body entirely (sending
-    // `team: null` would be a redundant clear and could surprise on the
-    // owner-or-team-required 422 path).
+    const { data } = await capsuleGet<{
+      kase: { team?: { id: number } | null; stage?: { id: number } | null };
+    }>(`/kases/${id}`);
+    // Only carry forward when the project actually has a value; if
+    // current team/stage is null, leave the field out of the body entirely
+    // (sending `team: null` would be a redundant clear and could surprise
+    // on the owner-or-team-required 422 path; same idea for stage).
     resolvedTeamId = data.kase?.team?.id ?? undefined;
+    if (stageId === undefined) {
+      resolvedStageId = data.kase?.stage?.id ?? undefined;
+    }
   }
 
   if (ownerId === null) body["owner"] = null;
   else if (ownerId !== undefined) body["owner"] = { id: ownerId };
   if (resolvedTeamId === null) body["team"] = null;
   else if (resolvedTeamId !== undefined) body["team"] = { id: resolvedTeamId };
-  if (stageId) body["stage"] = stageId;
+  if (resolvedStageId) body["stage"] = resolvedStageId;
   const mappedFields = mapFieldsForBody(fields);
   if (mappedFields !== undefined) body["fields"] = mappedFields;
 
