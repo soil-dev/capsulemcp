@@ -13,14 +13,15 @@
  *     entity only; the tag persists in the tenant for other entities
  *     that share it.
  *
- * IMPORTANT — two different "tag IDs":
- *   - The GLOBAL tag id (from list_tags) identifies a tag definition
- *     in the tenant.
- *   - The PER-ENTITY LINK id (from get_party / get_opportunity /
- *     get_project with `embed=tags`) is the row id of the entity↔tag
- *     link on a specific record.
- * For `remove_tag_by_id` Capsule REQUIRES the per-entity link id, not
- * the global tag id. The tool description spells that out.
+ * Tag id model — verified live during the alpha.10 production run:
+ * Capsule uses a SINGLE id per tag across both list_tags and
+ * embed=tags on an entity. Earlier wording on these tools warned
+ * that the two were different — that turned out to be wrong; both
+ * sources return the same id and remove_tag_by_id accepts either.
+ * The descriptions now recommend reading via embed=tags anyway,
+ * because that confirms the tag is actually attached to the
+ * specific entity before you try to remove it (a list_tags id
+ * for a tag NOT on this entity would 422 "tag not found to delete").
  *
  * Capsule docs:
  *   https://developer.capsulecrm.com/v2/operations/Party
@@ -79,7 +80,7 @@ export const addTagSchema = z.object({
     .string()
     .min(1)
     .describe(
-      "Name of the tag to attach. Capsule resolves by name: if a tag with this name already exists in the tenant it is attached to the entity; if not, Capsule creates the tag and attaches it. Names are case-sensitive and tenant-global. Use list_tags first if you need to avoid accidentally creating a near-duplicate (e.g. 'Zendesk' vs 'zendesk'). Idempotent — re-attaching an already-attached tag is harmless.",
+      "Name of the tag to attach. Capsule resolves by name: if a tag with this name already exists in the tenant it is attached to the entity; if not, Capsule creates the tag and attaches it. Names are tenant-global. Capsule matches case-INSENSITIVELY when resolving (so 'Zendesk' and 'zendesk' attach the same tag), preserving the canonical casing from whichever variant was created first. To ensure consistent casing in your tag list, call list_tags first and reuse the exact name from there. Idempotent — re-attaching an already-attached tag is harmless.",
     ),
 });
 
@@ -101,9 +102,7 @@ export const removeTagByIdSchema = z.object({
     .int()
     .positive()
     .describe(
-      "The PER-ENTITY tag LINK id — NOT the global tag id from list_tags. " +
-        "Read the entity with embed=tags (e.g. get_party with embed='tags'), and use the `id` field on each tag entry in the response. " +
-        "Removing detaches the tag from this entity only; the tag itself persists in the tenant for other entities that share it.",
+      "The tag's id. Read via get_party / get_opportunity / get_project with embed='tags' — each tag entry in the response has an `id` field. list_tags returns the same ids for the same tags, so either source works; reading via embed first is the safer pattern because it confirms the tag is actually attached to this entity before you try to remove it (otherwise Capsule returns 422 'tag not found to delete'). Removing detaches the tag from this entity only; the tag definition itself persists in the tenant for other entities that share it.",
     ),
 });
 

@@ -148,12 +148,16 @@ export const updateOpportunitySchema = z.object({
     .array(
       z.object({
         definitionId: z.number().int().positive(),
-        value: z.union([z.string(), z.number(), z.boolean(), z.null()]),
+        value: z
+          .union([z.string(), z.number(), z.boolean(), z.null()])
+          .describe(
+            "String for TEXT/DATE/LIST/LARGE_TEXT/LINK, number for NUMBER, boolean for BOOLEAN. Clearing: null works for TEXT/NUMBER/DATE/LIST; BOOLEAN rejects null with 422 — set to false instead. NUMBER read-back via embed=fields returns as a STRING (e.g. '3' not 3). TEXT '' has the same effect as null (row removed).",
+          ),
       }),
     )
     .optional()
     .describe(
-      "Set custom field values on this opportunity. PARTIAL UPDATE: only the definitions you list are touched; any field NOT in this array is left unchanged. Discover available definitions via list_custom_fields; read current values via get_opportunity with embed='fields'. Pass value:null to attempt clearing a field.",
+      "Set custom field values on this opportunity. PARTIAL UPDATE: only the definitions you list are touched; any field NOT in this array is left unchanged. Discover available definitions via list_custom_fields; read current values via get_opportunity with embed='fields'.",
     ),
 });
 

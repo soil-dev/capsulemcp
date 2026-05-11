@@ -1035,7 +1035,7 @@ export function createCapsuleMcpServer(): McpServer {
   if (!readOnly) {
     server.tool(
       "add_tag",
-      "Attach a tag to a party, opportunity, or project (kase) by NAME. Capsule resolves to an existing tag in the tenant or creates a fresh one with this name. Idempotent — re-attaching an already-attached tag is harmless. Use list_tags first if you need to avoid accidentally creating a near-duplicate (e.g. 'Zendesk' vs 'zendesk'). To DETACH a tag, use remove_tag_by_id and pass the per-entity link id (NOT the global tag id from list_tags).",
+      "Attach a tag to a party, opportunity, or project (kase) by NAME. Capsule resolves to an existing tag in the tenant or creates a fresh one with this name. Matching is case-insensitive — 'Zendesk' and 'zendesk' attach the same tag, preserving the canonical casing from whichever variant was created first. To avoid creating a genuinely-distinct near-duplicate (e.g. 'Zendesk' vs 'Zen Desk'), call list_tags first and reuse the exact name. Idempotent — re-attaching an already-attached tag is harmless. To DETACH a tag, use remove_tag_by_id with the tag's id (read via get_party/get_opportunity/get_project with embed='tags').",
       addTagSchema.shape,
       async (input) => {
         const result = await addTag(input);
@@ -1045,7 +1045,7 @@ export function createCapsuleMcpServer(): McpServer {
 
     server.tool(
       "remove_tag_by_id",
-      "Detach a tag from a party, opportunity, or project (kase). Atomic — one PUT to Capsule. The `tagId` parameter is the PER-ENTITY tag LINK id (read via get_party/get_opportunity/get_project with embed='tags'), NOT the global tag id from list_tags. The tag itself remains in the tenant for other entities that still share it.",
+      "Detach a tag from a party, opportunity, or project (kase). Atomic — one PUT to Capsule. The `tagId` parameter is the tag's id, readable via get_party/get_opportunity/get_project with embed='tags' (list_tags returns the same ids and also works, but reading via embed first confirms the tag is actually attached to this entity — otherwise Capsule returns 422 'tag not found to delete'). The tag definition itself remains in the tenant for other entities that still share it.",
       removeTagByIdSchema.shape,
       async (input) => {
         const result = await removeTagById(input);

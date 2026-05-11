@@ -260,4 +260,37 @@ parameter is unnecessary surface.
 
 ---
 
+## Tag-definition delete
+
+The connector exposes `add_tag` (which creates a tag if the name is
+new, otherwise attaches an existing tag) and `remove_tag_by_id`
+(which detaches a tag from one entity) but has no way to delete a
+tag *definition* tenant-wide. If a tag is created by mistake — typo,
+test data, deprecated category — the connector can detach it from
+every entity it's on, but the empty definition persists in
+`list_tags` indefinitely unless deleted via Capsule's web UI.
+
+**Why not implemented now**: deleting a tag definition is rare and
+inherently destructive — it would break filter saved-searches that
+reference the tag and silently drop the tag from any future
+`embed=tags` reads. Capsule's web UI is the right place for that
+kind of admin operation; exposing it through a connector would need
+a confirm gate and probably an "is this tag used anywhere first"
+pre-check.
+
+**When to consider**: a deployment that wants to clean up
+test/stale tag definitions programmatically — e.g. a post-deploy
+script that drops `ZZZ-MCP-*` tag definitions left behind by
+integration tests.
+
+**Implementation sketch**: `delete_tag_definition(entity, tagId,
+confirm: true)`. PUT shape probably `DELETE /<entity>/tags/{id}`
+or similar — needs verification against Capsule's docs (the v2
+docs don't show a tag-definition DELETE endpoint explicitly, so
+this may require either a different REST shape or be a
+genuine-Capsule-API-limit). Until that's confirmed, web-UI
+cleanup is the documented path.
+
+---
+
 ## (Add new entries above this line.)

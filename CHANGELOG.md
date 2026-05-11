@@ -11,6 +11,57 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Changed
+
+- Tag-write tool descriptions corrected after the alpha.10
+  production verification proved two earlier assumptions wrong:
+  - `add_tag.tagName`: previously said *"Names are case-sensitive
+    and tenant-global."* Verified live that Capsule matches
+    case-INSENSITIVELY ('Zendesk' and 'zendesk' attach the same
+    tag, preserving the canonical casing from whichever variant
+    was created first). Description and example updated.
+  - `remove_tag_by_id.tagId`: previously warned the parameter was
+    the "per-entity LINK id, NOT the global tag id from list_tags".
+    Verified live that the two are the same id — both sources work.
+    Warning softened to a recommendation: read via `embed=tags`
+    first because it confirms the tag is actually attached to the
+    entity (a list_tags id for a tag NOT on this entity would 422
+    'tag not found to delete').
+  - File-header comment in `src/tools/tags.ts` rewritten to
+    reflect the verified single-id model.
+- Custom-field `fields[].value` descriptions now document three
+  additional quirks surfaced during alpha.10 production
+  verification:
+  - **BOOLEAN cannot be cleared via `value: null`** — Capsule
+    returns 422 'invalid type for field'. The other four observed
+    types (TEXT, NUMBER, DATE, LIST) accept null cleanly and
+    remove the row. Set BOOLEAN to `false` instead; the connector
+    does not currently rewrite null → `_delete: true` for BOOLEAN
+    because the workaround is trivial and tri-state booleans are
+    rarely needed. (Bug 12 in the alpha.10 verification — closed
+    by documentation per the report's recommendation.)
+  - **NUMBER returned as string** — setting `value: 3` stores
+    correctly, but the read-back via `embed=fields` returns
+    `value: "3"` (string). Callers comparing values must coerce.
+  - **TEXT empty-string clears the field** — `value: ""` has the
+    same observable effect as `value: null`; empty-string and
+    never-set are indistinguishable in Capsule's storage.
+  - **Data-tag membership is implicit** — setting a custom field
+    that lives under a data tag (e.g. `Support Agreement Details`
+    on a project) populates the field row's internal tagId but
+    does NOT auto-add the data tag to the project's tags array.
+    `add_tag` it explicitly if you want it visible via
+    `embed=tags`. (Documented on `update_project.fields` only,
+    where this is most relevant.)
+
+### Documentation
+
+- IDEAS.md gains an entry for tag-definition delete: the connector
+  has no way to delete a tag *definition* tenant-wide, only to
+  detach a tag from a specific entity. Empty-definition cleanup
+  currently requires Capsule's web UI. Surfaced during alpha.10
+  verification (two test tags stranded in the tenant).
+
 ## [1.0.0-alpha.10] — 2026-05-11
 
 ### Added

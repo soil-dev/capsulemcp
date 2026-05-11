@@ -252,7 +252,10 @@ export const CustomFieldWriteSchema = z.object({
   value: z
     .union([z.string(), z.number(), z.boolean(), z.null()])
     .describe(
-      "The new value. String for text/date/list/large-text/link fields, number for numeric fields, boolean for boolean fields. Pass null to attempt clearing.",
+      "The new value. String for TEXT / DATE / LIST / LARGE_TEXT / LINK fields, number for NUMBER fields, boolean for BOOLEAN fields. " +
+        "Clearing: pass null for TEXT / NUMBER / DATE / LIST (Capsule removes the row). BOOLEAN does NOT accept null and Capsule responds 422 'invalid type for field'; set the BOOLEAN to false instead. " +
+        "NUMBER quirks: Capsule stores numerics correctly but the read-back via embed=fields returns them as STRINGS (e.g. value=3 reads as '3'); callers comparing values must coerce. " +
+        "TEXT quirks: value='' has the same observable effect as value=null (row removed); empty-string and never-set are indistinguishable.",
     ),
 });
 
