@@ -6,6 +6,11 @@ import {
   capsulePost,
   capsulePut,
 } from "../capsule/client.js";
+import {
+  CustomFieldWriteSchema,
+  fieldsArrayDescriptor,
+  mapFieldsForBody,
+} from "./_custom-fields.js";
 
 // ── Read ────────────────────────────────────────────────────────────────────
 
@@ -126,19 +131,11 @@ export const updateProjectSchema = z.object({
     ),
   expectedCloseOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("YYYY-MM-DD"),
   fields: z
-    .array(
-      z.object({
-        definitionId: z.number().int().positive(),
-        value: z
-          .union([z.string(), z.number(), z.boolean(), z.null()])
-          .describe(
-            "String for TEXT/DATE/LIST/LARGE_TEXT/LINK, number for NUMBER, boolean for BOOLEAN. Clearing: null works for TEXT/NUMBER/DATE/LIST; BOOLEAN rejects null with 422 — set to false instead. NUMBER read-back via embed=fields returns as a STRING (e.g. '3' not 3). TEXT '' has the same effect as null (row removed). Note: setting a field under a 'data tag' (e.g. Support Agreement Details) populates the row's internal tagId but does NOT auto-add the data tag to the project's tags array — use add_tag explicitly if you want it visible via embed=tags.",
-          ),
-      }),
-    )
+    .array(CustomFieldWriteSchema)
     .optional()
     .describe(
-      "Set custom field values on this project. PARTIAL UPDATE: only the definitions you list are touched; any field NOT in this array is left unchanged. Discover available definitions via list_custom_fields; read current values via get_project with embed='fields'.",
+      fieldsArrayDescriptor("get_project") +
+        " Project-specific: setting a field under a 'data tag' (e.g. Support Agreement Details) populates the row's internal tagId but does NOT auto-add the data tag to the project's tags array — use add_tag explicitly if you want it visible via embed=tags.",
     ),
 });
 
@@ -151,12 +148,8 @@ export async function updateProject(input: z.infer<typeof updateProjectSchema>) 
   }
   if (ownerId) body["owner"] = { id: ownerId };
   if (stageId) body["stage"] = stageId;
-  if (fields !== undefined) {
-    body["fields"] = fields.map((f) => ({
-      definition: { id: f.definitionId },
-      value: f.value,
-    }));
-  }
+  const mappedFields = mapFieldsForBody(fields);
+  if (mappedFields !== undefined) body["fields"] = mappedFields;
 
   return capsulePut<{ kase: unknown }>(`/kases/${id}`, { kase: body });
 }

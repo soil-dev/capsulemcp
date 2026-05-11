@@ -6,6 +6,11 @@ import {
   capsulePost,
   capsulePut,
 } from "../capsule/client.js";
+import {
+  CustomFieldWriteSchema,
+  fieldsArrayDescriptor,
+  mapFieldsForBody,
+} from "./_custom-fields.js";
 
 // ── Shared sub-schemas ──────────────────────────────────────────────────────
 
@@ -235,38 +240,9 @@ export async function createParty(input: z.infer<typeof createPartySchema>) {
 
 // ───────────────────────────────────────────────────────────────────────────
 
-// Custom-field write shape. Capsule's PUT body accepts:
-//   {definition: {id: <definitionId>}, value: <value>}  // set/create
-//   {id: <rowId>, value: <newValue>}                    // update existing row
-//   {id: <rowId>, _delete: true}                        // remove the row
-//
-// We expose only the first form: caller addresses a field by its
-// definitionId (discoverable via list_custom_fields). Capsule resolves
-// whether the value already exists for this entity and updates or
-// creates accordingly. To clear a value, pass `value: null` — Capsule's
-// docs don't explicitly document the clear shape, but null is the
-// natural caller-facing semantic; if Capsule needs `_delete: true`
-// instead, the handler can map it in a followup.
-export const CustomFieldWriteSchema = z.object({
-  definitionId: z
-    .number()
-    .int()
-    .positive()
-    .describe(
-      "The custom-field definition id from list_custom_fields. Identifies which field on the entity to set.",
-    ),
-  value: z
-    .union([z.string(), z.number(), z.boolean(), z.null()])
-    .describe(
-      "The new value. String for TEXT / DATE / LIST / LARGE_TEXT / LINK fields, number for NUMBER fields, boolean for BOOLEAN fields. " +
-        "Clearing: pass null for TEXT / NUMBER / DATE / LIST (Capsule removes the row). BOOLEAN does NOT accept null and Capsule responds 422 'invalid type for field'; set the BOOLEAN to false instead. " +
-        "NUMBER quirks: Capsule stores numerics correctly but the read-back via embed=fields returns them as STRINGS (e.g. value=3 reads as '3'); callers comparing values must coerce. " +
-        "TEXT quirks: value='' has the same observable effect as value=null (row removed); empty-string and never-set are indistinguishable.",
-    ),
-});
-
-const CustomFieldsArrayDescriptor =
-  "Set custom field values on this record. PARTIAL UPDATE: only the definitions you list are touched; any field NOT in this array is left unchanged. Discover available definitions via list_custom_fields; read current values via get_party / get_opportunity / get_project with embed='fields'.";
+// Custom-field write schema, descriptor, and body-mapper all live in
+// _custom-fields.ts (shared across update_party / update_opportunity /
+// update_project).
 
 export const updatePartySchema = z.object({
   id: z.number().int().positive(),
@@ -278,7 +254,7 @@ export const updatePartySchema = z.object({
   fields: z
     .array(CustomFieldWriteSchema)
     .optional()
-    .describe(CustomFieldsArrayDescriptor),
+    .describe(fieldsArrayDescriptor("get_party")),
   ...PartyWriteBaseSchema,
 });
 
@@ -290,12 +266,8 @@ export async function updateParty(input: z.infer<typeof updatePartySchema>) {
     if (v !== undefined) body[k] = v;
   }
   if (ownerId) body["owner"] = { id: ownerId };
-  if (fields !== undefined) {
-    body["fields"] = fields.map((f) => ({
-      definition: { id: f.definitionId },
-      value: f.value,
-    }));
-  }
+  const mappedFields = mapFieldsForBody(fields);
+  if (mappedFields !== undefined) body["fields"] = mappedFields;
 
   return capsulePut<{ party: unknown }>(`/parties/${id}`, { party: body });
 }
