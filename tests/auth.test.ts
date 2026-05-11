@@ -76,6 +76,34 @@ describe("issueToken / verifyToken", () => {
     expect(() => verifyToken("not-a-token", KEY)).toThrow(TokenSignatureError);
     expect(() => verifyToken("a.b.c", KEY)).toThrow(TokenSignatureError);
   });
+
+  it("rejects HMAC-valid tokens whose payload doesn't match the claims schema", async () => {
+    // Hand-craft a token with a non-string `clientId` and a valid HMAC.
+    // The signature check would pass — Zod-validation is the gate that
+    // catches this. Without the runtime schema-check, `expiresAt < Date.now()`
+    // would NaN-compare to false and the malformed claim would propagate.
+    const { createHmac } = await import("node:crypto");
+    const malformed = JSON.stringify({
+      type: "access",
+      clientId: 12345, // must be string
+      scopes: [],
+      expiresAt: Date.now() + 60_000,
+      nonce: "n",
+    });
+    const payloadB64 = Buffer.from(malformed, "utf8")
+      .toString("base64")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/, "");
+    const sigBuf = createHmac("sha256", KEY).update(payloadB64).digest();
+    const sigB64 = sigBuf
+      .toString("base64")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/, "");
+    const tok = `${payloadB64}.${sigB64}`;
+    expect(() => verifyToken(tok, KEY)).toThrow(TokenSignatureError);
+  });
 });
 
 // ── Provider ────────────────────────────────────────────────────────────────

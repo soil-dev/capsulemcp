@@ -11,20 +11,27 @@
  */
 
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { z } from "zod";
 
 export type TokenType = "access" | "refresh";
 
-export interface SignedTokenClaims {
-  type: TokenType;
-  clientId: string;
-  /** Canonical MCP resource URI this token was issued for. */
-  resource?: string;
-  scopes: string[];
-  /** ms-since-epoch when this token expires. */
-  expiresAt: number;
-  /** Random nonce so two tokens with otherwise identical claims differ. */
-  nonce: string;
-}
+// Schema is the source of truth; the interface below is derived from it
+// so a drift between runtime validation and TypeScript shape can't happen.
+// The HMAC verification already ensures an attacker can't forge claims,
+// but Zod-validating the parsed payload is defence-in-depth against a
+// future signing-key compromise / downgrade — a malformed claim (missing
+// `expiresAt`, non-string `clientId`, etc.) would otherwise propagate
+// into downstream AuthInfo with NaN-compared expiry checks.
+const SignedTokenClaimsSchema = z.object({
+  type: z.enum(["access", "refresh"]),
+  clientId: z.string().min(1),
+  resource: z.string().optional(),
+  scopes: z.array(z.string()),
+  expiresAt: z.number().int(),
+  nonce: z.string().min(1),
+});
+
+export type SignedTokenClaims = z.infer<typeof SignedTokenClaimsSchema>;
 
 function b64urlEncode(buf: Buffer): string {
   return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -78,12 +85,17 @@ export function verifyToken(token: string, signingKey: string): SignedTokenClaim
     throw new TokenSignatureError("invalid signature");
   }
 
-  let claims: SignedTokenClaims;
+  let raw: unknown;
   try {
-    claims = JSON.parse(b64urlDecode(payloadB64).toString("utf8")) as SignedTokenClaims;
+    raw = JSON.parse(b64urlDecode(payloadB64).toString("utf8"));
   } catch {
     throw new TokenSignatureError("malformed payload");
   }
+  const parsed = SignedTokenClaimsSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new TokenSignatureError("malformed payload");
+  }
+  const claims = parsed.data;
   if (claims.expiresAt < Date.now()) {
     throw new TokenExpiredError();
   }
