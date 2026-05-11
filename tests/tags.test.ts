@@ -80,6 +80,31 @@ describe("addTag — atomic attach by name", () => {
   });
 });
 
+describe("removeTagById — idempotency on already-detached", () => {
+  it("converts Capsule's 422 'tag not found to delete' into alreadyRemoved: true", async () => {
+    mockFetch(422, {
+      errors: [{ resource: "party.tags", message: "tag not found to delete" }],
+    });
+    const { removeTagById } = await import("../src/tools/tags.js");
+    const result = await removeTagById({
+      entity: "parties",
+      entityId: 99,
+      tagId: 42,
+    });
+    expect(result.removed).toBe(true);
+    expect(result.alreadyRemoved).toBe(true);
+    expect(result.tagId).toBe(42);
+  });
+
+  it("propagates other 422s (e.g. validation failure unrelated to existing links)", async () => {
+    mockFetch(422, { message: "some other validation failed" });
+    const { removeTagById } = await import("../src/tools/tags.js");
+    await expect(
+      removeTagById({ entity: "parties", entityId: 99, tagId: 42 }),
+    ).rejects.toThrow(/some other validation failed/);
+  });
+});
+
 describe("removeTagById — atomic detach by per-entity link id", () => {
   it.each([
     ["parties", "party", "/parties/284083000"],

@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { capsuleDelete, capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
+import {
+  CapsuleApiError,
+  capsuleDelete,
+  capsuleGet,
+  capsulePost,
+  capsulePut,
+} from "../capsule/client.js";
 
 // Capsule rejects {amount} without a currency on opportunity create/update
 // (422 Validation Failed). Make currency required at the schema layer so
@@ -200,6 +206,13 @@ export async function deleteOpportunity(input: z.infer<typeof deleteOpportunityS
   if (input.confirm !== true) {
     throw new Error("delete_opportunity requires confirm: true");
   }
-  await capsuleDelete(`/opportunities/${input.id}`);
-  return { deleted: true, id: input.id };
+  try {
+    await capsuleDelete(`/opportunities/${input.id}`);
+    return { deleted: true, alreadyDeleted: false, id: input.id };
+  } catch (err) {
+    if (err instanceof CapsuleApiError && err.status === 404) {
+      return { deleted: true, alreadyDeleted: true, id: input.id };
+    }
+    throw err;
+  }
 }

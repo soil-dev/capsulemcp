@@ -131,15 +131,32 @@ export async function removeAdditionalParty(
   if (input.confirm !== true) {
     throw new Error("remove_additional_party requires confirm: true");
   }
-  await capsuleDelete(
-    `/${input.entity}/${input.entityId}/parties/${input.partyId}`,
-  );
-  return {
-    removed: true,
-    entity: input.entity,
-    entityId: input.entityId,
-    partyId: input.partyId,
-  };
+  try {
+    await capsuleDelete(
+      `/${input.entity}/${input.entityId}/parties/${input.partyId}`,
+    );
+    return {
+      removed: true,
+      alreadyRemoved: false,
+      entity: input.entity,
+      entityId: input.entityId,
+      partyId: input.partyId,
+    };
+  } catch (err) {
+    if (err instanceof CapsuleApiError && err.status === 404) {
+      // Capsule returns 404 either for "party doesn't exist" OR
+      // "party isn't linked to this entity". Both are observationally
+      // "the link doesn't exist", so we treat them as already-removed.
+      return {
+        removed: true,
+        alreadyRemoved: true,
+        entity: input.entity,
+        entityId: input.entityId,
+        partyId: input.partyId,
+      };
+    }
+    throw err;
+  }
 }
 
 // ── List associated projects (opportunity → projects) ───────────────────────

@@ -320,7 +320,24 @@ describe("deleteParty", () => {
     const [url, options] = vi.mocked(fetch).mock.calls[0]!;
     expect(url).toContain("/parties/7");
     expect((options as RequestInit).method).toBe("DELETE");
-    expect(result).toEqual({ deleted: true, id: 7 });
+    expect(result).toEqual({ deleted: true, alreadyDeleted: false, id: 7 });
+  });
+
+  it("returns {alreadyDeleted: true} on 404 (idempotent destructive op)", async () => {
+    // §11-12 verification observed deletion-shape ops leaking
+    // Capsule's "doesn't exist" 404 to callers, breaking retry
+    // loops. Now caught and converted to a success shape.
+    vi.mocked(fetch).mockResolvedValueOnce({
+      status: 404,
+      ok: false,
+      headers: new Headers(),
+      json: async () => ({ message: "party not found" }),
+      statusText: "Not Found",
+    } as Awaited<ReturnType<typeof fetch>>);
+
+    const { deleteParty } = await import("../src/tools/parties.js");
+    const result = await deleteParty({ id: 7, confirm: true });
+    expect(result).toEqual({ deleted: true, alreadyDeleted: true, id: 7 });
   });
 });
 

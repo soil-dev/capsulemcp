@@ -85,7 +85,7 @@ describe("deleteOpportunity", () => {
     const [url, options] = vi.mocked(fetch).mock.calls[0]!;
     expect(url).toContain("/opportunities/21");
     expect((options as RequestInit).method).toBe("DELETE");
-    expect(result).toEqual({ deleted: true, id: 21 });
+    expect(result).toEqual({ deleted: true, alreadyDeleted: false, id: 21 });
   });
 });
 

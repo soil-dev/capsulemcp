@@ -218,6 +218,6 @@ describe("deleteEntry", () => {
     const [url, options] = vi.mocked(fetch).mock.calls[0]!;
     expect(url).toContain("/entries/99");
     expect((options as RequestInit).method).toBe("DELETE");
-    expect(result).toEqual({ deleted: true, id: 99 });
+    expect(result).toEqual({ deleted: true, alreadyDeleted: false, id: 99 });
   });
 });

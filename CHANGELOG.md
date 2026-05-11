@@ -11,6 +11,41 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Changed
+
+- **Destructive-op idempotency unified across all 12 tools.** §12 of
+  the production write-mode bug-report observed that delete/remove
+  tools leaked Capsule's "doesn't exist / not attached" errors
+  (404 / 422) to callers, breaking retry / undo / reconciliation
+  loops that naturally re-issue these calls expecting them to be
+  safe ("desired state: gone; current state: gone; → success"). The
+  `add_additional_party` precedent showed the pattern; now applied
+  uniformly:
+  - **DELETE-shape ops** (`delete_party`, `delete_opportunity`,
+    `delete_project`, `delete_task`, `delete_entry`,
+    `remove_additional_party`, `remove_track`) catch
+    `CapsuleApiError(404)` and return their normal success shape
+    plus `alreadyDeleted: true` (for `delete_*`) or
+    `alreadyRemoved: true` (for `remove_*`). Successful first-time
+    deletes now also carry `alreadyDeleted: false` /
+    `alreadyRemoved: false` so callers can distinguish.
+  - **PUT-with-_delete ops on party child arrays**
+    (`remove_party_email_address_by_id`,
+    `remove_party_phone_number_by_id`,
+    `remove_party_address_by_id`,
+    `remove_party_website_by_id`) catch `CapsuleApiError(404)`
+    and return `{removed: true, alreadyRemoved: true, partyId,
+    <subId>}`. Success path still returns the Capsule party
+    response merged with `{removed: true, alreadyRemoved: false}`.
+  - **`remove_tag_by_id`** catches `CapsuleApiError(422)` with the
+    specific message "tag not found to delete" (other 422s still
+    surface) and returns the same shape with `alreadyRemoved: true`.
+  - Errors with other status codes / messages still propagate
+    unchanged.
+
+  Closes the §12 class observation. Callers writing reconciliation
+  loops or undo flows can now retry destructive ops freely.
+
 ### Fixed
 
 - **Bug 13** — `apply_track.startDate` was silently ignored.

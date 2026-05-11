@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { capsuleDelete, capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
+import {
+  CapsuleApiError,
+  capsuleDelete,
+  capsuleGet,
+  capsulePost,
+  capsulePut,
+} from "../capsule/client.js";
 
 // ── Read ────────────────────────────────────────────────────────────────────
 
@@ -153,6 +159,13 @@ export async function deleteTask(input: z.infer<typeof deleteTaskSchema>) {
   if (input.confirm !== true) {
     throw new Error("delete_task requires confirm: true");
   }
-  await capsuleDelete(`/tasks/${input.id}`);
-  return { deleted: true, id: input.id };
+  try {
+    await capsuleDelete(`/tasks/${input.id}`);
+    return { deleted: true, alreadyDeleted: false, id: input.id };
+  } catch (err) {
+    if (err instanceof CapsuleApiError && err.status === 404) {
+      return { deleted: true, alreadyDeleted: true, id: input.id };
+    }
+    throw err;
+  }
 }

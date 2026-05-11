@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  CapsuleApiError,
   capsuleDelete,
   capsuleGet,
   capsulePost,
@@ -192,6 +193,13 @@ export async function deleteEntry(input: z.infer<typeof deleteEntrySchema>) {
   if (input.confirm !== true) {
     throw new Error("delete_entry requires confirm: true");
   }
-  await capsuleDelete(`/entries/${input.id}`);
-  return { deleted: true, id: input.id };
+  try {
+    await capsuleDelete(`/entries/${input.id}`);
+    return { deleted: true, alreadyDeleted: false, id: input.id };
+  } catch (err) {
+    if (err instanceof CapsuleApiError && err.status === 404) {
+      return { deleted: true, alreadyDeleted: true, id: input.id };
+    }
+    throw err;
+  }
 }

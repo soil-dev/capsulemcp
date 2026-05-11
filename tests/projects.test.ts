@@ -98,7 +98,7 @@ describe("deleteProject", () => {
     const [url, options] = vi.mocked(fetch).mock.calls[0]!;
     expect(url).toContain("/kases/11");
     expect((options as RequestInit).method).toBe("DELETE");
-    expect(result).toEqual({ deleted: true, id: 11 });
+    expect(result).toEqual({ deleted: true, alreadyDeleted: false, id: 11 });
   });
 });
 

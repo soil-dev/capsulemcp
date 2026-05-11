@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  CapsuleApiError,
   capsuleDelete,
   capsuleGet,
   capsulePost,
@@ -149,6 +150,13 @@ export async function removeTrack(input: z.infer<typeof removeTrackSchema>) {
   if (input.confirm !== true) {
     throw new Error("remove_track requires confirm: true");
   }
-  await capsuleDelete(`/tracks/${input.trackId}`);
-  return { removed: true, trackId: input.trackId };
+  try {
+    await capsuleDelete(`/tracks/${input.trackId}`);
+    return { removed: true, alreadyRemoved: false, trackId: input.trackId };
+  } catch (err) {
+    if (err instanceof CapsuleApiError && err.status === 404) {
+      return { removed: true, alreadyRemoved: true, trackId: input.trackId };
+    }
+    throw err;
+  }
 }

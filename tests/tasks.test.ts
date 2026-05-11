@@ -134,7 +134,7 @@ describe("deleteTask", () => {
     const [url, options] = vi.mocked(fetch).mock.calls[0]!;
     expect(url).toContain("/tasks/6");
     expect((options as RequestInit).method).toBe("DELETE");
-    expect(result).toEqual({ deleted: true, id: 6 });
+    expect(result).toEqual({ deleted: true, alreadyDeleted: false, id: 6 });
   });
 });
 
