@@ -846,57 +846,65 @@ The owner/team half of the PUT semantic is **asymmetric**:
 - **Neither in body** (e.g. updating only `name`) → owner/team
   both preserved.
 
-### Rule B — PUT `/kases/{id}`: `stage` in body clears `owner`
+### Rule B — POST `/kases`: `stage` in body clears `owner`
 
-When `stage` is in the PUT body, Capsule clears `owner` to null,
-**regardless of whether `owner` is also in the body**. So even
-`update_project { ownerId: U, stageId: S }` results in
-`owner: null`. There is no body shape that includes `stage` and
-produces a non-null `owner` in one call.
-
-Team appears to be preserved across stage-only updates (the
-alpha.18 verification didn't flag team clearing in this path).
-
-### Rule C — POST `/kases`: `stage` in body clears `owner`
-
-Symmetric to Rule B but at create time. POSTing
+When `stage` is in the POST body, Capsule sets `owner` to null,
+regardless of whether `owner` is also in the body. POSTing
 `{ owner: {id: U}, stage: <S> }` produces `owner: null, team:
-<board-default>, stage: <S>`. The owner-clearing fires whenever
+<board-default>, stage: <S>`. The clearing fires whenever
 `stage` is present in the create body, regardless of `team`.
+
+The connector enforces this at the schema level — `create_project
+{ ownerId, stageId }` is rejected by `superRefine` with an error
+pointing callers at one of the two-call workflows below (see #14).
+
+**No equivalent PUT-side rule.** A `stage`-only `update_project`
+preserves both `owner` and `team` (verified live in alpha.19).
+An earlier (alpha.18-era) framing of "stage in PUT body clears
+owner" turned out to be unreproducible against the alpha.19
+codebase — possibly state-dependent (adding stage to an unstaged
+project vs. moving between stages), possibly an upstream Capsule
+behaviour shift, possibly a misobservation. The current
+connector trusts the observed runtime behaviour and does not
+fabricate `owner`/`team` into stage-only PUT bodies.
 
 ### How to reach `owner + team + stage` end state
 
-There is **no single API call** that reaches this state. The
-working workflow is **stage-first, owner-second**:
+There is no single create call that reaches this state (the
+schema rejects `create_project { ownerId, stageId }` because
+Capsule's POST drops the owner). Two two-call workflows work
+equivalently:
 
-1. `create_project { partyId, stageId }` (omit `ownerId` and
-   `teamId`) → `owner: null, team: <board default>, stage: <S>`.
-2. `update_project { ownerId: U }` (optionally `+ teamId: T` to
-   change away from the board default) → connector's RMW carries
-   the current team forward; Capsule preserves stage because
-   `stage` is not in this PUT body; owner is set.
-
-The reverse order ("create with owner+team, update with stage")
-does NOT work — the stage-only update clears the owner per
-Rule B.
+- **Stage-first:** `create_project { partyId, stageId }` then
+  `update_project { ownerId }` — connector's RMW carries the
+  current team forward; stage preserved because it's not in the
+  PUT body; owner is set.
+- **Owner-first:** `create_project { partyId, ownerId, teamId }`
+  then `update_project { stageId }` — Capsule preserves owner
+  and team across the stage-only update.
 
 `create_project { partyId, stageId, teamId }` (with an explicit
-non-default team but no owner) also fails: Capsule appears to
+non-default team but no owner) fails: Capsule appears to
 implicitly attach the API-token user as owner and 422 on
 owner-must-be-in-team. So `teamId` at create time is only safe
 when combined with a compatible `ownerId` AND without `stageId`.
 
-### Connector-side mitigation (alpha.18, refined in alpha.19)
+### Connector-side mitigation
 
 `update_project` does a **read-modify-write** when the caller
 supplies `ownerId` without `teamId`: fetches the current project,
 reads its `team`, includes it in the PUT body. This neutralises
-Rule A's "owner-in-body clears team" half.
+Rule A's "owner-in-body clears team" half — `update_project
+{ ownerId }` becomes a safe owner reassignment that preserves
+team scope.
 
 No equivalent mitigation for `teamId` alone (Capsule preserves
-owner server-side per Rule A) or `stageId` alone (the
-owner-clearing per Rule B is independent of body shape — adding
-`owner` to the same body doesn't preserve it, so RMW can't help).
+owner server-side per Rule A) or `stageId` alone (Capsule
+preserves both owner and team on stage-only PUTs).
+
+`create_project` is guarded by a `superRefine` that rejects the
+`ownerId + stageId` combo at schema validation time, pushing
+callers to one of the documented two-call workflows.
 
 ### Where in our code
 
@@ -908,12 +916,12 @@ Descriptions on `create_project.stageId` and
 `update_project.stageId` walk callers through the stage-first
 workflow.
 
-Captured as Bug 16 (Rule A PUT-clears-team), Bug 17 (Rule C
-POST-drops-owner), and an unnumbered Rule B clarification across
-the §15, §15-supplementary, alpha.17, and alpha.18 verification
-reports. Bug 16 closed at the connector level by RMW; Bugs 17
-and the Rule B / Rule C cluster documented as Capsule API limits
-with the stage-first workaround.
+Captured as Bug 16 (Rule A PUT-clears-team) and Bug 17 (Rule B
+POST-drops-owner) across the §15, §15-supplementary, and
+alpha.{17,18,19} verification reports. Bug 16 closed at the
+connector level via RMW; Bug 17 closed at the schema level via
+`superRefine`, with two equivalent documented two-call
+workflows.
 
 **Earlier wrong framings** worth flagging for future readers
 re-reading the alpha.{16,17,18}-era code:
@@ -927,12 +935,14 @@ re-reading the alpha.{16,17,18}-era code:
    is cleared" (alpha.17 §27) — wrong; Rule A is asymmetric, not
    pair-rewrite.
 4. "Bug 17 fixable by supplying `teamId` alongside `ownerId` at
-   create time" (alpha.17 descriptions) — wrong; Rule C fires
+   create time" (alpha.17 descriptions) — wrong; Rule B fires
    regardless of `teamId`.
 5. "Two-call workflow: create without stageId, then update with
-   stageId" (alpha.18 descriptions) — wrong; the update-with-stage
-   leg clears owner per Rule B. The actual workflow is stage-first,
-   owner-second.
+   stageId — and ONLY the stage-first ordering works" (alpha.18
+   descriptions) — partial; the alpha.18 framing claimed
+   `update_project { stageId }` clears owner, but alpha.19
+   verification couldn't reproduce that. Both orderings (stage-
+   first and owner-first) actually work.
 
 **No Capsule docs page mentions either rule explicitly.**
 Verified live in §15-supplementary and the alpha.17 verification

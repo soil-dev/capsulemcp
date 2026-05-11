@@ -11,6 +11,26 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Documented
+
+- **`update_project.stageId` description and NOTES §27**
+  corrected after the alpha.19 verification report. The alpha.19
+  description still warned about Capsule's PUT clearing `owner`
+  whenever `stage` is in the body — but alpha.19 verification
+  against the live tenant couldn't reproduce that. Both
+  stage-only and stage+other PUT calls preserved owner. The
+  "Rule B" PUT-side framing was unreproducible (possibly
+  state-dependent on the alpha.18 path, possibly an upstream
+  shift, possibly a misobservation). Description and NOTES now
+  reflect the runtime: stage-only updates preserve owner and
+  team; only the POST-side Rule B (create-time owner-drop when
+  `stage` is in the body) is still real and is guarded at the
+  schema level (#14).
+- **Both two-call workflows** (stage-first, owner-first) now
+  documented as equivalent for reaching `owner + team + stage`.
+  The alpha.18 description had claimed only stage-first worked;
+  alpha.19 verification confirmed owner-first works too.
+
 ## [1.0.0-alpha.19] — 2026-05-11
 
 Two strands of work since alpha.18:

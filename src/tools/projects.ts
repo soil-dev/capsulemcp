@@ -130,11 +130,10 @@ export const createProjectSchema = z.object({
     .optional()
     .describe(
       "Stage (board column) to place the project on. Discover IDs via list_stages — each stage belongs to one Board, so picking a stageId implicitly picks the board. If omitted, the project is created with no stage assignment (and won't appear on any board). The board's default team is auto-applied unless you supply an explicit `teamId`. " +
-        "WARNING: supplying `stageId` at create time forces `owner: null` regardless of other inputs (Capsule drops `ownerId` whenever `stage` is in the create body). " +
-        "RECOMMENDED workflow to reach owner+team+stage: " +
-        "(1) `create_project { partyId, stageId }` (no ownerId, no teamId) — lands at owner=null, team=board-default, stage=set; " +
-        "(2) `update_project { ownerId }` (optionally `+ teamId` if you want to change away from the board default) — the connector's read-modify-write on update preserves team and stage, sets the owner. " +
-        "The reverse order ('create with owner, update with stage') does NOT work — `update_project { stageId }` also clears owner. See `update_project.stageId` for that rule.",
+        "WARNING: supplying `stageId` at create time forces `owner: null` regardless of other inputs (Capsule drops `ownerId` whenever `stage` is in the create body). The schema rejects `create_project { ownerId, stageId }` to surface this clearly — see `create_project.ownerId`. " +
+        "Two equivalent workflows reach owner+team+stage (both work; pick whichever fits the call site): " +
+        "(A, stage-first) `create_project { partyId, stageId }` (no ownerId) then `update_project { ownerId }` — connector's read-modify-write preserves team and stage, sets the owner; " +
+        "(B, owner-first) `create_project { partyId, ownerId, teamId }` (no stageId) then `update_project { stageId }` — Capsule preserves owner and team across stage-only updates.",
     ),
   expectedCloseOn: z
     .string()
@@ -200,9 +199,8 @@ export const updateProjectSchema = z.object({
     .positive()
     .optional()
     .describe(
-      "Move the project to this stage (board column). Discover IDs via list_stages. " +
-        "WARNING (cross-board): Capsule does NOT validate that the new stage belongs to the project's current board — passing a stageId from a different board silently relocates the project across boards. Team and other board-derived defaults are NOT updated to match the new board. Verify against the project's current board (read the project first, list its board's stages) before passing a cross-board id. " +
-        "WARNING (owner-clearing): when `stage` is in the PUT body, Capsule clears the project's `owner` to null. The connector cannot work around this — supplying `ownerId` in the same call does not preserve the owner (Capsule strips owner whenever stage is in the body, regardless of other fields). To change stage on a project with an owner you want to keep: do `update_project { stageId }` first (owner gets cleared), then `update_project { ownerId }` to re-set it (the connector's read-modify-write preserves team and stage on the second call).",
+      "Move the project to this stage (board column). Discover IDs via list_stages. Owner and team are preserved across stage-only updates (Capsule's PUT semantic). " +
+        "WARNING (cross-board): Capsule does NOT validate that the new stage belongs to the project's current board — passing a stageId from a different board silently relocates the project across boards. Team and other board-derived defaults are NOT updated to match the new board. Verify against the project's current board (read the project first, list its board's stages) before passing a cross-board id.",
     ),
   expectedCloseOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("YYYY-MM-DD"),
   fields: z
