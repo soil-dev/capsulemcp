@@ -11,6 +11,8 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.0.0-alpha.9] — 2026-05-11
+
 ### Fixed
 
 - `add_additional_party` is now actually idempotent. Tool description
