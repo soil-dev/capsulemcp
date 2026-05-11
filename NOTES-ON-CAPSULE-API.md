@@ -807,48 +807,83 @@ accepted as if it were a normal update.
 
 ---
 
-## 27. Project `owner` + `team` constraint: team must be one the owner belongs to
+## 27. Project `owner` / `team` write semantics: absent fields are cleared, not preserved
 
 Capsule's data model allows a project to have one of three
-combinations:
+ownership shapes:
 
 1. **`owner` alone** — owned by a specific user, no team scope.
 2. **`team` alone** — no owner, scoped to a team.
-3. **`owner` + `team`** — both set, with the constraint that the
-   team must be a team the owner is a member of. Users can be
-   members of multiple teams, so this combination is
-   straightforwardly expressible whenever the operator has
-   organised users into teams sensibly.
+3. **`owner` + `team`** — both set; the owner must be a member of
+   the team (users can belong to multiple teams).
 
-What's NOT allowed: `owner + team` where the owner is not in that
-team. Capsule resolves this in writes by **clearing the team to
-null** rather than rejecting the request. The §15 production
-verification observed exactly this — `update_project { ownerId: <user X> }`
-on a project with `team: <Team Y>` resulted in `team: null` when
-user X wasn't a member of Team Y.
+Two non-obvious write-side rules govern how these shapes are
+reached via the API:
 
-**Practical effect:** caller intuition is often "setting an owner
-shouldn't affect the team". It does, when the new owner isn't in
-the current team. Workflows that need a specific (owner, team)
-pair require choosing an owner who is in the team. If the team
-gets cleared as a side effect of an owner change, the connector
-can NOT restore it — there is no `teamId` parameter on any tool,
-and re-setting the stage doesn't re-trigger the board's default-
-team behaviour (that fires only on project creation). Restoring
-a team membership requires Capsule's web UI.
+### Rule A — PUT `/kases/{id}`: `owner` and `team` are written as a pair
 
-**Where in our code:** [`src/tools/projects.ts`](src/tools/projects.ts)
-`create_project.ownerId` and `update_project.ownerId` describe
-the full rule and the team-clearing-as-side-effect behaviour.
-Captured as Bug 16 in the §15-16 production write-mode bug-report;
-closed by documentation. (The bug report initially framed the
-constraint as "owner and team are mutually exclusive" — that
-framing was wrong; the actual rule is "team must be a team the
-owner belongs to", and the §15 observation was the consequence of
-the chosen owner not being in the project's team.)
+When **either** `owner` or `team` appears in the PUT body, Capsule
+re-writes the (owner, team) pair atomically: whichever of the two
+is absent from the body is cleared to null. The §15-supplementary
+production verification observed this clearly: `update_project
+{ ownerId: U }` on a project with `team: T` produced `owner: U,
+team: null` even when user U was a member of team T (so the
+"compatibility" framing previously suspected here was wrong —
+the team clears regardless of compatibility, because the PUT body
+simply didn't mention `team`).
 
-**No Capsule docs page mentions this constraint explicitly.**
-Verified live in §15 production verification (alpha.15).
+A PUT body that touches **neither** `owner` nor `team` (e.g.
+updating only `name` or `status`) leaves both fields alone — the
+pair-rewrite is only triggered when one of them is in the body.
+
+**Practical effect on update:** to change one half of the pair
+while preserving the other, the connector must send both in the
+body. The connector exposes `teamId` on `update_project` for
+exactly this — supply both `ownerId` and `teamId` together. To
+intentionally unassign one half, pass `null` (e.g. `update_project
+{ ownerId: null }`) — the connector forwards an explicit
+`owner: null` matching Capsule's web UI "Unassign" dropdown.
+
+### Rule B — POST `/kases` resolves owner/team conflicts in favour of team
+
+Creating a project with `owner: { id: U }` AND a `stage` on a
+board whose default team is T: Capsule silently drops the owner
+and keeps the board's team. The resulting project has `owner:
+null, team: T`. This was §15-supplementary Bug 17: the connector
+forwards `ownerId` correctly, but Capsule itself overrides it
+when the board contributes a default team. The fix is to also
+supply an explicit `teamId` (which override is unclear without
+further probing, but the operator gets to be explicit).
+
+**Practical effect on create:** to land at owner=U, team=T in one
+call, supply `ownerId: U` and `teamId: T` explicitly. Don't rely
+on `stageId` to imply the team.
+
+### Where in our code
+
+[`src/tools/projects.ts`](src/tools/projects.ts) —
+`create_project` and `update_project` both expose `ownerId` and
+`teamId`. Body builder sends `{owner: {id}, team: {id}}`
+explicitly when supplied. Descriptions on each parameter capture
+both rules with WARNING blocks.
+
+Captured as Bug 16 (PUT clears absent team) and Bug 17 (POST
+drops owner when board-default team wins) in the §15 and §15-
+supplementary production bug reports; closed by adding the
+`teamId` parameter (alpha.17).
+
+**Earlier framings of this rule were wrong** and worth flagging
+for future readers re-reading the alpha.16-era code:
+- "owner and team are mutually exclusive" (initial §15 report) —
+  wrong; the three shapes are all valid.
+- "team must be a team the owner belongs to or it clears"
+  (alpha.16 NOTES §27 attempt) — wrong; the team clears whenever
+  it's absent from the PUT body, irrespective of any compatibility
+  check.
+
+**No Capsule docs page mentions either rule explicitly.**
+Verified live in §15 and §15-supplementary production
+verification.
 
 ---
 
@@ -862,7 +897,7 @@ Capsule applies depends on the entity type:
 | Party (person or organisation) | API-token owner | |
 | Opportunity | API-token owner | Does NOT inherit from linked party — even if the party is owned by user X, an opportunity created on that party with no ownerId comes out owned by the API-token owner. |
 | Task | API-token owner | Tasks have no `team` field at all. |
-| Project (kase) | **null** | Project gets its `team` field from the board's default team instead, when a `stageId` is supplied (see §27 for the owner/team mutual-exclusivity that follows). |
+| Project (kase) | **null** | Project gets its `team` field from the board's default team instead, when a `stageId` is supplied (see §27 for the PUT/POST owner-team write semantics). |
 
 The asymmetry is real and surprising. A common workflow — "create
 an opp for a party owned by user X" — does not produce a
