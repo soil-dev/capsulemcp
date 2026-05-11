@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { isReadOnly } from "./capsule/client.js";
 import { ICONS } from "./icon.js";
+import { registerTool } from "./server/register-tool.js";
 
 import {
   searchPartiesSchema, searchParties,
@@ -125,6 +126,15 @@ import {
  *
  * Returns the server uninitialised; the caller is responsible for
  * connecting it to a transport.
+ *
+ * Tool registrations use the `registerTool` helper from
+ * src/server/register-tool.ts to keep each registration on a single
+ * line — collapses the ~8-line `server.tool(...)` boilerplate that
+ * grew through the alpha series, and incidentally eliminates the
+ * "Edit collapses two adjacent string lines" footgun by putting the
+ * name and description on the same call. The one exception is
+ * `get_attachment` (further down): its handler does content-type-aware
+ * response shaping and stays as a raw `server.tool(...)` call.
  */
 export function createCapsuleMcpServer(): McpServer {
   const readOnly = isReadOnly();
@@ -138,586 +148,255 @@ export function createCapsuleMcpServer(): McpServer {
 
   // ── Parties ───────────────────────────────────────────────────────────────
 
-  server.tool(
-    "search_parties",
+  registerTool(server, "search_parties",
     "Free-text search or list people and organisations in Capsule CRM. Returns results in Capsule's default order (no sort parameter is supported here). For structured queries — 'most recent', 'tagged X', 'added this month' — use filter_parties instead.",
-    searchPartiesSchema.shape,
-    async (input) => {
-      const result = await searchParties(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    searchPartiesSchema, searchParties);
 
-  server.tool(
-    "filter_parties",
+  registerTool(server, "filter_parties",
     "Filter parties by structured conditions (date ranges, tags, fields). Use this — not search_parties — for questions like 'most recent client', 'parties added this week', 'parties tagged VIP'. Capsule's API does not support ad-hoc sort, but for 'most recent X' you can filter by a date field (e.g. {field: 'addedOn', operator: 'is within last', value: 30}) and pick the highest-id row from the result — Capsule IDs are monotonic, so newest id = newest record.",
-    filterPartiesSchema.shape,
-    async (input) => {
-      const result = await filterParties(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    filterPartiesSchema, filterParties);
 
-  server.tool(
-    "get_party",
+  registerTool(server, "get_party",
     "Fetch a single party (person or organisation) by its numeric ID.",
-    getPartySchema.shape,
-    async (input) => {
-      const result = await getParty(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    getPartySchema, getParty);
 
-  server.tool(
-    "get_parties",
+  registerTool(server, "get_parties",
     "Batch-fetch up to 10 parties by ID in a single call. Use this when Claude already knows several party IDs to avoid N round trips of get_party.",
-    getPartiesSchema.shape,
-    async (input) => {
-      const result = await getParties(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    getPartiesSchema, getParties);
 
-  server.tool(
-    "list_party_opportunities",
+  registerTool(server, "list_party_opportunities",
     "List all opportunities linked to a given party.",
-    listPartyOpportunitiesSchema.shape,
-    async (input) => {
-      const result = await listPartyOpportunities(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    listPartyOpportunitiesSchema, listPartyOpportunities);
 
-  server.tool(
-    "list_party_projects",
+  registerTool(server, "list_party_projects",
     "List all projects (cases) linked to a given party.",
-    listPartyProjectsSchema.shape,
-    async (input) => {
-      const result = await listPartyProjects(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    listPartyProjectsSchema, listPartyProjects);
 
-  server.tool(
-    "list_employees",
+  registerTool(server, "list_employees",
     "List the people who work at a given organisation party. Returns the parties whose `organisation` field references the given partyId. Use this to answer 'who works at X?' rather than enumerating all parties.",
-    listEmployeesSchema.shape,
-    async (input) => {
-      const result = await listEmployees(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    listEmployeesSchema, listEmployees);
 
-  server.tool(
-    "list_custom_fields",
+  registerTool(server, "list_custom_fields",
     "List custom field DEFINITIONS for an entity type (parties, opportunities, or projects/kases). Returns the schema — name, type, options for list-type fields, etc. — NOT the values on any specific record. To read values on a record, use get_party / get_opportunity / get_project with embed=fields.",
-    listCustomFieldsSchema.shape,
-    async (input) => {
-      const result = await listCustomFields(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    listCustomFieldsSchema, listCustomFields);
 
-  server.tool(
-    "get_custom_field",
+  registerTool(server, "get_custom_field",
     "Show a single custom field DEFINITION by id. Use list_custom_fields first to discover field ids.",
-    getCustomFieldSchema.shape,
-    async (input) => {
-      const result = await getCustomField(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    getCustomFieldSchema, getCustomField);
 
-  server.tool(
-    "list_deleted_parties",
+  registerTool(server, "list_deleted_parties",
     "Audit feature: list parties deleted on or after a given timestamp. The `since` parameter is REQUIRED (Capsule rejects the call without it). Response also includes a `restrictedParties` key — records the integration user can see were deleted but cannot read fully.",
-    listDeletedPartiesSchema.shape,
-    async (input) => {
-      const result = await listDeletedParties(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    listDeletedPartiesSchema, listDeletedParties);
 
   if (!readOnly) {
-    server.tool(
-      "create_party",
+    registerTool(server, "create_party",
       "Create a new person or organisation in Capsule CRM. For type='person', firstName or lastName is required (one suffices); the `name` field is silently ignored. For type='organisation', `name` is required and firstName/lastName/title/jobTitle are silently ignored. Passing organisationId pointing at a non-organisation party (e.g. another person's id) returns 404 'organisation not found' — Capsule filters lookups by type.",
-      createPartySchema.shape,
-      async (input) => {
-        const result = await createParty(input);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      },
-    );
+      createPartySchema, createParty);
 
-    server.tool(
-      "update_party",
+    registerTool(server, "update_party",
       "Update top-level fields on an existing party (about, firstName/lastName/name/title/jobTitle, ownerId). Only the fields you provide are changed. Child arrays (emailAddresses / phoneNumbers / addresses / websites) on this tool are APPEND-ONLY: items are merged into the existing list, not replaced. For surgical changes — replacing one email, removing one phone number, fixing the type on one address — use the dedicated atomic tools: add_party_email_address / remove_party_email_address_by_id (and the phone/address/website equivalents).",
-      updatePartySchema.shape,
-      async (input) => {
-        const result = await updateParty(input);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      },
-    );
+      updatePartySchema, updateParty);
 
-    server.tool(
-      "delete_party",
+    registerTool(server, "delete_party",
       "DESTRUCTIVE & IRREVERSIBLE: permanently delete a party (person or organisation). Cascades to all linked notes, tasks, opportunities, AND projects (kases). Deleting an organisation does NOT delete people linked to it via organisationId — their `organisation` field is silently cleared to null and they survive as standalone records. Requires confirm=true. Always read the party first with get_party and confirm with the user before calling. Idempotent on retry: response is `{deleted: true, alreadyDeleted: false, id}` on a fresh delete or `{deleted: true, alreadyDeleted: true, id}` if the party was already gone (Capsule's 404 is caught internally so reconciliation loops can re-issue safely).",
-      deletePartySchema.shape,
-      async (input) => {
-        const result = await deleteParty(input);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      },
-    );
+      deletePartySchema, deleteParty);
 
     // ── Atomic child-array operations (avoid append-only surprises) ─────
-    server.tool(
-      "add_party_email_address",
+    registerTool(server, "add_party_email_address",
       "Append a single email address to a party. Atomic — one PUT to Capsule. Use this instead of update_party.emailAddresses when you want to add exactly one entry; the bulk array on update_party is append-only and won't replace.",
-      addPartyEmailAddressSchema.shape,
-      async (input) => {
-        const result = await addPartyEmailAddress(input);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      },
-    );
+      addPartyEmailAddressSchema, addPartyEmailAddress);
 
-    server.tool(
-      "remove_party_email_address_by_id",
+    registerTool(server, "remove_party_email_address_by_id",
       "Remove one email-address entry from a party by its row id. Atomic. Discover the id via get_party — each entry in the emailAddresses array carries one. Use this to replace an existing entry: remove the old id, then call add_party_email_address with the new value (any associated server-side metadata on the old row is discarded along with the row). Idempotent on retry: response is `{removed: true, alreadyRemoved: false, partyId, emailAddressId, party}` on a fresh remove (the updated party shape is included) or `{removed: true, alreadyRemoved: true, partyId, emailAddressId}` if the row was already gone (Capsule's 404 is caught).",
-      removePartyEmailAddressByIdSchema.shape,
-      async (input) => {
-        const result = await removePartyEmailAddressById(input);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      },
-    );
+      removePartyEmailAddressByIdSchema, removePartyEmailAddressById);
 
-    server.tool(
-      "add_party_phone_number",
+    registerTool(server, "add_party_phone_number",
       "Append a single phone number to a party. Atomic — one PUT to Capsule. Use this instead of update_party.phoneNumbers for single-entry adds.",
-      addPartyPhoneNumberSchema.shape,
-      async (input) => {
-        const result = await addPartyPhoneNumber(input);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      },
-    );
+      addPartyPhoneNumberSchema, addPartyPhoneNumber);
 
-    server.tool(
-      "remove_party_phone_number_by_id",
+    registerTool(server, "remove_party_phone_number_by_id",
       "Remove one phone-number entry from a party by its row id. Atomic. Discover the id via get_party. Idempotent on retry: response is `{removed: true, alreadyRemoved: false, partyId, phoneNumberId, party}` on a fresh remove or `{removed: true, alreadyRemoved: true, partyId, phoneNumberId}` if the row was already gone.",
-      removePartyPhoneNumberByIdSchema.shape,
-      async (input) => {
-        const result = await removePartyPhoneNumberById(input);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      },
-    );
+      removePartyPhoneNumberByIdSchema, removePartyPhoneNumberById);
 
-    server.tool(
-      "add_party_address",
+    registerTool(server, "add_party_address",
       "Append a single postal address to a party. Atomic — one PUT to Capsule. Use this instead of update_party.addresses for single-entry adds.",
-      addPartyAddressSchema.shape,
-      async (input) => {
-        const result = await addPartyAddress(input);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      },
-    );
+      addPartyAddressSchema, addPartyAddress);
 
-    server.tool(
-      "remove_party_address_by_id",
+    registerTool(server, "remove_party_address_by_id",
       "Remove one address entry from a party by its row id. Atomic. Discover the id via get_party. Idempotent on retry: response is `{removed: true, alreadyRemoved: false, partyId, addressId, party}` on a fresh remove or `{removed: true, alreadyRemoved: true, partyId, addressId}` if the row was already gone.",
-      removePartyAddressByIdSchema.shape,
-      async (input) => {
-        const result = await removePartyAddressById(input);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      },
-    );
+      removePartyAddressByIdSchema, removePartyAddressById);
 
-    server.tool(
-      "add_party_website",
+    registerTool(server, "add_party_website",
       "Append a single website / social handle to a party. Atomic — one PUT to Capsule. Use this instead of update_party.websites for single-entry adds. The 'address' field is a URL when service='URL' or a handle (e.g. '@anton') for social services.",
-      addPartyWebsiteSchema.shape,
-      async (input) => {
-        const result = await addPartyWebsite(input);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      },
-    );
+      addPartyWebsiteSchema, addPartyWebsite);
 
-    server.tool(
-      "remove_party_website_by_id",
+    registerTool(server, "remove_party_website_by_id",
       "Remove one website entry from a party by its row id. Atomic. Discover the id via get_party. Idempotent on retry: response is `{removed: true, alreadyRemoved: false, partyId, websiteId, party}` on a fresh remove or `{removed: true, alreadyRemoved: true, partyId, websiteId}` if the row was already gone.",
-      removePartyWebsiteByIdSchema.shape,
-      async (input) => {
-        const result = await removePartyWebsiteById(input);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      },
-    );
+      removePartyWebsiteByIdSchema, removePartyWebsiteById);
   }
 
   // ── Opportunities ─────────────────────────────────────────────────────────
 
-  server.tool(
-    "search_opportunities",
+  registerTool(server, "search_opportunities",
     "Free-text search or list opportunities in Capsule CRM. Returns results in Capsule's default order (no sort parameter is supported here). For structured queries — 'most recent', 'won this quarter', 'in pipeline X at milestone Y' — use filter_opportunities instead.",
-    searchOpportunitiesSchema.shape,
-    async (input) => {
-      const result = await searchOpportunities(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    searchOpportunitiesSchema, searchOpportunities);
 
-  server.tool(
-    "filter_opportunities",
+  registerTool(server, "filter_opportunities",
     "Filter opportunities by structured conditions (milestone, value, close date, tags). Use this — not search_opportunities — for questions like 'last won deal', 'opportunities closed this month', 'pipeline X at milestone Y'. Capsule's API does not support ad-hoc sort, but for 'most recent X' you can filter by a date field (e.g. {field: 'closedOn', operator: 'is within last', value: 90}) and pick the highest-id row — Capsule IDs are monotonic, so newest id = newest record.",
-    filterOpportunitiesSchema.shape,
-    async (input) => {
-      const result = await filterOpportunities(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    filterOpportunitiesSchema, filterOpportunities);
 
-  server.tool(
-    "get_opportunity",
+  registerTool(server, "get_opportunity",
     "Fetch a single opportunity by its numeric ID.",
-    getOpportunitySchema.shape,
-    async (input) => {
-      const result = await getOpportunity(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    getOpportunitySchema, getOpportunity);
 
-  server.tool(
-    "get_opportunities",
+  registerTool(server, "get_opportunities",
     "Batch-fetch up to 10 opportunities by ID in a single call.",
-    getOpportunitiesSchema.shape,
-    async (input) => {
-      const result = await getOpportunities(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    getOpportunitiesSchema, getOpportunities);
 
-  server.tool(
-    "list_deleted_opportunities",
+  registerTool(server, "list_deleted_opportunities",
     "Audit feature: list opportunities deleted on or after a given timestamp. The `since` parameter is REQUIRED. Response also includes a `restrictedOpportunities` key for records the integration user can't read fully.",
-    listDeletedOpportunitiesSchema.shape,
-    async (input) => {
-      const result = await listDeletedOpportunities(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    listDeletedOpportunitiesSchema, listDeletedOpportunities);
 
-  server.tool(
-    "list_additional_parties",
+  registerTool(server, "list_additional_parties",
     "List secondary party links on an opportunity or project. The 'main' party is on the entity itself (opportunity.party); additional parties are e.g. partners, consultants, or referrers also involved in the deal. Set entity to 'opportunities' or 'kases' (Capsule's term for projects).",
-    listAdditionalPartiesSchema.shape,
-    async (input) => {
-      const result = await listAdditionalParties(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    listAdditionalPartiesSchema, listAdditionalParties);
 
-  server.tool(
-    "list_associated_projects",
+  registerTool(server, "list_associated_projects",
     "List projects (cases) associated with a given opportunity. The inverse direction (project → opportunity) is on each project's `opportunity` field directly.",
-    listAssociatedProjectsSchema.shape,
-    async (input) => {
-      const result = await listAssociatedProjects(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    listAssociatedProjectsSchema, listAssociatedProjects);
 
   if (!readOnly) {
-    server.tool(
-      "create_opportunity",
+    registerTool(server, "create_opportunity",
       "Create a new opportunity linked to a party and a pipeline milestone.",
-      createOpportunitySchema.shape,
-      async (input) => {
-        const result = await createOpportunity(input);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      },
-    );
+      createOpportunitySchema, createOpportunity);
 
-    server.tool(
-      "update_opportunity",
+    registerTool(server, "update_opportunity",
       "Update fields on an existing opportunity. Only the fields you provide are changed. Closed (Won/Lost) opportunities ARE editable — Capsule does not enforce closed-record immutability, so `value`, `description`, etc. can be changed on a Won opp without warning. If the workflow needs historical revenue numbers to be stable, enforce that caller-side.",
-      updateOpportunitySchema.shape,
-      async (input) => {
-        const result = await updateOpportunity(input);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      },
-    );
+      updateOpportunitySchema, updateOpportunity);
 
-    server.tool(
-      "delete_opportunity",
+    registerTool(server, "delete_opportunity",
       "DESTRUCTIVE & IRREVERSIBLE: permanently delete an opportunity. Requires confirm=true. Always read the opportunity first with get_opportunity and confirm with the user before calling. Idempotent on retry: response is `{deleted: true, alreadyDeleted: false, id}` on a fresh delete or `{deleted: true, alreadyDeleted: true, id}` if the opportunity was already gone.",
-      deleteOpportunitySchema.shape,
-      async (input) => {
-        const result = await deleteOpportunity(input);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      },
-    );
+      deleteOpportunitySchema, deleteOpportunity);
   }
 
   // ── Projects ──────────────────────────────────────────────────────────────
 
-  server.tool(
-    "list_projects",
+  registerTool(server, "list_projects",
     "List projects (cases) in Capsule CRM, optionally filtered by status. Returns results in Capsule's default order (no sort parameter is supported here). For structured queries — 'most recent project', 'projects opened this month', 'projects tagged X' — use filter_projects instead.",
-    listProjectsSchema.shape,
-    async (input) => {
-      const result = await listProjects(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    listProjectsSchema, listProjects);
 
-  server.tool(
-    "filter_projects",
+  registerTool(server, "filter_projects",
     "Filter projects (cases) by structured conditions (date ranges, status, tags, owner). Use this — not list_projects — for questions like 'most recent project', 'projects opened this month'. Capsule's API does not support ad-hoc sort, but for 'most recent X' you can filter by a date field and pick the highest-id row — Capsule IDs are monotonic, so newest id = newest record.",
-    filterProjectsSchema.shape,
-    async (input) => {
-      const result = await filterProjects(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    filterProjectsSchema, filterProjects);
 
-  server.tool(
-    "get_project",
+  registerTool(server, "get_project",
     "Fetch a single project (case) by its numeric ID.",
-    getProjectSchema.shape,
-    async (input) => {
-      const result = await getProject(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    getProjectSchema, getProject);
 
-  server.tool(
-    "get_projects",
+  registerTool(server, "get_projects",
     "Batch-fetch up to 10 projects (cases) by ID in a single call.",
-    getProjectsSchema.shape,
-    async (input) => {
-      const result = await getProjects(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    getProjectsSchema, getProjects);
 
-  server.tool(
-    "list_deleted_projects",
+  registerTool(server, "list_deleted_projects",
     "Audit feature: list projects deleted on or after a given timestamp. The `since` parameter is REQUIRED. Response also includes a `restrictedKases` key for records the integration user can't read fully.",
-    listDeletedProjectsSchema.shape,
-    async (input) => {
-      const result = await listDeletedProjects(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    listDeletedProjectsSchema, listDeletedProjects);
 
   if (!readOnly) {
-    server.tool(
-      "create_project",
+    registerTool(server, "create_project",
       "Create a new project (case) in Capsule CRM linked to a party.",
-      createProjectSchema.shape,
-      async (input) => {
-        const result = await createProject(input);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      },
-    );
+      createProjectSchema, createProject);
 
-    server.tool(
-      "update_project",
+    registerTool(server, "update_project",
       "Update fields on an existing project. Only the fields you provide are changed. Use status='CLOSED' to close a project. CLOSED projects remain fully editable — Capsule does not enforce closed-record immutability. Stage moves and description edits on a CLOSED project are accepted without warning.",
-      updateProjectSchema.shape,
-      async (input) => {
-        const result = await updateProject(input);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      },
-    );
+      updateProjectSchema, updateProject);
 
-    server.tool(
-      "delete_project",
+    registerTool(server, "delete_project",
       "DESTRUCTIVE & IRREVERSIBLE: permanently delete a project (case). Prefer update_project with status='CLOSED' to close a project while preserving history. Requires confirm=true. Always read the project first with get_project and confirm with the user before calling. Idempotent on retry: response is `{deleted: true, alreadyDeleted: false, id}` on a fresh delete or `{deleted: true, alreadyDeleted: true, id}` if the project was already gone.",
-      deleteProjectSchema.shape,
-      async (input) => {
-        const result = await deleteProject(input);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      },
-    );
+      deleteProjectSchema, deleteProject);
 
     // ── Relationships (writes) ──────────────────────────────────────────────
-
-    server.tool(
-      "add_additional_party",
+    registerTool(server, "add_additional_party",
       "Link an existing party as an additional (secondary) party on an opportunity or project. The 'main' party is set via update_opportunity / update_project; this adds *additional* parties beyond the main one. Idempotent — re-adding a linked party is harmless. Response: `{linked: true, alreadyLinked: false}` on a fresh link, `{linked: true, alreadyLinked: true}` if the party was already linked (Capsule's 422 'already a contact' / 'already related' is caught internally and converted).",
-      addAdditionalPartySchema.shape,
-      async (input) => {
-        const result = await addAdditionalParty(input);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      },
-    );
+      addAdditionalPartySchema, addAdditionalParty);
 
-    server.tool(
-      "remove_additional_party",
+    registerTool(server, "remove_additional_party",
       "Remove an additional-party link between an opportunity/project and a party. The party itself is NOT deleted. Requires confirm=true. Reversible by re-adding via add_additional_party. Idempotent on retry: response is `{removed: true, alreadyRemoved: false, entity, entityId, partyId}` on a fresh remove or `{removed: true, alreadyRemoved: true, ...}` if the link was already gone (Capsule's 404 is caught and converted).",
-      removeAdditionalPartySchema.shape,
-      async (input) => {
-        const result = await removeAdditionalParty(input);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      },
-    );
+      removeAdditionalPartySchema, removeAdditionalParty);
 
     // ── Tracks (writes) ─────────────────────────────────────────────────────
-
-    server.tool(
-      "apply_track",
+    registerTool(server, "apply_track",
       "Apply a track definition to an opportunity or project. Creates a track instance and auto-creates tasks per the track's task definitions; tasks' `dueOn` is computed from `startDate` (defaults to today) plus each task's `daysAfter` offset. Use list_track_definitions to discover available templates. NOT IDEMPOTENT — applying the same trackDefinitionId twice creates two independent track instances and two sets of auto-tasks (no de-duplication). If you want to apply only once, call list_entity_tracks first and check for an existing instance with the same trackDefinition.id (but mind that list_entity_tracks can include auto-applied tracks from board stage rules, not just manual applies).",
-      applyTrackSchema.shape,
-      async (input) => {
-        const result = await applyTrack(input);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      },
-    );
+      applyTrackSchema, applyTrack);
 
-    server.tool(
-      "update_track",
+    registerTool(server, "update_track",
       "Update a track instance. Capsule's PUT semantics are partial — provide only the fields you want to change in `fields`. Common: { complete: true } to mark a track completed.",
-      updateTrackSchema.shape,
-      async (input) => {
-        const result = await updateTrack(input);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      },
-    );
+      updateTrackSchema, updateTrack);
 
-    server.tool(
-      "remove_track",
+    registerTool(server, "remove_track",
       "Remove a track instance from its entity. Tasks already created by the track stay on the entity and must be deleted separately if desired. Requires confirm=true. Idempotent on retry: response is `{removed: true, alreadyRemoved: false, trackId}` on a fresh remove or `{removed: true, alreadyRemoved: true, trackId}` if the track was already gone.",
-      removeTrackSchema.shape,
-      async (input) => {
-        const result = await removeTrack(input);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      },
-    );
+      removeTrackSchema, removeTrack);
   }
 
   // ── Tasks ─────────────────────────────────────────────────────────────────
 
-  server.tool(
-    "list_tasks",
+  registerTool(server, "list_tasks",
     "List tasks in Capsule CRM. Defaults to OPEN tasks; pass status to broaden. Optionally filter to a specific owner via ownerId. Capsule does not expose a due-date filter on this endpoint — for that use filter_* tools elsewhere or iterate.",
-    listTasksSchema.shape,
-    async (input) => {
-      const result = await listTasks(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    listTasksSchema, listTasks);
 
-  server.tool(
-    "get_task",
+  registerTool(server, "get_task",
     "Fetch a single task by its numeric ID.",
-    getTaskSchema.shape,
-    async (input) => {
-      const result = await getTask(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    getTaskSchema, getTask);
 
-  server.tool(
-    "get_tasks",
+  registerTool(server, "get_tasks",
     "Batch-fetch up to 10 tasks by ID in a single call.",
-    getTasksSchema.shape,
-    async (input) => {
-      const result = await getTasks(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    getTasksSchema, getTasks);
 
   if (!readOnly) {
-    server.tool(
-      "create_task",
+    registerTool(server, "create_task",
       "Create a new task, optionally linked to a party, opportunity, or project.",
-      createTaskSchema.shape,
-      async (input) => {
-        const result = await createTask(input);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      },
-    );
+      createTaskSchema, createTask);
 
-    server.tool(
-      "update_task",
+    registerTool(server, "update_task",
       "Update fields on an existing task. Only the fields you provide are changed. To mark a task done prefer complete_task.",
-      updateTaskSchema.shape,
-      async (input) => {
-        const result = await updateTask(input);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      },
-    );
+      updateTaskSchema, updateTask);
 
-    server.tool(
-      "complete_task",
+    registerTool(server, "complete_task",
       "Mark a task as done / completed / finished. Sets status=COMPLETED on the task, populating completedBy and completedAt while preserving the task in history (unlike delete_task which removes it permanently). Use this whenever a user says 'mark done', 'complete', 'finish', or similar — equivalent to update_task with status:COMPLETED but more discoverable.",
-      completeTaskSchema.shape,
-      async (input) => {
-        const result = await completeTask(input);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      },
-    );
+      completeTaskSchema, completeTask);
 
-    server.tool(
-      "delete_task",
+    registerTool(server, "delete_task",
       "DESTRUCTIVE & IRREVERSIBLE: permanently delete a task. Prefer complete_task to mark a task done while keeping it in history. Requires confirm=true. Idempotent on retry: response is `{deleted: true, alreadyDeleted: false, id}` on a fresh delete or `{deleted: true, alreadyDeleted: true, id}` if the task was already gone.",
-      deleteTaskSchema.shape,
-      async (input) => {
-        const result = await deleteTask(input);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      },
-    );
+      deleteTaskSchema, deleteTask);
   }
 
   // ── Entries (notes, captured emails, completed-task records) ──────────────
 
-  server.tool(
-    "list_party_entries",
+  registerTool(server, "list_party_entries",
     "List timeline entries (notes, captured emails, completed-task records) for a party. Use this to read the conversation history with a contact or organisation.",
-    listPartyEntriesSchema.shape,
-    async (input) => {
-      const result = await listPartyEntries(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    listPartyEntriesSchema, listPartyEntries);
 
-  server.tool(
-    "list_opportunity_entries",
+  registerTool(server, "list_opportunity_entries",
     "List timeline entries (notes, captured emails, completed-task records) for an opportunity.",
-    listOpportunityEntriesSchema.shape,
-    async (input) => {
-      const result = await listOpportunityEntries(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    listOpportunityEntriesSchema, listOpportunityEntries);
 
-  server.tool(
-    "list_project_entries",
+  registerTool(server, "list_project_entries",
     "List timeline entries (notes, captured emails, completed-task records) for a project (case).",
-    listProjectEntriesSchema.shape,
-    async (input) => {
-      const result = await listProjectEntries(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    listProjectEntriesSchema, listProjectEntries);
 
-  server.tool(
-    "get_entry",
+  registerTool(server, "get_entry",
     "Fetch a single timeline entry by its numeric ID. Returns full content (note body, email subject + body, etc.).",
-    getEntrySchema.shape,
-    async (input) => {
-      const result = await getEntry(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    getEntrySchema, getEntry);
 
-  server.tool(
-    "list_entries",
+  registerTool(server, "list_entries",
     "Global timeline feed: every note, captured email, and completed-task record across the whole Capsule account, paginated. Default order is most-recent-first. Use this for 'what activity happened today/this week across the company?' rather than iterating list_party_entries / list_opportunity_entries / list_project_entries.",
-    listEntriesSchema.shape,
-    async (input) => {
-      const result = await listEntries(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    listEntriesSchema, listEntries);
+
+  // ── Attachments ──────────────────────────────────────────────────────────
+  //
+  // get_attachment can't use registerTool because its handler does
+  // content-type-aware response shaping (image → MCP image content,
+  // text → text content, binary → metadata + base64). The raw
+  // server.tool call stays here so the content shape can vary.
 
   server.tool(
     "get_attachment",
@@ -818,263 +497,119 @@ export function createCapsuleMcpServer(): McpServer {
   );
 
   if (!readOnly) {
-    server.tool(
-      "add_note",
+    registerTool(server, "add_note",
       "Add a note to a party, opportunity, or project. Provide exactly one of partyId, opportunityId, or projectId.",
-      addNoteSchema.shape,
-      async (input) => {
-        const result = await addNote(input);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      },
-    );
+      addNoteSchema, addNote);
 
-    server.tool(
-      "update_entry",
+    registerTool(server, "update_entry",
       "Edit an existing timeline entry — typically a note. Provide the entry id plus the fields you want to change (content, subject). Only the fields you supply are modified; other fields keep their current values. Cannot change the entry's type. Use this to correct or extend a note added previously.",
-      updateEntrySchema.shape,
-      async (input) => {
-        const result = await updateEntry(input);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      },
-    );
+      updateEntrySchema, updateEntry);
 
-    server.tool(
-      "upload_attachment",
+    registerTool(server, "upload_attachment",
       "Upload a file as a new note attachment, linked to a party, opportunity, or project. Provide the file as base64-encoded `dataBase64` along with `filename` and `contentType` (MIME). Also provide exactly one of partyId / opportunityId / projectId to anchor the note. Optionally pass `content` to set the note body (defaults to '[attachment]'). Two-step orchestration server-side: bytes upload → token → note creation. Adding to an existing entry is not supported.",
-      uploadAttachmentSchema.shape,
-      async (input) => {
-        const result = await uploadAttachment(input);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      },
-    );
+      uploadAttachmentSchema, uploadAttachment);
 
-    server.tool(
-      "delete_entry",
+    registerTool(server, "delete_entry",
       "DESTRUCTIVE & IRREVERSIBLE: permanently delete a note (or other entry) by its ID. Requires confirm=true. Idempotent on retry: response is `{deleted: true, alreadyDeleted: false, id}` on a fresh delete or `{deleted: true, alreadyDeleted: true, id}` if the entry was already gone.",
-      deleteEntrySchema.shape,
-      async (input) => {
-        const result = await deleteEntry(input);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      },
-    );
+      deleteEntrySchema, deleteEntry);
   }
 
   // ── Pipelines & milestones ────────────────────────────────────────────────
 
-  server.tool(
-    "list_pipelines",
+  registerTool(server, "list_pipelines",
     "List all sales pipelines defined in Capsule CRM.",
-    listPipelinesSchema.shape,
-    async (input) => {
-      const result = await listPipelines(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    listPipelinesSchema, listPipelines);
 
-  server.tool(
-    "list_milestones",
+  registerTool(server, "list_milestones",
     "List all milestones (stages) within a specific opportunity pipeline.",
-    listMilestonesSchema.shape,
-    async (input) => {
-      const result = await listMilestones(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    listMilestonesSchema, listMilestones);
 
   // ── Boards & stages (project workflow metadata) ───────────────────────────
   //
   // Boards/stages are to projects what pipelines/milestones are to
   // opportunities. A project sits at one stage at a time on one board.
 
-  server.tool(
-    "list_boards",
+  registerTool(server, "list_boards",
     "List all project (kase) boards defined in Capsule. A board is a grouping of stages that projects flow through — the project equivalent of an opportunity pipeline.",
-    listBoardsSchema.shape,
-    async (input) => {
-      const result = await listBoards(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    listBoardsSchema, listBoards);
 
-  server.tool(
-    "list_stages",
+  registerTool(server, "list_stages",
     "List project stages. Without arguments returns every stage across every board (each carries a .board reference). Pass boardId to scope to one specific board.",
-    listStagesSchema.shape,
-    async (input) => {
-      const result = await listStages(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    listStagesSchema, listStages);
 
   // ── Reference metadata (teams, lost reasons, activity types) ──────────────
 
-  server.tool(
-    "list_teams",
+  registerTool(server, "list_teams",
     "List all teams configured in the Capsule account. Useful as input for filter_* queries that scope by team, and for reporting.",
-    listTeamsSchema.shape,
-    async (input) => {
-      const result = await listTeams(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    listTeamsSchema, listTeams);
 
-  server.tool(
-    "list_lostreasons",
+  registerTool(server, "list_lostreasons",
     "List all configured opportunity-loss reasons (e.g. 'Poor Qualification', 'Lost to competitor'). Useful for analysing closed-lost opportunities by reason.",
-    listLostReasonsSchema.shape,
-    async (input) => {
-      const result = await listLostReasons(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    listLostReasonsSchema, listLostReasons);
 
-  server.tool(
-    "list_activitytypes",
+  registerTool(server, "list_activitytypes",
     "List all configured activity types (e.g. Call, Meeting, Email). These are the categories used when logging timeline entries.",
-    listActivityTypesSchema.shape,
-    async (input) => {
-      const result = await listActivityTypes(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    listActivityTypesSchema, listActivityTypes);
 
-  server.tool(
-    "list_categories",
+  registerTool(server, "list_categories",
     "List configured entry/task categories (Call, Email, Meeting, Follow-up, etc.) with their colours. Used to label and filter timeline entries and tasks.",
-    listCategoriesSchema.shape,
-    async (input) => {
-      const result = await listCategories(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    listCategoriesSchema, listCategories);
 
-  server.tool(
-    "list_track_definitions",
+  registerTool(server, "list_track_definitions",
     "List workflow track definitions: reusable templates that auto-create tasks at configured intervals when applied to an opportunity or project. Each track includes nested taskDefinitions specifying what to create and when. Use this to understand what automations exist.",
-    listTrackDefinitionsSchema.shape,
-    async (input) => {
-      const result = await listTrackDefinitions(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    listTrackDefinitionsSchema, listTrackDefinitions);
 
-  server.tool(
-    "list_entity_tracks",
+  registerTool(server, "list_entity_tracks",
     "List track INSTANCES on a specific record — i.e., which tracks have been applied to this opportunity / project / party. Distinct from list_track_definitions, which lists the templates. NOTE: some boards have stage-triggered automation that auto-applies tracks when an entity enters specific stages — tracks returned here may include BOTH manually-applied tracks (via apply_track) and auto-applied tracks from Capsule board rules. To distinguish, compare each track's `trackDefinition.id` against your application's apply_track call history.",
-    listEntityTracksSchema.shape,
-    async (input) => {
-      const result = await listEntityTracks(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    listEntityTracksSchema, listEntityTracks);
 
-  server.tool(
-    "show_track",
+  registerTool(server, "show_track",
     "Fetch a single track instance by id. Returns the minimal Capsule projection: id, description, trackDateOn, direction, and the array of tasks attached to the track. Capsule's GET /tracks/{id} does NOT include a trackDefinition link, an entity reference, or a completion field — to find the entity a track is applied to, use list_entity_tracks (which lists track instances by their parent entity); to check completion, the track-tasks' own statuses are the proxy.",
-    showTrackSchema.shape,
-    async (input) => {
-      const result = await showTrack(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    showTrackSchema, showTrack);
 
-  server.tool(
-    "list_goals",
+  registerTool(server, "list_goals",
     "List sales / activity goals configured in the account (per-user or per-team revenue or activity targets). Returns an empty list for accounts that don't use the Goals feature.",
-    listGoalsSchema.shape,
-    async (input) => {
-      const result = await listGoals(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    listGoalsSchema, listGoals);
 
-  server.tool(
-    "get_site",
+  registerTool(server, "get_site",
     "Return the Capsule account this connector is currently authenticated against (subdomain, display name, URL). Diagnostic for 'which Capsule account is this?'. For the PAT owner's user identity, use get_current_user.",
-    getSiteSchema.shape,
-    async (input) => {
-      const result = await getSite(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    getSiteSchema, getSite);
 
   // ── Saved filters (UI-defined filters; support sort, unlike ad-hoc) ───────
 
-  server.tool(
-    "list_saved_filters",
+  registerTool(server, "list_saved_filters",
     "List all filters that users have saved in Capsule's web UI for an entity type. Saved filters are reusable — they bundle conditions, columns, and (importantly) sort. Use this to discover what queries are already configured before building a one-off filter_* call.",
-    listSavedFiltersSchema.shape,
-    async (input) => {
-      const result = await listSavedFilters(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    listSavedFiltersSchema, listSavedFilters);
 
-  server.tool(
-    "run_saved_filter",
+  registerTool(server, "run_saved_filter",
     "Run a saved filter by id and return its results, paginated. Unlike filter_parties / filter_opportunities / filter_projects (which use the ad-hoc filter endpoint and CANNOT sort), saved filters DO support sort — the orderBy is configured in Capsule's web UI when the filter is created. So 'most recent X by Y' questions are answerable in one call IF a saved filter exists; use list_saved_filters first to find one.",
-    runSavedFilterSchema.shape,
-    async (input) => {
-      const result = await runSavedFilter(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    runSavedFilterSchema, runSavedFilter);
 
   // ── Tags ──────────────────────────────────────────────────────────────────
 
-  server.tool(
-    "list_tags",
+  registerTool(server, "list_tags",
     "List all tags available for a given entity type (parties, opportunities, or kases).",
-    listTagsSchema.shape,
-    async (input) => {
-      const result = await listTags(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    listTagsSchema, listTags);
 
   if (!readOnly) {
-    server.tool(
-      "add_tag",
+    registerTool(server, "add_tag",
       "Attach a tag to a party, opportunity, or project (kase) by NAME. Capsule resolves to an existing tag in the tenant or creates a fresh one with this name. Matching is case-insensitive — 'Zendesk' and 'zendesk' attach the same tag, preserving the canonical casing from whichever variant was created first. To avoid creating a genuinely-distinct near-duplicate (e.g. 'Zendesk' vs 'Zen Desk'), call list_tags first and reuse the exact name. Idempotent — re-attaching an already-attached tag is harmless. To DETACH a tag, use remove_tag_by_id with the tag's id (read via get_party/get_opportunity/get_project with embed='tags').",
-      addTagSchema.shape,
-      async (input) => {
-        const result = await addTag(input);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      },
-    );
+      addTagSchema, addTag);
 
-    server.tool(
-      "remove_tag_by_id",
+    registerTool(server, "remove_tag_by_id",
       "Detach a tag from a party, opportunity, or project (kase). Atomic — one PUT to Capsule. The `tagId` parameter is the tag's id, readable via get_party/get_opportunity/get_project with embed='tags' (list_tags returns the same ids and also works, but reading via embed first confirms the tag is actually attached to this entity). The tag definition itself remains in the tenant for other entities that still share it. Idempotent on retry: response is `{removed: true, alreadyRemoved: false, entity, entityId, tagId, ...<updated entity>}` on a fresh detach or `{removed: true, alreadyRemoved: true, entity, entityId, tagId}` if the tag was already detached (Capsule's 422 'tag not found to delete' is caught and converted).",
-      removeTagByIdSchema.shape,
-      async (input) => {
-        const result = await removeTagById(input);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      },
-    );
+      removeTagByIdSchema, removeTagById);
   }
 
   // ── Users ─────────────────────────────────────────────────────────────────
 
-  server.tool(
-    "list_users",
+  registerTool(server, "list_users",
     "List all users in the Capsule account.",
-    listUsersSchema.shape,
-    async (input) => {
-      const result = await listUsers(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    listUsersSchema, listUsers);
 
-  server.tool(
-    "get_current_user",
+  registerTool(server, "get_current_user",
     "Show the user owning the API token this connector is using. Useful for audit ('under whose Capsule identity is the connector running?') and for confirming a token rotation moved ownership to the expected account. Wraps Capsule's GET /users/current — note the endpoint is /users/current, not /users/me.",
-    getCurrentUserSchema.shape,
-    async (input) => {
-      const result = await getCurrentUser(input);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    },
-  );
+    getCurrentUserSchema, getCurrentUser);
 
   return server;
 }
