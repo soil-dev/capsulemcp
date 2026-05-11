@@ -11,6 +11,34 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Security
+
+- **Removed `add_note.creatorId`** (issue #11). The parameter let
+  any caller with write access record a note attributed to an
+  arbitrary Capsule user, not just the API-token owner. Combined
+  with `entryAt` backdating and a shared-connector deployment
+  (where the OAuth client secret might leak or multiple humans
+  drive the same connector), this was a trivial audit-attribution
+  spoofing surface. The use cases it was added for (historical
+  imports, on-behalf-of automation) are real but niche; surfacing
+  the override by default is the wrong trade-off. Removed from
+  the schema entirely; `addNote` no longer reads or forwards
+  `creatorId`. Notes are now always attributed to the API-token
+  owner. The `add_note` schema and the tool description on the
+  server registration both note the removal explicitly so any
+  caller carrying old call shapes gets a clear breadcrumb.
+- A future env-gated re-introduction (`CAPSULE_MCP_ALLOW_CREATOR_OVERRIDE=yes`)
+  is parked in IDEAS.md for deployments that actually need the
+  override and are willing to opt in explicitly.
+
+### Tests
+
+- The alpha.8 regression test for `creatorId → creator: {id}`
+  mapping was replaced with a negative regression test confirming
+  the schema drops the parameter (zod's default unknown-key
+  behaviour) and that no `creator` field reaches Capsule's request
+  body.
+
 ## [1.0.0-alpha.13] — 2026-05-11
 
 Refactor-heavy alpha, no behaviour change. Sets up cleaner internals

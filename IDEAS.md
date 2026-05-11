@@ -293,4 +293,41 @@ cleanup is the documented path.
 
 ---
 
+## Env-gated `add_note.creatorId` (on-behalf-of authoring)
+
+`creatorId` shipped briefly on `add_note` in alpha.8 to support
+logging notes attributed to a specific Capsule user other than the
+API-token owner — e.g. recording that Kajal attended a meeting,
+attributed to Kajal, even though Anton's token is making the call.
+Removed in alpha.13 after a security review (issue #11) found that
+the override + natural-language write access + a shared connector =
+trivial audit-attribution spoofing.
+
+The legitimate use cases haven't gone away:
+- Migrating historical notes from another CRM where authorship is
+  recorded per-note rather than per-importer
+- A pure-automation flow where a service account writes notes that
+  should logically be attributed to the team member whose actions
+  the automation reflects
+
+**When to consider re-adding**: a deployment surfaces one of those
+workflows and is willing to opt in explicitly.
+
+**Implementation sketch**: gate behind an env var
+`CAPSULE_MCP_ALLOW_CREATOR_OVERRIDE=yes`, default off. When the
+gate is set:
+- `addNoteSchema` includes a `creatorId: z.number().int().positive().optional()` field, with a description that names the audit-implication openly.
+- Handler maps `creatorId → entry.creator: {id}` as alpha.8 did.
+
+When the gate is unset (default):
+- The schema does NOT include the parameter at all (so Claude can't see it as an option).
+- The handler doesn't map anything.
+
+This keeps the security default safe and surfaces the feature only
+where an operator has explicitly green-lit it. The DEPLOY.md
+operational notes should describe the audit implication of enabling
+the gate, so the opt-in is informed.
+
+---
+
 ## (Add new entries above this line.)

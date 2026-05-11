@@ -110,20 +110,12 @@ export const addNoteSchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})$/)
     .optional()
     .describe(
-      "ISO-8601 timestamp for when this note actually happened (e.g. '2024-03-15T14:30:00Z'). Defaults to now. Use this for backdating historical notes when migrating from another system. `entryAt` is preserved across subsequent update_entry calls; only `updatedAt` advances on edits.",
-    ),
-  creatorId: z
-    .number()
-    .int()
-    .positive()
-    .optional()
-    .describe(
-      "User ID to record as the note's creator. Defaults to the user owning the API token. Use this to log a note on behalf of a colleague (e.g. record that Kajal attended a meeting, attributed to Kajal, even though Anton is making the API call). Discover IDs via list_users.",
+      "ISO-8601 timestamp for when this note actually happened (e.g. '2024-03-15T14:30:00Z'). Defaults to now. Use this for backdating historical notes when migrating from another system. `entryAt` is preserved across subsequent update_entry calls; only `updatedAt` advances on edits. Note attribution still flows to the API-token owner — there is no way to record a note as authored by a different user via this connector (a `creatorId` override was shipped briefly in alpha.8 but removed in alpha.13 after a security review found it enables audit-attribution spoofing on shared-connector deployments).",
     ),
 });
 
 export async function addNote(input: z.infer<typeof addNoteSchema>) {
-  const { content, partyId, opportunityId, projectId, entryAt, creatorId } = input;
+  const { content, partyId, opportunityId, projectId, entryAt } = input;
 
   const linked = [partyId, opportunityId, projectId].filter(Boolean);
   if (linked.length !== 1) {
@@ -135,7 +127,6 @@ export async function addNote(input: z.infer<typeof addNoteSchema>) {
   if (opportunityId) body["opportunity"] = { id: opportunityId };
   if (projectId) body["kase"] = { id: projectId };
   if (entryAt !== undefined) body["entryAt"] = entryAt;
-  if (creatorId !== undefined) body["creator"] = { id: creatorId };
 
   return capsulePost<{ entry: unknown }>("/entries", { entry: body });
 }

@@ -156,18 +156,33 @@ describe("addNote", () => {
     expect(body.entry.entryAt).toBe("2020-03-15T14:30:00Z");
   });
 
-  it("maps creatorId → creator:{id} for on-behalf-of authoring", async () => {
-    mockFetch(201, { entry: { id: 5 } });
-    const { addNote } = await import("../src/tools/entries.js");
-    await addNote({
-      content: "Logged on behalf of Kajal",
+  it("does NOT expose creatorId — note attribution flows to the API-token owner only", async () => {
+    // creatorId was briefly shipped in alpha.8 to support
+    // on-behalf-of authoring (e.g. log a note attributed to Kajal
+    // even though Anton owns the API token), but removed in
+    // alpha.13 after a security review (issue #11) flagged it as
+    // an audit-attribution-spoofing surface on shared-connector
+    // deployments. The schema must NOT accept it; passing it to
+    // safeParse should drop it (zod strips unknown keys by default).
+    const { addNoteSchema } = await import("../src/tools/entries.js");
+    const parsed = addNoteSchema.safeParse({
+      content: "x",
       partyId: 7,
       creatorId: 99,
     });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect("creatorId" in parsed.data).toBe(false);
+    }
+
+    // And the body sent to Capsule must NOT include a `creator` field
+    // even if some upstream tries to sneak one in.
+    mockFetch(201, { entry: { id: 5 } });
+    const { addNote } = await import("../src/tools/entries.js");
+    await addNote({ content: "Plain note", partyId: 7 });
     const [, options] = vi.mocked(fetch).mock.calls[0]!;
     const body = JSON.parse((options as RequestInit).body as string);
-    expect(body.entry.creator).toEqual({ id: 99 });
-    expect(body.entry.creatorId).toBeUndefined();
+    expect(body.entry.creator).toBeUndefined();
   });
 
   it("rejects malformed entryAt at the schema layer", async () => {
