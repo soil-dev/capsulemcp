@@ -215,7 +215,14 @@ const PartyWriteBaseSchema = {
     .describe(
       "APPEND-ONLY: items are merged into the existing list, never replaced. For atomic add/remove/replace use add_party_website and remove_party_website_by_id.",
     ),
-  ownerId: z.number().int().positive().optional().describe("Assign to user ID"),
+  ownerId: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      "Assign to user ID. On create_party, defaults to the API-token owner when omitted. Once set, this connector cannot clear the owner back to null — use Capsule's web UI for that. Discover IDs via list_users.",
+    ),
 };
 
 export const createPartySchema = z.object({

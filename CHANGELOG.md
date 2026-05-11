@@ -11,6 +11,43 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Documented
+
+- **Bug 16** — setting `ownerId` on a project silently clears its
+  team membership. Capsule's data model treats `owner` and `team`
+  as mutually exclusive on projects, but the connector did not
+  surface this side effect. The team membership cannot be
+  restored via the connector once cleared — only Capsule's web UI
+  can re-assign. Documented as verbose WARNINGs on both
+  `create_project.ownerId` and `update_project.ownerId`, plus a
+  new section in `NOTES-ON-CAPSULE-API.md` (§27). A behavioural
+  fix (reject ownerId writes when team is set, require an
+  explicit `clearTeam: true` opt-in) was considered but deferred
+  until a workflow surfaces that warrants the friction.
+- Per-entity **`ownerId` default inconsistency** documented on
+  every `create_*.ownerId` description:
+  - `create_party.ownerId`, `create_opportunity.ownerId`,
+    `create_task.ownerId` default to the API-token owner when
+    omitted.
+  - `create_project.ownerId` defaults to **null** (Capsule lets
+    the board's default team populate the `team` field instead).
+  - **Opportunities do NOT inherit owner from the linked party** —
+    surprising behaviour worth calling out separately on
+    `create_opportunity.ownerId`. Also captured as
+    `NOTES-ON-CAPSULE-API.md` §28.
+- **Owner cannot be cleared via the connector**: once an `ownerId`
+  is set on any entity, this connector has no path back to null
+  (the schema rejects `0`, no `null` provision). Capsule's web UI
+  is the only path. Documented on every `ownerId` field.
+
+These close the §15-16 batch of the production write-mode test
+plan. **The 16-section test plan is now fully run.** Final
+tally: 16 numbered bugs filed across all 16 sections, **14
+resolved**, 2 open (Bug 12 BOOLEAN-null clearing and Bug 16
+owner/team mutual exclusivity — both documented as Capsule API
+limits with workarounds). NOTES-ON-CAPSULE-API.md grows to 28
+sections.
+
 ## [1.0.0-alpha.15] — 2026-05-11
 
 Docs-only alpha. Three commits since alpha.14, none touching

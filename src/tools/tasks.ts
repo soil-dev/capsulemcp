@@ -79,7 +79,14 @@ export const createTaskSchema = z.object({
   dueOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe("YYYY-MM-DD"),
   dueTime: z.string().regex(/^\d{2}:\d{2}$/).optional().describe("HH:MM in user's timezone"),
   detail: z.string().optional(),
-  ownerId: z.number().int().positive().optional(),
+  ownerId: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      "Assign to user ID. Defaults to the API-token owner when omitted. Once set, this connector cannot clear the owner back to null — use Capsule's web UI for that.",
+    ),
   partyId: z.number().int().positive().optional().describe("Link task to a party (mutually exclusive with opportunityId/projectId)"),
   opportunityId: z.number().int().positive().optional().describe("Link task to an opportunity (mutually exclusive with partyId/projectId)"),
   projectId: z.number().int().positive().optional().describe("Link task to a project (mutually exclusive with partyId/opportunityId)"),
@@ -118,7 +125,14 @@ export const updateTaskSchema = z.object({
     .describe(
       "Set to OPEN or COMPLETED. (PENDING exists internally for track-driven tasks but cannot be set directly via this tool — Capsule rejects it.) Setting status: OPEN on an already-open task is a true no-op (does not advance updatedAt).",
     ),
-  ownerId: z.number().int().positive().optional(),
+  ownerId: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      "Reassign owner to user ID. Once set, this connector cannot clear an owner back to null — use Capsule's web UI for that.",
+    ),
 });
 
 export async function updateTask(input: z.infer<typeof updateTaskSchema>) {

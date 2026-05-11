@@ -101,7 +101,14 @@ export const createOpportunitySchema = z.object({
   value: OpportunityValueSchema.optional(),
   expectedCloseOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("YYYY-MM-DD"),
   probability: z.number().int().min(0).max(100).optional(),
-  ownerId: z.number().int().positive().optional(),
+  ownerId: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      "Assign to user ID. Defaults to the API-token owner when omitted — note that opportunities do NOT inherit owner from the linked party, even though one might expect it. Once set, this connector cannot clear the owner back to null (use Capsule's web UI). Discover IDs via list_users.",
+    ),
 });
 
 export async function createOpportunity(
@@ -154,7 +161,14 @@ export const updateOpportunitySchema = z.object({
     .describe(
       "Reason the opportunity was lost. Only meaningful when transitioning to a Lost milestone — Capsule silently drops it for other milestones. Without this set, a connector-driven Lost-close leaves `lostReason: null`. Discover IDs via list_lostreasons.",
     ),
-  ownerId: z.number().int().positive().optional(),
+  ownerId: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      "Reassign owner to user ID. Once set, this connector cannot clear an owner back to null — use Capsule's web UI for that.",
+    ),
   fields: z
     .array(CustomFieldWriteSchema)
     .optional()

@@ -78,14 +78,22 @@ export const createProjectSchema = z.object({
     .enum(["OPEN", "CLOSED"])
     .optional()
     .describe("Defaults to OPEN when omitted."),
-  ownerId: z.number().int().positive().optional(),
+  ownerId: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      "Assign to user ID. Defaults to NO owner when omitted (unlike create_party / create_opportunity / create_task which default to the API-token owner). The project's `team` field auto-populates from the board's default team if a stageId is supplied. " +
+        "WARNING: Capsule's data model treats `owner` and `team` as mutually exclusive on projects — setting `ownerId` (whether on create or later via update_project) will silently clear the team membership. Once cleared there is no connector-side path to restore the team — only Capsule's web UI can re-assign. To preserve a board-derived team-scope, omit ownerId and let it inherit, or accept that the project will be owner-scoped instead.",
+    ),
   stageId: z
     .number()
     .int()
     .positive()
     .optional()
     .describe(
-      "Stage (board column) to place the project on. Discover IDs via list_stages — each stage belongs to one Board, so picking a stageId implicitly picks the board. If omitted, the project is created with no stage assignment (and won't appear on any board).",
+      "Stage (board column) to place the project on. Discover IDs via list_stages — each stage belongs to one Board, so picking a stageId implicitly picks the board. If omitted, the project is created with no stage assignment (and won't appear on any board). The board's default team is auto-applied to the project's `team` field unless `ownerId` is also set on this call (see ownerId WARNING — owner and team are mutually exclusive).",
     ),
   expectedCloseOn: z
     .string()
@@ -120,7 +128,14 @@ export const updateProjectSchema = z.object({
   name: z.string().min(1).optional(),
   description: z.string().optional(),
   status: z.enum(["OPEN", "CLOSED"]).optional(),
-  ownerId: z.number().int().positive().optional(),
+  ownerId: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      "Reassign owner to user ID. WARNING: setting `ownerId` will silently clear the project's `team` membership — Capsule treats owner and team as mutually exclusive on projects, and the team cannot be restored via this connector once cleared (only Capsule's web UI can re-assign). If you need to keep the project team-scoped, do NOT set ownerId via this tool. Once an owner is set, this connector cannot clear it back to null — use Capsule's web UI for that.",
+    ),
   stageId: z
     .number()
     .int()

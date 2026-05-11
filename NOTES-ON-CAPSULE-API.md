@@ -807,6 +807,70 @@ accepted as if it were a normal update.
 
 ---
 
+## 27. On projects, setting `owner` silently clears `team` (mutually exclusive)
+
+Capsule's data model treats a project's `owner` and `team` as
+mutually exclusive — a project can be owned by a specific user OR
+scoped to a team, never both. Writing `owner` on a project that
+currently has a team membership clears the team to null without
+warning. The reverse is true in principle too (setting a team
+would clear the owner) but the connector can't set `team` directly
+in any case.
+
+There is **no connector-side path to restore the team after
+clearing.** Re-setting the stage (even to the same value) does not
+re-trigger the board's default-team behaviour — that fires only on
+project creation. The only path back to a team-scoped project is
+Capsule's web UI.
+
+**Practical effect:** the "owned by user X AND visible to team Y"
+shape can't be expressed via this connector. If a workflow needs
+team-scoping, create the project on a board whose default team
+matches the desired scope and DO NOT set ownerId on this or any
+later update_project call.
+
+**Where in our code:** [`src/tools/projects.ts`](src/tools/projects.ts)
+`create_project.ownerId` and `update_project.ownerId` both carry
+verbose WARNINGs about the team-clearing side effect. Captured as
+Bug 16 in the §15-16 production write-mode bug-report; closed by
+documentation. A behavioural fix (reject the ownerId write when
+team is set, require an explicit `clearTeam: true` opt-in) was
+considered but deferred until a workflow surfaces that warrants
+the friction.
+
+**No Capsule docs page mentions this constraint.** Verified live
+in §15 production verification (alpha.15).
+
+---
+
+## 28. `create_*.ownerId` defaults differ per entity
+
+When `ownerId` is omitted on a `create_*` call, the default owner
+Capsule applies depends on the entity type:
+
+| Entity | Default owner | Notes |
+|---|---|---|
+| Party (person or organisation) | API-token owner | |
+| Opportunity | API-token owner | Does NOT inherit from linked party — even if the party is owned by user X, an opportunity created on that party with no ownerId comes out owned by the API-token owner. |
+| Task | API-token owner | Tasks have no `team` field at all. |
+| Project (kase) | **null** | Project gets its `team` field from the board's default team instead, when a `stageId` is supplied (see §27 for the owner/team mutual-exclusivity that follows). |
+
+The asymmetry is real and surprising. A common workflow — "create
+an opp for a party owned by user X" — does not produce a
+party-owner-matching opp.
+
+**Where in our code:** [`src/tools/parties.ts`](src/tools/parties.ts),
+[`src/tools/opportunities.ts`](src/tools/opportunities.ts),
+[`src/tools/tasks.ts`](src/tools/tasks.ts),
+[`src/tools/projects.ts`](src/tools/projects.ts) — each
+`create_*.ownerId` description states the default explicitly,
+including the opportunity-doesn't-inherit-from-party note. Verified
+in §15 production verification.
+
+**No Capsule docs page enumerates these per-entity defaults.**
+
+---
+
 ## How to add to this file
 
 When you discover a new Capsule API quirk:
