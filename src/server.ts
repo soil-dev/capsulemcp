@@ -537,8 +537,7 @@ export function createCapsuleMcpServer(): McpServer {
     // ── Relationships (writes) ──────────────────────────────────────────────
 
     server.tool(
-      "add_additional_party",
-      "Link an existing party as an additional (secondary) party on an opportunity or project. The 'main' party is set via update_opportunity / update_project; this adds *additional* parties beyond the main one. Idempotent — re-adding a linked party is harmless.",
+      "Link an existing party as an additional (secondary) party on an opportunity or project. The 'main' party is set via update_opportunity / update_project; this adds *additional* parties beyond the main one. Idempotent — re-adding a linked party is harmless. Response: `{linked: true, alreadyLinked: false}` on a fresh link, `{linked: true, alreadyLinked: true}` if the party was already linked (Capsule's 422 'already a contact' / 'already related' is caught internally and converted).",
       addAdditionalPartySchema.shape,
       async (input) => {
         const result = await addAdditionalParty(input);
