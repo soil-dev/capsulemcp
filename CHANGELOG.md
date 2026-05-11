@@ -11,6 +11,8 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.0.0-alpha.14] — 2026-05-11
+
 ### Security
 
 - **Removed `add_note.creatorId`** (issue #11). The parameter let
