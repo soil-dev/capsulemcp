@@ -37,9 +37,11 @@ hardenings, and a thorough schema-description / docs sync.
 - **Constant-time `client_secret` comparison on `/token`.** The
   MCP SDK's auth router uses native `!==` for client-secret
   validation, leaking a timing channel. Added an explicit
-  pre-check middleware on `/token` that does `timingSafeEqual`
-  before delegating; the SDK's downstream compare now only ever
-  runs on a known-valid secret, closing the channel.
+  pre-check middleware on `/token` that compares fixed-width
+  digests with `timingSafeEqual` before delegating; the SDK's
+  downstream compare now only ever runs on a known-valid
+  secret-bearing client, while public DCR clients still flow
+  through the SDK's standards path.
 - **Stdio entry fails fast on missing `CAPSULE_API_TOKEN`.**
   Matches the HTTP entry's behaviour. The error used to surface
   only on the first tool call.
@@ -50,15 +52,16 @@ hardenings, and a thorough schema-description / docs sync.
   `expiresAt`, non-string `clientId`) would otherwise propagate
   into downstream `AuthInfo`.
 - **`update_project` RMW now carries `stage` forward too.** When the
-  caller supplies `ownerId` without `teamId` the connector reads
-  the current project for the RMW; alpha.20 only captured `team`
-  from that read, but the same Capsule PUT semantic that would
-  clear an absent `team` could plausibly clear an absent `stage`
-  too (it was never directly tested either way). One extra
-  integer in the body, no extra HTTP call, defensive against a
-  silent stage-clear regression. Explicit `stageId` on the same
-  call still wins — the RMW only fills in `stage` when the
-  caller didn't supply one.
+  caller supplies `ownerId` and omits `teamId` and/or `stageId`,
+  the connector reads the current project for the RMW and carries
+  omitted fields forward; alpha.20 only captured `team` from that
+  read, but the same Capsule PUT semantic that would clear an
+  absent `team` could plausibly clear an absent `stage` too (it
+  was never directly tested either way). One extra integer in the
+  body, no extra HTTP call when a RMW is already needed, defensive
+  against a silent stage-clear regression. Explicit `stageId` on
+  the same call still wins — the RMW only fills in `stage` when
+  the caller didn't supply one.
 
 ### Changed
 
@@ -71,7 +74,7 @@ hardenings, and a thorough schema-description / docs sync.
 ### Documented
 
 - **`update_project.ownerId` description** now mentions that the
-  RMW carries both team AND stage forward, not just team.
+  RMW carries any omitted team/stage field forward, not just team.
 - **`update_project.stageId` description** dropped the stale
   owner-clearing warning (the alpha.18-era observation that
   drove it couldn't be reproduced).

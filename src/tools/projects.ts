@@ -148,7 +148,7 @@ export const updateProjectSchema = z.object({
     .optional()
     .describe(
       "Reassign owner: pass a user ID to set, or `null` to unassign (matches the 'Unassign' option in Capsule's web UI). " +
-        "When you supply `ownerId` WITHOUT a `teamId`, the connector fetches the project's current `team` AND `stage` and includes them in the PUT body — this preserves both across the owner change (without it, Capsule's PUT would clear team; stage carry is defensive against the symmetric clear). " +
+        "When you supply `ownerId` and omit `teamId` and/or `stageId`, the connector fetches the project's current omitted fields and includes them in the PUT body — this preserves them across the owner change (without it, Capsule's PUT would clear team; stage carry is defensive against the symmetric clear). " +
         "Supply `teamId` and/or `stageId` explicitly on the same call to change them instead. `teamId: null` clears the team as part of an owner change. " +
         "Constraints (Capsule enforces, 422 on violation): owner must be a member of the team if both are set; a project must always have at least one of {owner, team} set (cannot clear both).",
     ),
@@ -198,19 +198,18 @@ export async function updateProject(input: z.infer<typeof updateProjectSchema>) 
   //
   // To make `update_project { ownerId }` safe (so it doesn't accidentally
   // clear an existing team — or, defensively, stage), the connector reads
-  // the current project and carries the existing `team` AND `stage` into
-  // the PUT body whenever `ownerId` is being touched without an explicit
-  // value for those fields. Carrying stage is defensive: alpha.20-era
-  // verification didn't directly probe whether owner-in-body PUTs clear
-  // stage the way they clear team, but the cost of a redundant
-  // `stage: <currentId>` is one extra integer in the body, so we err on
-  // the safe side rather than risk a silent stage clear.
+  // the current project and carries any omitted `team` / `stage` into the
+  // PUT body whenever `ownerId` is being touched. Carrying stage is
+  // defensive: alpha.20-era verification didn't directly probe whether
+  // owner-in-body PUTs clear stage the way they clear team, but the cost
+  // of a redundant `stage: <currentId>` is one extra integer in the body,
+  // so we err on the safe side rather than risk a silent stage clear.
   //
   // `null` means "unassign" on either owner/team (matches Capsule's UI
   // "Unassign" option); `undefined` means "don't touch this field".
   let resolvedTeamId: number | null | undefined = teamId;
   let resolvedStageId: number | undefined = stageId;
-  if (ownerId !== undefined && teamId === undefined) {
+  if (ownerId !== undefined && (teamId === undefined || stageId === undefined)) {
     const { data } = await capsuleGet<{
       kase: { team?: { id: number } | null; stage?: { id: number } | null };
     }>(`/kases/${id}`);
@@ -218,7 +217,9 @@ export async function updateProject(input: z.infer<typeof updateProjectSchema>) 
     // current team/stage is null, leave the field out of the body entirely
     // (sending `team: null` would be a redundant clear and could surprise
     // on the owner-or-team-required 422 path; same idea for stage).
-    resolvedTeamId = data.kase?.team?.id ?? undefined;
+    if (teamId === undefined) {
+      resolvedTeamId = data.kase?.team?.id ?? undefined;
+    }
     if (stageId === undefined) {
       resolvedStageId = data.kase?.stage?.id ?? undefined;
     }

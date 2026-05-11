@@ -275,30 +275,48 @@ describe("updateProject", () => {
     expect(body.kase.teamId).toBeUndefined();
   });
 
-  it("ownerId + teamId together: no RMW (caller has expressed both intents)", async () => {
+  it("ownerId + teamId + stageId together: no RMW (caller has expressed all intents)", async () => {
     mockFetch(200, { kase: { id: 10 } });
 
     const { updateProject } = await import("../src/tools/projects.js");
-    await updateProject({ id: 10, ownerId: 7, teamId: 88 });
+    await updateProject({ id: 10, ownerId: 7, teamId: 88, stageId: 99 });
 
     expect(vi.mocked(fetch).mock.calls).toHaveLength(1);
     const [, options] = vi.mocked(fetch).mock.calls[0]!;
     const body = JSON.parse((options as RequestInit).body as string);
     expect(body.kase.owner).toEqual({ id: 7 });
     expect(body.kase.team).toEqual({ id: 88 });
+    expect(body.kase.stage).toBe(99);
   });
 
-  it("ownerId + teamId:null: no RMW, sends owner + team:null (clear team as part of owner change)", async () => {
+  it("ownerId + teamId together still carries current stage when stageId is omitted", async () => {
+    mockFetch(200, { kase: { id: 10, stage: { id: 99 } } });
+    mockFetch(200, { kase: { id: 10 } });
+
+    const { updateProject } = await import("../src/tools/projects.js");
+    await updateProject({ id: 10, ownerId: 7, teamId: 88 });
+
+    expect(vi.mocked(fetch).mock.calls).toHaveLength(2);
+    const [, putOptions] = vi.mocked(fetch).mock.calls[1]!;
+    const body = JSON.parse((putOptions as RequestInit).body as string);
+    expect(body.kase.owner).toEqual({ id: 7 });
+    expect(body.kase.team).toEqual({ id: 88 });
+    expect(body.kase.stage).toBe(99);
+  });
+
+  it("ownerId + teamId:null carries current stage while clearing team", async () => {
+    mockFetch(200, { kase: { id: 10, stage: { id: 99 } } });
     mockFetch(200, { kase: { id: 10 } });
 
     const { updateProject } = await import("../src/tools/projects.js");
     await updateProject({ id: 10, ownerId: 7, teamId: null });
 
-    expect(vi.mocked(fetch).mock.calls).toHaveLength(1);
-    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    expect(vi.mocked(fetch).mock.calls).toHaveLength(2);
+    const [, options] = vi.mocked(fetch).mock.calls[1]!;
     const body = JSON.parse((options as RequestInit).body as string);
     expect(body.kase.owner).toEqual({ id: 7 });
     expect(body.kase).toHaveProperty("team", null);
+    expect(body.kase.stage).toBe(99);
   });
 
   it("sends owner:null + carries current team when ownerId=null (Unassign owner, keep team)", async () => {

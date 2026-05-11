@@ -9,7 +9,7 @@
  * missing config, app.listen).
  */
 
-import { timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import express from "express";
 import { rateLimit } from "express-rate-limit";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -46,6 +46,16 @@ export interface AppOptions {
   trustProxy?: boolean | number | string;
 }
 
+function secretDigest(value: string): Buffer {
+  return createHash("sha256").update(value, "utf8").digest();
+}
+
+function timingSafeSecretEqual(provided: string, expected: string): boolean {
+  // Compare fixed-width digests so the equality check doesn't branch on
+  // the raw client_secret length before timingSafeEqual runs.
+  return timingSafeEqual(secretDigest(provided), secretDigest(expected));
+}
+
 export function createApp(opts: AppOptions): express.Express {
   const { oauthProvider, issuerUrl, jsonLimit, allowedOrigins } = opts;
   const resourceName = opts.resourceName ?? "Capsule CRM MCP";
@@ -71,11 +81,11 @@ export function createApp(opts: AppOptions): express.Express {
   // constant-time) then runs on a known-valid secret, closing the
   // timing channel for invalid-secret attackers.
   //
-  // Reads client_secret_post only (form body) — the SDK's downstream
-  // auth doesn't support client_secret_basic, so supporting it here
-  // would create a half-working path. The FixedClientStore default of
-  // `token_endpoint_auth_method: "client_secret_post"` is what callers
-  // actually use.
+  // For secret-bearing clients, reads client_secret_post only (form body).
+  // The SDK's downstream auth doesn't support client_secret_basic, so
+  // supporting it here would create a half-working path. The
+  // FixedClientStore default of `token_endpoint_auth_method:
+  // "client_secret_post"` is what static-client callers actually use.
   //
   // Wrapped as URL-encoded middleware because mcpAuthRouter installs
   // its own body parser internally; we need access to req.body here,
@@ -83,7 +93,7 @@ export function createApp(opts: AppOptions): express.Express {
   app.post(
     "/token",
     express.urlencoded({ extended: false }),
-    (req, res, next) => {
+    async (req, res, next) => {
       const sendInvalidClient = (description: string): void => {
         res.status(401).json({
           error: "invalid_client",
@@ -93,33 +103,64 @@ export function createApp(opts: AppOptions): express.Express {
 
       const body = (req.body ?? {}) as Record<string, unknown>;
       const clientId =
-        typeof body["client_id"] === "string" ? (body["client_id"] as string) : undefined;
+        typeof body["client_id"] === "string"
+          ? (body["client_id"] as string)
+          : undefined;
       const providedSecret =
         typeof body["client_secret"] === "string"
           ? (body["client_secret"] as string)
           : undefined;
 
-      if (!clientId || providedSecret === undefined) {
+      if (!clientId) {
         sendInvalidClient("client credentials required");
         return;
       }
 
-      const expected = oauthProvider.clientsStore.getClient(clientId);
-      // Use a fake-but-fixed-length expected secret when the clientId
-      // doesn't resolve, so the comparison takes constant time
-      // regardless of whether the clientId is known. Otherwise an
-      // attacker could distinguish "unknown clientId" from "known
-      // clientId, wrong secret" by timing.
-      const expectedSecret =
-        expected && typeof expected.client_secret === "string"
-          ? expected.client_secret
-          : "x".repeat(providedSecret.length || 1);
+      let expected: Awaited<
+        ReturnType<typeof oauthProvider.clientsStore.getClient>
+      >;
+      try {
+        expected = await oauthProvider.clientsStore.getClient(clientId);
+      } catch {
+        res.status(500).json({
+          error: "server_error",
+          error_description: "client lookup failed",
+        });
+        return;
+      }
 
-      const a = Buffer.from(providedSecret);
-      const b = Buffer.from(expectedSecret);
-      const ok =
-        a.length === b.length && timingSafeEqual(a, b) && expected !== undefined;
-      if (!ok) {
+      // Always run a fixed-width digest comparison before branching on
+      // whether the client exists. Otherwise an attacker could distinguish
+      // "unknown clientId" from "known clientId, wrong secret" by timing.
+      const expectedSecret =
+        expected &&
+        typeof expected.client_secret === "string" &&
+        expected.client_secret
+          ? expected.client_secret
+          : "";
+      const secretsMatch = timingSafeSecretEqual(
+        providedSecret ?? "",
+        expectedSecret,
+      );
+      if (!expected) {
+        sendInvalidClient("client authentication failed");
+        return;
+      }
+
+      // Public DCR clients (`token_endpoint_auth_method: "none"`) have no
+      // client_secret. Let the SDK's downstream auth middleware handle that
+      // standards path; the pre-check only replaces secret-bearing compares.
+      if (!expectedSecret) {
+        next();
+        return;
+      }
+
+      const expiresAt = expected.client_secret_expires_at;
+      const secretExpired =
+        typeof expiresAt === "number" &&
+        expiresAt !== 0 &&
+        expiresAt < Math.floor(Date.now() / 1000);
+      if (providedSecret === undefined || !secretsMatch || secretExpired) {
         sendInvalidClient("client authentication failed");
         return;
       }
