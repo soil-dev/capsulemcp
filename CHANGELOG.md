@@ -11,6 +11,53 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.0.0-alpha.18] — 2026-05-11
+
+Follow-through on the alpha.17-verification report. Three
+findings landed:
+
+1. The asymmetric Capsule PUT semantic was misdiagnosed twice
+   before — actually `owner`-in-body clears `team`, but
+   `team`-in-body preserves `owner` (server-side). The alpha.17
+   "pair-rewrite" framing was wrong.
+2. Bug 17 is broader than first thought: Capsule's POST drops
+   `owner` whenever `stage` is in the body, regardless of
+   whether `teamId` is supplied. The previous workaround
+   ("supply teamId explicitly") doesn't work.
+3. Capsule rejects projects with both `owner` and `team` set to
+   null — `422 kase: owner or team is required`.
+
+### Fixed
+
+- **Bug 16 (closed at the connector level).** `update_project`
+  now does **read-modify-write** when the caller supplies
+  `ownerId` without `teamId`: fetches the project's current
+  `team` and includes it in the PUT body, so the
+  Capsule-side "owner-in-body clears team" semantic no longer
+  bites. Caller-visible behaviour: `update_project { ownerId }`
+  preserves the existing team scope. Callers who want to clear
+  team alongside an owner change pass `teamId: null`.
+
+### Documented
+
+- **Bug 17 reframed and given a working workaround.**
+  `create_project.ownerId` and `create_project.stageId` now
+  describe the two-call workflow: create without `stageId`
+  (`create_project { ownerId, teamId }`), then
+  `update_project { stageId }` afterwards. The previous "supply
+  `teamId` alongside" advice was wrong.
+- **Owner-or-team-required constraint** (422 on violation) noted
+  on both `update_project.ownerId` and `update_project.teamId`,
+  and §27.
+- **Owner-must-be-member-of-team constraint** (422 on violation)
+  noted on `update_project.teamId` description.
+- **NOTES-ON-CAPSULE-API.md §27** rewritten (fourth pass) around
+  the actual asymmetric PUT semantic + the
+  always-owner-or-team-required constraint + the connector's
+  RMW shim. Earlier three wrong framings are explicitly listed
+  in the section so future readers don't get confused by
+  alpha.{16,17}-era commits.
+
 ## [1.0.0-alpha.17] — 2026-05-11
 
 Project-ownership write surface fix. The §15-supplementary
