@@ -807,7 +807,7 @@ accepted as if it were a normal update.
 
 ---
 
-## 27. Project `owner` / `team` write semantics (asymmetric PUT, owner-dropping POST)
+## 27. Project `owner` / `team` write semantics (asymmetric PUT)
 
 Capsule's data model allows a project to be in one of three
 ownership shapes — and Capsule enforces that one of them always
@@ -827,9 +827,6 @@ Constraints (both 422 on violation):
   a member of the team. Capsule returns `422 kase: owner is not a
   member of the team`.
 
-Three non-obvious write-side rules govern how these shapes are
-reached via the API:
-
 ### Rule A — PUT `/kases/{id}`: setting `owner` clears `team`, but setting `team` preserves `owner`
 
 The owner/team half of the PUT semantic is **asymmetric**:
@@ -843,53 +840,37 @@ The owner/team half of the PUT semantic is **asymmetric**:
   (`update_project { teamId: T }` alone on a project owned by U
   produces `owner: U, team: T`, or 422 if U ∉ T.)
 - **Both in body** → both are set; same membership constraint.
-- **Neither in body** (e.g. updating only `name`) → owner/team
-  both preserved.
+- **Neither in body** (e.g. updating only `name`, `status`, or
+  `stage`) → owner and team both preserved.
 
-### Rule B — POST `/kases`: `stage` in body clears `owner`
+This is the only owner/team-related rule the API itself imposes.
 
-When `stage` is in the POST body, Capsule sets `owner` to null,
-regardless of whether `owner` is also in the body. POSTing
-`{ owner: {id: U}, stage: <S> }` produces `owner: null, team:
-<board-default>, stage: <S>`. The clearing fires whenever
-`stage` is present in the create body, regardless of `team`.
+### Tenant board automation can mutate `owner` / `team` independently of the API
 
-The connector enforces this at the schema level — `create_project
-{ ownerId, stageId }` is rejected by `superRefine` with an error
-pointing callers at one of the two-call workflows below (see #14).
+A separate behaviour to be aware of: Capsule lets tenants
+configure **board-level automation rules** that fire on project
+creation and stage transitions. These can clear `owner`, set
+`team` from a board default, or apply tracks — without any
+involvement from the API contract. From the API caller's
+perspective the mutation looks indistinguishable from an API
+quirk, but it isn't one.
 
-**No equivalent PUT-side rule.** A `stage`-only `update_project`
-preserves both `owner` and `team` (verified live in alpha.19).
-An earlier (alpha.18-era) framing of "stage in PUT body clears
-owner" turned out to be unreproducible against the alpha.19
-codebase — possibly state-dependent (adding stage to an unstaged
-project vs. moving between stages), possibly an upstream Capsule
-behaviour shift, possibly a misobservation. The current
-connector trusts the observed runtime behaviour and does not
-fabricate `owner`/`team` into stage-only PUT bodies.
+This is not a hypothetical: the §15-supplementary through
+alpha.19 verification series spent four reports treating
+"`create_project { ownerId, stageId }` drops the owner" as a
+Capsule API rule (Bug 17, framed across alpha.{17,18,19}). The
+alpha.19-R re-verification with the board automation disabled
+showed the API preserves both fields cleanly. Same for the
+"board default team" — that was automation, not a data-model
+default.
 
-### How to reach `owner + team + stage` end state
+**Practical implication:** when you observe `owner` or `team`
+being mutated unexpectedly on create_project, check the target
+board's automation configuration before assuming the connector
+or the API is at fault. Capsule's API itself preserves whatever
+you POST.
 
-There is no single create call that reaches this state (the
-schema rejects `create_project { ownerId, stageId }` because
-Capsule's POST drops the owner). Two two-call workflows work
-equivalently:
-
-- **Stage-first:** `create_project { partyId, stageId }` then
-  `update_project { ownerId }` — connector's RMW carries the
-  current team forward; stage preserved because it's not in the
-  PUT body; owner is set.
-- **Owner-first:** `create_project { partyId, ownerId, teamId }`
-  then `update_project { stageId }` — Capsule preserves owner
-  and team across the stage-only update.
-
-`create_project { partyId, stageId, teamId }` (with an explicit
-non-default team but no owner) fails: Capsule appears to
-implicitly attach the API-token user as owner and 422 on
-owner-must-be-in-team. So `teamId` at create time is only safe
-when combined with a compatible `ownerId` AND without `stageId`.
-
-### Connector-side mitigation
+### Connector-side mitigation (RMW on update)
 
 `update_project` does a **read-modify-write** when the caller
 supplies `ownerId` without `teamId`: fetches the current project,
@@ -898,13 +879,15 @@ Rule A's "owner-in-body clears team" half — `update_project
 { ownerId }` becomes a safe owner reassignment that preserves
 team scope.
 
-No equivalent mitigation for `teamId` alone (Capsule preserves
-owner server-side per Rule A) or `stageId` alone (Capsule
-preserves both owner and team on stage-only PUTs).
+No equivalent mitigation needed for `teamId` alone (Capsule
+preserves owner server-side per Rule A) or `stageId` alone
+(Capsule's PUT doesn't fire any clears when only stage is in
+the body).
 
-`create_project` is guarded by a `superRefine` that rejects the
-`ownerId + stageId` combo at schema validation time, pushing
-callers to one of the documented two-call workflows.
+`create_project` performs no automation-aware coercion — the
+descriptions on `create_project.ownerId` / `teamId` / `stageId`
+flag the automation caveat so callers know where to look when
+they see surprise null owners.
 
 ### Where in our code
 
@@ -912,19 +895,19 @@ callers to one of the documented two-call workflows.
 `update_project` and `create_project` both expose
 `ownerId` and `teamId` (nullable on update for explicit unassign).
 `update_project` does the RMW for ownerId-without-teamId.
-Descriptions on `create_project.stageId` and
-`update_project.stageId` walk callers through the stage-first
-workflow.
+Descriptions surface the Rule A asymmetry on update and the
+automation caveat on create.
 
-Captured as Bug 16 (Rule A PUT-clears-team) and Bug 17 (Rule B
-POST-drops-owner) across the §15, §15-supplementary, and
-alpha.{17,18,19} verification reports. Bug 16 closed at the
-connector level via RMW; Bug 17 closed at the schema level via
-`superRefine`, with two equivalent documented two-call
-workflows.
+Captured as Bug 16 (Rule A PUT-clears-team) across the §15,
+§15-supplementary, and alpha.{17,18,19} verification reports —
+closed at the connector level via RMW. Bug 17 (originally framed
+as a Capsule API quirk that drops owner on create) closed in
+alpha.19-R as an **automation artifact** in the test tenant,
+not a real API behaviour. The schema-level rejection introduced
+in alpha.19 (#14) was rolled back in the same wave.
 
 **Earlier wrong framings** worth flagging for future readers
-re-reading the alpha.{16,17,18}-era code:
+re-reading the alpha.{16,17,18,19}-era code:
 
 1. "owner and team are mutually exclusive" (initial §15 report) —
    wrong; the three shapes are all valid.
@@ -943,6 +926,14 @@ re-reading the alpha.{16,17,18}-era code:
    `update_project { stageId }` clears owner, but alpha.19
    verification couldn't reproduce that. Both orderings (stage-
    first and owner-first) actually work.
+6. "Bug 17 / Rule B POST-side: `create_project { ownerId,
+   stageId }` always drops owner" (alpha.{17,18,19}, schema-level
+   rejection added in alpha.19 #14) — wrong; the alpha.19-R
+   re-verification with board automation disabled showed Capsule's
+   API preserves both fields cleanly. The drops we'd been
+   observing were tenant board automation, not the API. Schema
+   rejection rolled back; descriptions soft-pedalled to flag the
+   automation possibility instead of claiming a Capsule API rule.
 
 **No Capsule docs page mentions either rule explicitly.**
 Verified live in §15-supplementary and the alpha.17 verification
@@ -960,11 +951,13 @@ Capsule applies depends on the entity type:
 | Party (person or organisation) | API-token owner | |
 | Opportunity | API-token owner | Does NOT inherit from linked party — even if the party is owned by user X, an opportunity created on that party with no ownerId comes out owned by the API-token owner. |
 | Task | API-token owner | Tasks have no `team` field at all. |
-| Project (kase) | **null** | Project gets its `team` field from the board's default team instead, when a `stageId` is supplied (see §27 for the PUT/POST owner-team write semantics). |
+| Project (kase) | API-token owner | Same as the other entities. Earlier versions of this file claimed projects defaulted to `owner: null` — that was an artifact of board automation in the test tenant (see §27). |
 
-The asymmetry is real and surprising. A common workflow — "create
-an opp for a party owned by user X" — does not produce a
-party-owner-matching opp.
+The defaults are uniform across entity types, but the
+opportunity-doesn't-inherit-from-party asymmetry is still
+surprising: a common workflow — "create an opp for a party
+owned by user X" — does not produce a party-owner-matching opp.
+The opp's owner comes from the API token, not the linked party.
 
 **Where in our code:** [`src/tools/parties.ts`](src/tools/parties.ts),
 [`src/tools/opportunities.ts`](src/tools/opportunities.ts),
