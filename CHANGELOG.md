@@ -11,6 +11,11 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.0.0-alpha.13] — 2026-05-11
+
+Refactor-heavy alpha, no behaviour change. Sets up cleaner internals
+on the path to v1.0.0 final.
+
 ### Changed
 
 - `show_track` description corrected — alpha.12's text claimed the
@@ -31,6 +36,53 @@ versions adhere to [Semantic Versioning](https://semver.org).
   documentation gap was flagged in the alpha.12 verification with
   the same shape as the alpha.9 → alpha.10 follow-up on
   `add_additional_party.alreadyLinked`.
+- Outbound HTTP timeout (alpha.12, commit ca25f87) description
+  softened: the alpha.10 / alpha.11 transient hangs that prompted
+  the work were most likely Claude.ai tool-approval timeouts
+  higher up the stack, not Capsule slowness. The 60s timeout is
+  still correct as defense in depth; the prose was the only thing
+  wrong.
+
+### Refactored (internal only — no behaviour change)
+
+- **`CustomFieldWriteSchema` consolidated** into a shared
+  `src/tools/_custom-fields.ts` module. Previously the zod shape
+  and the `definitionId → {definition: {id}, value}` body mapping
+  lived in three places (parties, opportunities, projects) and had
+  begun to drift. One source now. Net −45 LOC.
+- **Destructive-op idempotency helper** extracted to
+  `src/capsule/idempotent.ts`. The catch-and-convert-to-success
+  pattern shipped in alpha.12 was duplicated in 11 handlers
+  across 7 files; each block was ~10 lines. The helper collapses
+  each to a 3-line call. Two named predicates (`isCapsule404`,
+  `isCapsuleTagNotFound`) make "what error is caught" more
+  discoverable than the inline status + message-match checks
+  were. Net −65 LOC.
+- **`registerTool` helper** extracted to
+  `src/server/register-tool.ts`. Each of the 80 read/write tools
+  in `createCapsuleMcpServer()` was registered with the same
+  8-line `server.tool(...)` wrapper pattern; collapsed to a
+  single-line call. Two payoffs: (1) `src/server.ts` drops from
+  1080 to 615 lines and the built bundles drop ~10 KB each,
+  (2) the tool name and description now live on the same call,
+  eliminating the "Edit collapses two adjacent string lines"
+  footgun that had hit three times in the alpha series.
+  `get_attachment` stays as a raw `server.tool` call: its handler
+  shapes the response per Content-Type and can't use the helper's
+  fixed JSON-stringify wrapper.
+
+  A bigger refactor (splitting `src/server.ts` into 13 per-resource
+  modules mirroring `src/tools/`) was considered and deferred —
+  the main benefit there was bounding-edits-by-file, and that's
+  largely achieved by the line-count shrink alone. The option
+  stays open for post-1.0.
+
+Numbers:
+  - Tools: 81 (49 read-only) — unchanged
+  - Tests: 292 / 292 — unchanged
+  - Build: dist/index.js 116 → 104 KB, dist/http.js 136 → 124 KB
+    (the `registerTool` extraction collapses 80 inlined wrappers
+    into one shared helper)
 
 ## [1.0.0-alpha.12] — 2026-05-11
 
