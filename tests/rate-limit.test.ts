@@ -71,24 +71,38 @@ describe("doFetch retry-on-429", () => {
   });
 
   it("respects HTTP-date Retry-After (not just integer-seconds)", async () => {
-    // HTTP-date: 1 second from now. parseRetryAfter computes the
-    // delta and waits at most that long.
-    const oneSecond = new Date(Date.now() + 1000).toUTCString();
-    vi.mocked(fetch)
-      .mockResolvedValueOnce(
-        makeResponse(429, { message: "slow down" }, { "Retry-After": oneSecond }),
-      )
-      .mockResolvedValueOnce(makeResponse(200, { ok: true }));
+    // Fake timers + pinned system time make the HTTP-date math
+    // deterministic. toUTCString() has whole-second precision, so without
+    // a pinned now, `Date.now() + 1000` can format to the same second as
+    // "now" once parsed back — parseRetryAfter then gets a ≤0 delta and
+    // falls back to the 5s default, racing the test timeout (#15).
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+      // Build the header 2 seconds out so the whole-second toUTCString
+      // round-trip lands at least 1 second after "now" deterministically.
+      const twoSeconds = new Date(Date.now() + 2000).toUTCString();
 
-    const { capsuleGet } = await import("../src/capsule/client.js");
-    const start = Date.now();
-    const result = await capsuleGet<{ ok: boolean }>("/test");
-    const elapsed = Date.now() - start;
+      vi.mocked(fetch)
+        .mockResolvedValueOnce(
+          makeResponse(429, { message: "slow down" }, { "Retry-After": twoSeconds }),
+        )
+        .mockResolvedValueOnce(makeResponse(200, { ok: true }));
 
-    // Retry should fire after roughly 1 second (allow some slop).
-    // Critical: it should NOT use the 5-second default.
-    expect(elapsed).toBeLessThan(2000);
-    expect(result.data).toEqual({ ok: true });
+      const { capsuleGet } = await import("../src/capsule/client.js");
+      const promise = capsuleGet<{ ok: boolean }>("/test");
+
+      // Advance just past the 2s window; retry must fire before the 5s
+      // default would. If the retry hadn't fired by 2.5s, fetch.callCount
+      // would still be 1 — the post-advance assertions catch that.
+      await vi.advanceTimersByTimeAsync(2_500);
+      const result = await promise;
+
+      expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
+      expect(result.data).toEqual({ ok: true });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("throws when both attempts return 429 (no infinite loop)", async () => {
@@ -166,29 +180,37 @@ describe("doFetch retry-on-429", () => {
   });
 
   it("honours Capsule's X-RateLimit-Reset (epoch seconds) over Retry-After", async () => {
-    // Capsule's actual signal: X-RateLimit-Reset = UTC epoch seconds.
-    // Reset 1 second from now → retry should wait ~1s, not the 5s
-    // default and not the X-RateLimit-Limit (4000).
-    const oneSecondFromNow = Math.floor((Date.now() + 1000) / 1000);
-    vi.mocked(fetch)
-      .mockResolvedValueOnce(
-        makeResponse(429, { error: "rate limit reached" }, {
-          "X-RateLimit-Limit": "4000",
-          "X-RateLimit-Remaining": "0",
-          "X-RateLimit-Reset": String(oneSecondFromNow),
-        }),
-      )
-      .mockResolvedValueOnce(makeResponse(200, { ok: true }));
+    // Same flake-class as the HTTP-date test (#15): epoch-second
+    // rounding plus real timers makes the computed delta race with the
+    // 5s default. Pin time + fake timers to make it deterministic.
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+      const twoSecondsFromNow = Math.floor((Date.now() + 2000) / 1000);
 
-    const { capsuleGet } = await import("../src/capsule/client.js");
-    const start = Date.now();
-    const result = await capsuleGet<{ ok: boolean }>("/test");
-    const elapsed = Date.now() - start;
+      vi.mocked(fetch)
+        .mockResolvedValueOnce(
+          makeResponse(429, { error: "rate limit reached" }, {
+            "X-RateLimit-Limit": "4000",
+            "X-RateLimit-Remaining": "0",
+            "X-RateLimit-Reset": String(twoSecondsFromNow),
+          }),
+        )
+        .mockResolvedValueOnce(makeResponse(200, { ok: true }));
 
-    // Should be ~1s, not the 5s default fallback.
-    expect(elapsed).toBeLessThan(2000);
-    expect(elapsed).toBeGreaterThanOrEqual(900);
-    expect(result.data).toEqual({ ok: true });
+      const { capsuleGet } = await import("../src/capsule/client.js");
+      const promise = capsuleGet<{ ok: boolean }>("/test");
+
+      // Advance past the 2s window; the retry must fire well before the
+      // 5s default would.
+      await vi.advanceTimersByTimeAsync(2_500);
+      const result = await promise;
+
+      expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
+      expect(result.data).toEqual({ ok: true });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("X-RateLimit-Reset takes precedence over Retry-After", async () => {
