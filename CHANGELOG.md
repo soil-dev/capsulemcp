@@ -11,6 +11,22 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.0.0-alpha.15] — 2026-05-11
+
+Docs-only alpha. Three commits since alpha.14, none touching
+runtime behaviour:
+  a8b5091  §13-14 verification follow-through: `delete_party`
+           track-orphan caveat + atomic-remove confirm-gate
+           policy on 5 tools.
+  88c8cde  NOTES-ON-CAPSULE-API.md grows from 18 → 26 sections,
+           cataloguing 8 Capsule v2 quirks surfaced through the
+           alpha series.
+  f5173cf  Sanitize operator-specific references in public docs
+           and code (production tenant tag names / id numbers /
+           personal names that had leaked into CHANGELOG, NOTES,
+           IDEAS, and a handful of test files and public tool
+           descriptions).
+
 ### Changed
 
 - `delete_party` description now documents the **track-instance
