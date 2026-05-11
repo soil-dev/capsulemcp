@@ -235,6 +235,21 @@ describe("uploadAttachment", () => {
     expect(vi.mocked(fetch)).not.toHaveBeenCalled();
   });
 
+  it("rejects decoded files over Capsule's 25 MB attachment ceiling before upload", async () => {
+    const { uploadAttachment } = await import("../src/tools/attachments.js");
+    const tooLarge = Buffer.alloc(25 * 1024 * 1024 + 1).toString("base64");
+
+    await expect(
+      uploadAttachment({
+        filename: "too-large.bin",
+        contentType: "application/octet-stream",
+        dataBase64: tooLarge,
+        partyId: 1,
+      }),
+    ).rejects.toThrow(/exceeding the .* attachment limit/);
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+  });
+
   it("accepts valid base64 (with padding)", async () => {
     mockJson(200, { upload: { token: "t" } });
     mockJson(200, { entry: { id: 1 } });
