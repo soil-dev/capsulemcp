@@ -1,6 +1,6 @@
 import { z } from "zod";
+import { idempotent } from "../capsule/idempotent.js";
 import {
-  CapsuleApiError,
   capsuleDelete,
   capsuleGet,
   capsulePost,
@@ -193,13 +193,9 @@ export async function deleteEntry(input: z.infer<typeof deleteEntrySchema>) {
   if (input.confirm !== true) {
     throw new Error("delete_entry requires confirm: true");
   }
-  try {
-    await capsuleDelete(`/entries/${input.id}`);
-    return { deleted: true, alreadyDeleted: false, id: input.id };
-  } catch (err) {
-    if (err instanceof CapsuleApiError && err.status === 404) {
-      return { deleted: true, alreadyDeleted: true, id: input.id };
-    }
-    throw err;
-  }
+  return idempotent(
+    () => capsuleDelete(`/entries/${input.id}`),
+    () => ({ deleted: true, alreadyDeleted: false, id: input.id }),
+    () => ({ deleted: true, alreadyDeleted: true, id: input.id }),
+  );
 }

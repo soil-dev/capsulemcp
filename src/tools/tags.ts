@@ -30,7 +30,11 @@
  */
 
 import { z } from "zod";
-import { CapsuleApiError, capsuleGet, capsulePut } from "../capsule/client.js";
+import { capsuleGet, capsulePut } from "../capsule/client.js";
+import {
+  idempotentWithResult,
+  isCapsuleTagNotFound,
+} from "../capsule/idempotent.js";
 
 const TAG_LIST_PATH = {
   parties: "/parties/tags",
@@ -111,37 +115,23 @@ export async function removeTagById(
 ) {
   const { entity, entityId, tagId } = input;
   const wrapper = ENTITY_TO_WRAPPER[entity];
-  try {
-    const result = await capsulePut<Record<string, unknown>>(
-      `/${entity}/${entityId}`,
-      { [wrapper]: { tags: [{ id: tagId, _delete: true }] } },
-    );
-    return {
+  return idempotentWithResult(
+    () =>
+      capsulePut<Record<string, unknown>>(`/${entity}/${entityId}`, {
+        [wrapper]: { tags: [{ id: tagId, _delete: true }] },
+      }),
+    (result) => ({
       removed: true,
       alreadyRemoved: false,
       entity,
       entityId,
       tagId,
       ...result,
-    };
-  } catch (err) {
-    // Capsule returns 422 with a "tag not found to delete" message
-    // when the tag isn't actually attached. We treat that as
-    // already-removed for idempotency, the way add_additional_party
-    // catches "already a contact" 422s.
-    if (
-      err instanceof CapsuleApiError &&
-      err.status === 422 &&
-      /tag not found/i.test(err.message)
-    ) {
-      return {
-        removed: true,
-        alreadyRemoved: true,
-        entity,
-        entityId,
-        tagId,
-      };
-    }
-    throw err;
-  }
+    }),
+    () => ({ removed: true, alreadyRemoved: true, entity, entityId, tagId }),
+    // Tag detach uses PUT with _delete: true and 422s with "tag not
+    // found to delete" on a not-attached tag, instead of the standard
+    // 404. Other 422s with different wording still surface.
+    isCapsuleTagNotFound,
+  );
 }

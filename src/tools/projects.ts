@@ -1,11 +1,11 @@
 import { z } from "zod";
 import {
-  CapsuleApiError,
   capsuleDelete,
   capsuleGet,
   capsulePost,
   capsulePut,
 } from "../capsule/client.js";
+import { idempotent } from "../capsule/idempotent.js";
 import {
   CustomFieldWriteSchema,
   fieldsArrayDescriptor,
@@ -167,13 +167,9 @@ export async function deleteProject(input: z.infer<typeof deleteProjectSchema>) 
   if (input.confirm !== true) {
     throw new Error("delete_project requires confirm: true");
   }
-  try {
-    await capsuleDelete(`/kases/${input.id}`);
-    return { deleted: true, alreadyDeleted: false, id: input.id };
-  } catch (err) {
-    if (err instanceof CapsuleApiError && err.status === 404) {
-      return { deleted: true, alreadyDeleted: true, id: input.id };
-    }
-    throw err;
-  }
+  return idempotent(
+    () => capsuleDelete(`/kases/${input.id}`),
+    () => ({ deleted: true, alreadyDeleted: false, id: input.id }),
+    () => ({ deleted: true, alreadyDeleted: true, id: input.id }),
+  );
 }

@@ -1,6 +1,6 @@
 import { z } from "zod";
+import { idempotent } from "../capsule/idempotent.js";
 import {
-  CapsuleApiError,
   capsuleDelete,
   capsuleGet,
   capsulePost,
@@ -150,13 +150,9 @@ export async function removeTrack(input: z.infer<typeof removeTrackSchema>) {
   if (input.confirm !== true) {
     throw new Error("remove_track requires confirm: true");
   }
-  try {
-    await capsuleDelete(`/tracks/${input.trackId}`);
-    return { removed: true, alreadyRemoved: false, trackId: input.trackId };
-  } catch (err) {
-    if (err instanceof CapsuleApiError && err.status === 404) {
-      return { removed: true, alreadyRemoved: true, trackId: input.trackId };
-    }
-    throw err;
-  }
+  return idempotent(
+    () => capsuleDelete(`/tracks/${input.trackId}`),
+    () => ({ removed: true, alreadyRemoved: false, trackId: input.trackId }),
+    () => ({ removed: true, alreadyRemoved: true, trackId: input.trackId }),
+  );
 }

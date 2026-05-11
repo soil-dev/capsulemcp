@@ -1,11 +1,14 @@
 import { z } from "zod";
 import {
-  CapsuleApiError,
   capsuleDelete,
   capsuleGet,
   capsulePost,
   capsulePut,
 } from "../capsule/client.js";
+import {
+  idempotent,
+  idempotentWithResult,
+} from "../capsule/idempotent.js";
 import {
   CustomFieldWriteSchema,
   fieldsArrayDescriptor,
@@ -289,15 +292,11 @@ export async function deleteParty(input: z.infer<typeof deletePartySchema>) {
   if (input.confirm !== true) {
     throw new Error("delete_party requires confirm: true");
   }
-  try {
-    await capsuleDelete(`/parties/${input.id}`);
-    return { deleted: true, alreadyDeleted: false, id: input.id };
-  } catch (err) {
-    if (err instanceof CapsuleApiError && err.status === 404) {
-      return { deleted: true, alreadyDeleted: true, id: input.id };
-    }
-    throw err;
-  }
+  return idempotent(
+    () => capsuleDelete(`/parties/${input.id}`),
+    () => ({ deleted: true, alreadyDeleted: false, id: input.id }),
+    () => ({ deleted: true, alreadyDeleted: true, id: input.id }),
+  );
 }
 
 // ── Atomic child-array operations ──────────────────────────────────────────
@@ -356,28 +355,20 @@ export async function removePartyEmailAddressById(
   input: z.infer<typeof removePartyEmailAddressByIdSchema>,
 ) {
   const { partyId, emailAddressId } = input;
-  try {
-    const result = await capsulePut<{ party: unknown }>(`/parties/${partyId}`, {
-      party: { emailAddresses: [{ id: emailAddressId, _delete: true }] },
-    });
-    return {
+  return idempotentWithResult(
+    () =>
+      capsulePut<{ party: unknown }>(`/parties/${partyId}`, {
+        party: { emailAddresses: [{ id: emailAddressId, _delete: true }] },
+      }),
+    (result) => ({
       removed: true,
       alreadyRemoved: false,
       partyId,
       emailAddressId,
       ...result,
-    };
-  } catch (err) {
-    if (err instanceof CapsuleApiError && err.status === 404) {
-      return {
-        removed: true,
-        alreadyRemoved: true,
-        partyId,
-        emailAddressId,
-      };
-    }
-    throw err;
-  }
+    }),
+    () => ({ removed: true, alreadyRemoved: true, partyId, emailAddressId }),
+  );
 }
 
 // phoneNumbers ───────────────────────────────────────────────────────
@@ -414,28 +405,20 @@ export async function removePartyPhoneNumberById(
   input: z.infer<typeof removePartyPhoneNumberByIdSchema>,
 ) {
   const { partyId, phoneNumberId } = input;
-  try {
-    const result = await capsulePut<{ party: unknown }>(`/parties/${partyId}`, {
-      party: { phoneNumbers: [{ id: phoneNumberId, _delete: true }] },
-    });
-    return {
+  return idempotentWithResult(
+    () =>
+      capsulePut<{ party: unknown }>(`/parties/${partyId}`, {
+        party: { phoneNumbers: [{ id: phoneNumberId, _delete: true }] },
+      }),
+    (result) => ({
       removed: true,
       alreadyRemoved: false,
       partyId,
       phoneNumberId,
       ...result,
-    };
-  } catch (err) {
-    if (err instanceof CapsuleApiError && err.status === 404) {
-      return {
-        removed: true,
-        alreadyRemoved: true,
-        partyId,
-        phoneNumberId,
-      };
-    }
-    throw err;
-  }
+    }),
+    () => ({ removed: true, alreadyRemoved: true, partyId, phoneNumberId }),
+  );
 }
 
 // addresses ──────────────────────────────────────────────────────────
@@ -483,28 +466,20 @@ export async function removePartyAddressById(
   input: z.infer<typeof removePartyAddressByIdSchema>,
 ) {
   const { partyId, addressId } = input;
-  try {
-    const result = await capsulePut<{ party: unknown }>(`/parties/${partyId}`, {
-      party: { addresses: [{ id: addressId, _delete: true }] },
-    });
-    return {
+  return idempotentWithResult(
+    () =>
+      capsulePut<{ party: unknown }>(`/parties/${partyId}`, {
+        party: { addresses: [{ id: addressId, _delete: true }] },
+      }),
+    (result) => ({
       removed: true,
       alreadyRemoved: false,
       partyId,
       addressId,
       ...result,
-    };
-  } catch (err) {
-    if (err instanceof CapsuleApiError && err.status === 404) {
-      return {
-        removed: true,
-        alreadyRemoved: true,
-        partyId,
-        addressId,
-      };
-    }
-    throw err;
-  }
+    }),
+    () => ({ removed: true, alreadyRemoved: true, partyId, addressId }),
+  );
 }
 
 // websites ───────────────────────────────────────────────────────────
@@ -567,26 +542,18 @@ export async function removePartyWebsiteById(
   input: z.infer<typeof removePartyWebsiteByIdSchema>,
 ) {
   const { partyId, websiteId } = input;
-  try {
-    const result = await capsulePut<{ party: unknown }>(`/parties/${partyId}`, {
-      party: { websites: [{ id: websiteId, _delete: true }] },
-    });
-    return {
+  return idempotentWithResult(
+    () =>
+      capsulePut<{ party: unknown }>(`/parties/${partyId}`, {
+        party: { websites: [{ id: websiteId, _delete: true }] },
+      }),
+    (result) => ({
       removed: true,
       alreadyRemoved: false,
       partyId,
       websiteId,
       ...result,
-    };
-  } catch (err) {
-    if (err instanceof CapsuleApiError && err.status === 404) {
-      return {
-        removed: true,
-        alreadyRemoved: true,
-        partyId,
-        websiteId,
-      };
-    }
-    throw err;
-  }
+    }),
+    () => ({ removed: true, alreadyRemoved: true, partyId, websiteId }),
+  );
 }
