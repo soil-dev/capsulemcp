@@ -93,41 +93,27 @@ describe("createProject", () => {
     expect(body.kase.teamId).toBeUndefined();
   });
 
-  it("rejects ownerId + stageId together at schema level (#14)", async () => {
-    const { createProjectSchema } = await import("../src/tools/projects.js");
-    const result = createProjectSchema.safeParse({
+  it("accepts ownerId + stageId together — Capsule's API allows it; any owner-clearing is tenant board automation, not the API", async () => {
+    // Earlier alpha.{17,18,19} releases rejected this combo based on
+    // observations from a tenant whose board automation cleared `owner`
+    // on project creation. The alpha.19R re-verification (with the
+    // automation disabled) confirmed Capsule's API itself preserves
+    // ownerId across the call. We no longer reject; we serialize and
+    // let the tenant's actual behaviour surface in the response.
+    mockFetch(201, { kase: { id: 10, owner: { id: 7 }, stage: { id: 42 } } });
+
+    const { createProject } = await import("../src/tools/projects.js");
+    await createProject({
       name: "Onboarding",
       partyId: 5,
       ownerId: 7,
       stageId: 42,
     });
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      const msg = result.error.issues[0]!.message;
-      expect(msg).toMatch(/Cannot supply `ownerId` and `stageId` together/);
-      expect(msg).toMatch(/stage-first workflow/);
-      expect(result.error.issues[0]!.path).toEqual(["ownerId"]);
-    }
-  });
 
-  it("accepts ownerId alone (no stageId) — single-owner create stays valid", async () => {
-    const { createProjectSchema } = await import("../src/tools/projects.js");
-    const result = createProjectSchema.safeParse({
-      name: "Onboarding",
-      partyId: 5,
-      ownerId: 7,
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it("accepts stageId alone (no ownerId) — stage-first create stays valid", async () => {
-    const { createProjectSchema } = await import("../src/tools/projects.js");
-    const result = createProjectSchema.safeParse({
-      name: "Onboarding",
-      partyId: 5,
-      stageId: 42,
-    });
-    expect(result.success).toBe(true);
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.kase.owner).toEqual({ id: 7 });
+    expect(body.kase.stage).toBe(42);
   });
 
   it("sends both owner and team when ownerId+teamId supplied (USER+TEAM shape, Bug 17 fix)", async () => {

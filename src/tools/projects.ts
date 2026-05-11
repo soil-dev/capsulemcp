@@ -70,31 +70,6 @@ export async function getProjects(input: z.infer<typeof getProjectsSchema>) {
 
 // ── Write ───────────────────────────────────────────────────────────────────
 
-// Refinement: Capsule's POST silently drops `ownerId` whenever `stageId`
-// is in the create body, producing owner=null regardless of any other
-// inputs. The connector cannot work around this in-call (the drop happens
-// inside Capsule, not at our serialisation layer), so we reject the bad
-// shape at schema level with an actionable error pointing callers at the
-// stage-first workflow. See NOTES-ON-CAPSULE-API.md §27 Rule C and #14.
-const rejectOwnerWithStageAtCreate = <T extends { ownerId?: number; stageId?: number }>(
-  data: T,
-  ctx: z.RefinementCtx,
-) => {
-  if (data.ownerId !== undefined && data.stageId !== undefined) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["ownerId"],
-      message:
-        "Cannot supply `ownerId` and `stageId` together at create time — " +
-        "Capsule's create endpoint silently drops `ownerId` whenever `stage` is in the body, " +
-        "producing `owner: null` regardless of other inputs. Use the stage-first workflow: " +
-        "(1) create_project { partyId, stageId } (omit ownerId), " +
-        "(2) update_project { ownerId } afterwards — the connector's read-modify-write " +
-        "preserves team and stage on the second call. See `create_project.stageId` for the full rule.",
-    });
-  }
-};
-
 export const createProjectSchema = z.object({
   name: z.string().min(1),
   partyId: z.number().int().positive().describe("ID of the party linked to this project"),
@@ -109,8 +84,8 @@ export const createProjectSchema = z.object({
     .positive()
     .optional()
     .describe(
-      "Assign to user ID. Defaults to NO owner when omitted (unlike create_party / create_opportunity / create_task which default to the API-token owner). " +
-        "WARNING: if `stageId` is also supplied, Capsule's create endpoint silently drops `ownerId` — the resulting project has `owner: null`. This is independent of `teamId` and of whether the board has a default team.",
+      "Assign to user ID. Defaults to the API-token owner when omitted, same as create_party / create_opportunity / create_task. " +
+        "NOTE: some Capsule tenants configure board-level **automation rules** that mutate `owner` (and `team`) on project creation — e.g. an automation that clears `owner` when a project enters a particular board. If you observe a project landing with unexpected `owner: null` after a create_project with `ownerId`, check the target board's automation configuration. Capsule's API itself does not drop `ownerId` when `stageId` is also supplied.",
     ),
   teamId: z
     .number()
@@ -120,8 +95,7 @@ export const createProjectSchema = z.object({
     .describe(
       "Assign to team ID (discover via list_teams). Capsule projects must always have at least one of {owner, team} set — Capsule returns 422 'owner or team is required' otherwise. " +
         "Three ownership shapes are valid: owner alone, team alone, or owner+team (the user must be a member of the team — users can belong to multiple teams; 422 'owner is not a member of the team' otherwise). " +
-        "Supplying `teamId` here overrides any team that would otherwise be auto-inherited from the board's default. " +
-        "WARNING: supplying `teamId` together with `stageId` and NO `ownerId` can produce 422 'owner is not a member of the team' — Capsule appears to implicitly attach an owner in this combination. To create a board-placed project with the board's default team, omit `teamId` (let the board default fire). To create with a non-default team, omit `stageId` and add the stage via update_project afterwards.",
+        "Tenant-specific board automations may set the team field on project creation (e.g. 'when project enters board X, set team to T'). If you observe a team set despite omitting `teamId`, check the target board's automation rules.",
     ),
   stageId: z
     .number()
@@ -129,18 +103,15 @@ export const createProjectSchema = z.object({
     .positive()
     .optional()
     .describe(
-      "Stage (board column) to place the project on. Discover IDs via list_stages — each stage belongs to one Board, so picking a stageId implicitly picks the board. If omitted, the project is created with no stage assignment (and won't appear on any board). The board's default team is auto-applied unless you supply an explicit `teamId`. " +
-        "WARNING: supplying `stageId` at create time forces `owner: null` regardless of other inputs (Capsule drops `ownerId` whenever `stage` is in the create body). The schema rejects `create_project { ownerId, stageId }` to surface this clearly — see `create_project.ownerId`. " +
-        "Two equivalent workflows reach owner+team+stage (both work; pick whichever fits the call site): " +
-        "(A, stage-first) `create_project { partyId, stageId }` (no ownerId) then `update_project { ownerId }` — connector's read-modify-write preserves team and stage, sets the owner; " +
-        "(B, owner-first) `create_project { partyId, ownerId, teamId }` (no stageId) then `update_project { stageId }` — Capsule preserves owner and team across stage-only updates.",
+      "Stage (board column) to place the project on. Discover IDs via list_stages — each stage belongs to one Board, so picking a stageId implicitly picks the board. If omitted, the project is created with no stage assignment (and won't appear on any board). " +
+        "NOTE: tenant-specific board automation rules may run on project creation and mutate `owner` / `team` fields. See `create_project.ownerId` / `create_project.teamId` for the automation caveat. Capsule's create endpoint itself preserves the `ownerId` / `teamId` you supply — any clearing you observe traces to board automations, not the API.",
     ),
   expectedCloseOn: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional()
     .describe("YYYY-MM-DD"),
-}).superRefine(rejectOwnerWithStageAtCreate);
+});
 
 export async function createProject(input: z.infer<typeof createProjectSchema>) {
   const { partyId, ownerId, teamId, status, stageId, ...rest } = input;
