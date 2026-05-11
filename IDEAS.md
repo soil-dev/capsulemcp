@@ -228,12 +228,15 @@ or edit records owned by that team. The connector exposes `ownerId`
 on every write tool but historically did **not** expose `teamId`.
 
 **Status (alpha.17):** `teamId` is now wired on `create_project`
-and `update_project`. The §15-supplementary production
-verification surfaced two project-side bugs (Bug 16 PUT clearing
-team because absent fields are treated as "clear"; Bug 17 POST
-dropping owner when board-default team wins) whose only clean fix
-was to expose `teamId`. See [NOTES-ON-CAPSULE-API.md §27](NOTES-ON-CAPSULE-API.md)
-for the full rule.
+and `update_project`. Originally added to address what we then
+believed were two Capsule API quirks on projects; one of those
+(originally Bug 17 — POST dropping owner) was later reclassified
+as tenant board automation, not a Capsule API rule. The teamId
+parameter is still useful in its own right: it lets callers
+express the USER+TEAM ownership shape explicitly without relying
+on tenant-side automations to fill in the team. See
+[NOTES-ON-CAPSULE-API.md §27](NOTES-ON-CAPSULE-API.md) for the
+current write-semantics framing.
 
 **Still not exposed on:** `create_party`, `update_party`,
 `create_opportunity`, `update_opportunity`, `create_task`,

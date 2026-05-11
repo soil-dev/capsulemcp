@@ -51,6 +51,11 @@ If neither mode is configured, the server **refuses to start**. There's no path 
 | `MCP_OAUTH_I_KNOW_WHAT_IM_DOING` | only with insecure-auto-approve on a non-loopback host | Set to `yes` to acknowledge that you've put the deployment behind a private-network ingress (e.g. Tailscale, VPN). Required because the auto-approve mode lets anyone who reaches the URL register a client and use the shared Capsule token |
 | `CAPSULE_MCP_READONLY` | optional | Set to `1` to skip registering all write/delete tools at the MCP layer |
 | `CAPSULE_API_BASE_URL` | optional | Override the Capsule API base URL (default `https://api.capsulecrm.com/api/v2`). Useful for testing |
+| `MCP_HTTP_JSON_LIMIT` | optional | Inbound JSON body limit for `/mcp` (default `35mb`). Leaves headroom for the base64 expansion of a 25 MB attachment binary; bump if you raise the attachment cap |
+| `MCP_HTTP_RATE_LIMIT_MAX` | optional | Max `/mcp` requests per client per window (default `600`). The connector tracks usage per authenticated client_id, so one runaway caller can't burn the shared Capsule quota |
+| `MCP_HTTP_RATE_LIMIT_WINDOW_MS` | optional | Window in ms for the above (default `60000`) |
+| `MCP_HTTP_RATE_LIMIT_DISABLED` | optional | Set to `1` to disable the `/mcp` rate limiter entirely. Test-only |
+| `MCP_HTTP_DEBUG` | optional | Set to `1` to include full `err.message` in `/mcp` error logs (default: low-cardinality summary only, to avoid Capsule response bodies smearing across log aggregators) |
 | `PORT` | optional | Listen port (Cloud Run injects automatically; default 8080) |
 
 Generate strong values:
@@ -228,6 +233,14 @@ Three secrets, three concerns:
 - `/mcp` validates any browser `Origin` header against `PUBLIC_BASE_URL`, `https://claude.ai`, and optional `MCP_ALLOWED_ORIGINS` entries, matching the Streamable HTTP DNS-rebinding guidance.
 - Issued tokens have **1-day access TTL** and **30-day refresh TTL**. Anthropic's connector renews silently in the background using the static client_id/secret; if a refresh token leaks, its useful life is bounded by the 30-day TTL **or** by the next signing-key rotation, whichever comes first.
 - The `capsule_api_token` scope is the **blast radius cap**. If a token leaks somehow, the read-only scope means no writes happen.
+
+### Trust model — read before deploying
+
+Three things worth being explicit about, because they're not always obvious to operators:
+
+1. **Shared Capsule identity.** Every MCP caller that completes the OAuth dance against this deployment uses the **same** `CAPSULE_API_TOKEN` against Capsule's API. Capsule sees one identity; per-MCP-caller authorization happens **only** at the OAuth gate (client_secret + access-token validation), not at the Capsule layer. If you want different team members to operate under different Capsule identities, run separate deployments with separate tokens — there is no per-user identity multiplexing here.
+2. **Unsanitized data passthrough.** Custom field values, party notes, opportunity descriptions, and other free-text content flow Capsule → connector → MCP client without sanitization. The trust boundary is **Capsule's web UI** (where the data was entered). If a Capsule admin pastes raw HTML or markdown into a custom field, the MCP client receives it verbatim. This is intentional — sanitizing in the connector would corrupt structured content — but operators with adversarial-tenant scenarios should know.
+3. **Leaked-token response.** There is no per-token revocation. The kill switch for any leaked access or refresh token is **rotating `MCP_OAUTH_SIGNING_KEY`**. All clients re-authorise on next call; the static `client_id`/`client_secret` stay unchanged.
 
 ### What you should treat as public
 

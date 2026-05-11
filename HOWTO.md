@@ -11,7 +11,7 @@ npm install
 npm test
 ```
 
-301 tests, all mocked — no Capsule API calls happen, no token needed. The suite has three layers:
+308 tests, all mocked — no Capsule API calls happen, no token needed. The suite has three layers:
 
 - **Per-tool unit tests** (e.g. `tests/parties.test.ts`): import the tool function, mock `undici.fetch`, assert on the URL, method, body, and response handling. Most tests live here.
 - **MCP-protocol integration tests** (`tests/mcp-integration.test.ts`): drive a real `McpServer` through the wire protocol via the SDK's in-memory transport pair, with `undici.fetch` still mocked. Catches the layer between "tool function works" and "MCP correctly registers and dispatches the tool". Includes the `get_attachment` content-type routing logic (which lives in `server.ts`, not the tool function).
@@ -31,7 +31,7 @@ npm run test:watch
 npm run build
 ```
 
-Produces `dist/index.js` (stdio entry, ~109 KB, with `#!/usr/bin/env node` shebang and the executable bit set) and `dist/http.js` (HTTP entry, ~130 KB, no shebang). Each is fully self-contained — tsup runs as two separate configs so the stdio entry can be invoked directly via npx while the HTTP entry isn't a CLI. tsup target is Node 22 (undici 8 requires Node 22+ for the `webidl.util.markAsUncloneable` runtime API).
+Produces `dist/index.js` (stdio entry, ~111 KB, with `#!/usr/bin/env node` shebang and the executable bit set) and `dist/http.js` (HTTP entry, ~134 KB, no shebang). Each is fully self-contained — tsup runs as two separate configs so the stdio entry can be invoked directly via npx while the HTTP entry isn't a CLI. tsup target is Node 22 (undici 8 requires Node 22+ for the `webidl.util.markAsUncloneable` runtime API).
 
 `npm run build` also chains `npm run build:icon` (`scripts/build-icon.mjs`), which regenerates `src/icon.ts` from the canonical `assets/icon.svg`. The TypeScript file is committed (so typecheck works without a build step) but is **generated** — edit the SVG, then run the build. A drift-guard test (`tests/icon-source.test.ts`) fails CI if the two ever fall out of sync.
 
@@ -244,8 +244,10 @@ Easy things to forget that have bitten us before:
 
 - [ ] **`package-lock.json` root version matches `package.json`.** Bumping the two source-of-truth files (package.json + server.ts) doesn't touch the lockfile root — it drifts silently. `npm install --package-lock-only --ignore-scripts` after the bump keeps it honest.
 - [ ] **Three places all match**: `package.json`, `src/server.ts`, `package-lock.json` (root + `packages[""]`).
+- [ ] **`#vX.Y.Z` pins in `README.md` and `INSTALL.md`** point to the new tag. Three locations in each file (the JSON snippet, the `claude mcp add` line, the export-then-add line in INSTALL).
 - [ ] **CHANGELOG `[Unreleased]` is empty** after the cut — its content should now live under `[vX.Y.Z]`.
 - [ ] **HOWTO test count and bundle sizes** reflect reality (greppable: `npm test 2>&1 | tail -3` and `npm run build 2>&1 | tail -5`).
+- [ ] **README "N tools / N read-only" counts** still match — bumping a tool count without bumping these numbers silently drifts. `grep -c "registerTool(server" src/server.ts` and `awk` over `if (!readOnly)` blocks.
 - [ ] **Tag exists before triggering downstream builds**: any image-build pipeline that takes a git ref expects the tag to already be on GitHub.
 
 Versioning convention:

@@ -11,8 +11,44 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+Pre-beta polish pass. Beta-readiness review across four angles
+(schema-description vs handler, top-level docs vs code, test
+hygiene, and security) drove a coordinated cleanup. No
+behavioural regressions; one new connector-layer protection
+(per-client rate limit on `/mcp`), two new defence-in-depth
+hardenings, and a thorough schema-description / docs sync.
+
+### Added
+
+- **Per-client rate limit on `/mcp`.** Keyed by authenticated
+  `clientId` (falls back to IP). Default 600 requests per 60s,
+  configurable via `MCP_HTTP_RATE_LIMIT_MAX` /
+  `MCP_HTTP_RATE_LIMIT_WINDOW_MS`, disable-able via
+  `MCP_HTTP_RATE_LIMIT_DISABLED=1` for tests. Backstop against
+  one abusive caller exhausting the shared Capsule 4000-rph
+  quota for everyone else on the same deployment.
+- **`MCP_HTTP_DEBUG=1`** env var: opts in to verbose `/mcp`
+  error logging. Default is now a low-cardinality summary
+  (`ErrorName status`), to avoid Capsule response bodies (party
+  names, validation messages) smearing across log aggregators.
+
 ### Fixed
 
+- **Constant-time `client_secret` comparison on `/token`.** The
+  MCP SDK's auth router uses native `!==` for client-secret
+  validation, leaking a timing channel. Added an explicit
+  pre-check middleware on `/token` that does `timingSafeEqual`
+  before delegating; the SDK's downstream compare now only ever
+  runs on a known-valid secret, closing the channel.
+- **Stdio entry fails fast on missing `CAPSULE_API_TOKEN`.**
+  Matches the HTTP entry's behaviour. The error used to surface
+  only on the first tool call.
+- **`verifyToken` runtime-validates the claims payload (Zod).**
+  HMAC verification already prevents forgery, but Zod-validating
+  the parsed JSON guards against future signing-key compromise
+  / downgrade scenarios where a malformed claim (missing
+  `expiresAt`, non-string `clientId`) would otherwise propagate
+  into downstream `AuthInfo`.
 - **`update_project` RMW now carries `stage` forward too.** When the
   caller supplies `ownerId` without `teamId` the connector reads
   the current project for the RMW; alpha.20 only captured `team`
@@ -24,8 +60,51 @@ versions adhere to [Semantic Versioning](https://semver.org).
   call still wins — the RMW only fills in `stage` when the
   caller didn't supply one.
 
+### Changed
+
+- **`src/tools/_custom-fields.ts` renamed to
+  `custom-field-helpers.ts`.** The underscore-prefix convention
+  was idiosyncratic and read as "private/scratch" to newcomers
+  despite the documented sort-ordering intent. Imports updated
+  in the three call sites; no behavioural change.
+
 ### Documented
 
+- **`update_project.ownerId` description** now mentions that the
+  RMW carries both team AND stage forward, not just team.
+- **`update_project.stageId` description** dropped the stale
+  owner-clearing warning (the alpha.18-era observation that
+  drove it couldn't be reproduced).
+- **`apply_track.startDate` schema** now enforces the
+  YYYY-MM-DD regex the description already promised (the schema
+  was previously unconstrained `z.string()`).
+- **`apply_track.entity` enum** comment reconciled with the
+  schema: tracks are only exposed for opportunities and projects
+  (parties remain unexposed, even though Capsule's API would
+  accept them).
+- **Operator-facing `add_note` descriptions** dropped the
+  alpha.8 → alpha.13 `creatorId` history; reframed as "this
+  parameter would enable audit-attribution spoofing on
+  shared-connector deployments, so it is intentionally not
+  exposed."
+- **NOTES-ON-CAPSULE-API.md** last-sync date bumped; stale
+  `Bug N` references in source comments removed (the section
+  numbers in NOTES are canonical now).
+- **IDEAS.md** Bug 17 framing on the `teamId` entry updated to
+  reflect the alpha.19R reclassification (was tenant board
+  automation, not a Capsule API rule).
+- **DESIGN.md** "Wrong-path errors" section dropped the
+  `v0.5.0`/`v0.5.1` version anchors (those releases don't
+  exist in public history).
+- **DEPLOY.md env-var table** now lists `MCP_HTTP_JSON_LIMIT`,
+  the three new `MCP_HTTP_RATE_LIMIT_*` knobs, and
+  `MCP_HTTP_DEBUG`. New "Trust model — read before deploying"
+  subsection makes the shared-Capsule-identity model,
+  unsanitized-data passthrough, and signing-key-rotation kill
+  switch explicit.
+- **HOWTO.md** pre-release checklist extended: README/INSTALL
+  pin updates and README tool-count assertions added as
+  explicit items (both have drifted before).
 - **`CustomFieldWriteSchema.value`** description gains a one-line
   audit-log note: sending `value: null` on a field that's already
   empty is accepted but still bumps the parent entity's

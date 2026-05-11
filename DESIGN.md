@@ -331,17 +331,18 @@ and a pointer to where in our code we encode the resolution.
 
 ### Wrong-path errors and their corrections
 
-A cautionary section for the next contributor: during the v0.5.0
-docs crawl I dismissed several endpoints based on 404 responses, and
-the 404s were wrong-path errors on my side, not actual API gaps.
-Each was fixed in v0.5.1.
+A cautionary section for the next contributor: during early
+development I dismissed several endpoints based on 404 responses,
+and the 404s were wrong-path errors on my side, not actual API
+gaps. The corrections are now part of the live code; the table
+stays as a reminder.
 
 | Wrong path I tried | Correct path |
 |---|---|
 | `GET /opportunities/{id}/additionalparties` | `GET /opportunities/{id}/parties` |
 | `GET /opportunities/{id}/projects` | `GET /opportunities/{id}/kases` (legacy term) |
 | `GET /<entity>/customfields` | `GET /<entity>/fields/definitions` |
-| `GET /users/me` | `GET /users/current` (added in v1.0.0 as `get_current_user`) |
+| `GET /users/me` | `GET /users/current` (now wired as `get_current_user`) |
 
 The lesson: when an endpoint that the docs claim exists returns 404,
 re-check the docs for the *exact* path before concluding it's
