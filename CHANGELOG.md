@@ -11,6 +11,51 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Added
+
+- **`teamId` parameter on `create_project` and `update_project`.**
+  Maps to Capsule's body shape `team: {id: teamId}`. Discover IDs
+  via `list_teams`. Unblocks the USER+TEAM project-ownership
+  workflow that the connector previously couldn't express.
+- **Explicit unassign via `null` on `update_project.ownerId` and
+  `update_project.teamId`.** Passing `null` sends `owner: null` /
+  `team: null` in the PUT body — matches Capsule's web UI
+  "Unassign" dropdown option. Passing `undefined` (omitting the
+  field) continues to mean "don't touch this field in the body".
+
+### Fixed (via the new `teamId` parameter)
+
+- **Bug 16 (corrected) — `update_project { ownerId }` clears
+  `team`.** Root cause re-diagnosed via the §15-supplementary
+  production verification: Capsule's PUT on /kases treats an
+  absent `team` field in the request body as "clear team to
+  null", **not** "leave unchanged" — regardless of any
+  compatibility between the new owner and the existing team. The
+  alpha.16 framing ("team must be one the owner belongs to or it
+  clears") was wrong. Fix: callers can now supply both `ownerId`
+  and `teamId` on the same update to preserve (or change) team
+  scope across an owner change. The symmetric case (`teamId`
+  clearing owner) is documented on `update_project.teamId`.
+- **Bug 17 (NEW) — `create_project { ownerId, stageId }` silently
+  drops `ownerId` when the stage's board has a default team.**
+  Connector forwards `ownerId` correctly — Capsule's POST
+  resolves the conflict in favour of the board's default team.
+  Fix: supply `ownerId` and `teamId` explicitly to land at
+  owner+team in one call.
+
+### Documented
+
+- **NOTES-ON-CAPSULE-API.md §27** rewritten (third pass) around
+  the actual write semantics: (Rule A) PUT treats absent
+  owner/team as "clear", and (Rule B) POST drops owner when
+  board-default team wins. Previous framings — "mutually
+  exclusive" (initial) and "team must be one the owner belongs
+  to" (alpha.16) — both wrong, explicitly flagged in §27 for
+  future readers.
+- IDEAS.md "Explicit `teamId` on write tools" entry updated to
+  reflect partial implementation (projects only); parties /
+  opportunities / tasks still deferred.
+
 ## [1.0.0-alpha.16] — 2026-05-11
 
 Closes the §15-16 final batch of the production write-mode test
