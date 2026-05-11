@@ -571,6 +571,246 @@ Opportunity, and Project.
 
 ---
 
+## 19. POST /tracks body field is `trackDateOn`, not `startDate`
+
+Sibling to §2. Capsule's POST /tracks body has two field-naming
+asymmetries from common API convention:
+- The track-definition reference key is `definition` on POST,
+  `trackDefinition` on GET (covered in §2).
+- The track-start-date key is **`trackDateOn`** on POST. Sending
+  `startDate` (the obvious caller-side name) results in Capsule
+  silently dropping the field — the resulting track lands at
+  today's date and every auto-task computes its `dueOn` from today
+  rather than the supplied start.
+
+`trackDateOn` IS visible in Capsule's verbatim POST body example
+(see §2's quote), but it's easy to miss when scanning for "where
+do I put the start date" and end up at `startDate`. We tripped on
+this through alpha.13 (Bug 13 in the §11-12 verification).
+
+**Where in our code:** [`src/tools/tracks.ts`](src/tools/tracks.ts)
+`applyTrack()` — the user-facing parameter is `startDate` (more
+intuitive), but the handler maps to `trackDateOn` on the way out.
+
+---
+
+## 20. Tag id is a single tenant-global value, not a per-entity link id
+
+When Capsule's per-entity docs (Opportunity, Kase, Party) describe
+removing a tag via `{id, _delete: true}`, the phrasing reads as if
+the `id` is a per-entity *link id* — i.e. each (entity, tag) pair
+has its own row id. We initially documented this — and warned
+callers — that the id from `list_tags` was different from the id
+from `get_*?embed=tags`. Verified live during the alpha.10
+verification: the two are the same id. Capsule uses a single
+tenant-global tag id everywhere. Detaching via that id removes the
+link on the specific entity; the tag definition persists for other
+entities that share it.
+
+**Where in our code:** [`src/tools/tags.ts`](src/tools/tags.ts) —
+the file header now states the verified single-id model;
+`remove_tag_by_id.tagId`'s description recommends reading via
+`embed=tags` first (not because the ids differ, but because that
+read confirms the tag is actually attached to the entity — a
+list_tags id for a tag NOT on this entity would 422).
+
+**Empirical confirmation** (alpha.10 production verification):
+
+| Tag name              | list_tags id | embed=tags id |
+|---|---|---|
+| Zendesk               | 5440182      | 5440182       |
+| ZZZ-A10-TestTag       | 5834607      | 5834607       |
+| zzz-completely-different | 5834608   | 5834608       |
+
+Plus: attaching the same tag to two different parties — both show
+the same id on their respective tag entries.
+
+---
+
+## 21. Custom-field clearing: `value: null` works for most types but rejects BOOLEAN
+
+For `update_party`, `update_opportunity`, and `update_project`'s
+`fields` array, passing `value: null` on a row removes the value
+for TEXT / NUMBER / DATE / LIST / LARGE_TEXT / LINK fields cleanly
+(Capsule responds 200 OK and the read-back shows the field gone).
+
+**BOOLEAN is the exception.** Sending
+`{definition: {id}, value: null}` for a BOOLEAN field returns
+`422 field.value: invalid type for field`. Capsule rejects null
+specifically for booleans; the API has no other documented "clear"
+shape for them. Workaround: set the field to `false`, which is
+how most workflows model "the no value" anyway (`Auto-Renewal
+Ceased`, `IsActive`, etc.).
+
+If genuine tri-state BOOLEAN (true / false / unknown) is needed,
+the only path is the `_delete: true` row-shape (which requires
+knowing the row id, hence a GET-then-PUT) — same shape as the
+party-child-array removes in §18.
+
+**Where in our code:** [`src/tools/_custom-fields.ts`](src/tools/_custom-fields.ts)
+`CustomFieldWriteSchema.value` description spells out the
+BOOLEAN-specific rejection. Documented as Bug 12 in the alpha.10
+verification; closed by documentation.
+
+**No Capsule docs page mentions the BOOLEAN-null restriction.**
+
+---
+
+## 22. NUMBER custom-field values are returned as strings via `embed=fields`
+
+A read-back quirk. Setting `value: 3` on a NUMBER custom field
+stores correctly, but `get_party?embed=fields` (or the
+get_opportunity / get_project equivalents) returns `value: "3"` —
+a string, not a number. Callers comparing values across reads and
+writes need to coerce.
+
+The other type-direction is consistent — string values come back
+as strings, boolean values come back as booleans. NUMBER is the
+only type Capsule serialises out as a string instead of its
+native JSON type.
+
+**Where in our code:** [`src/tools/_custom-fields.ts`](src/tools/_custom-fields.ts)
+`CustomFieldWriteSchema.value` description warns about this.
+Observed in alpha.10 verification.
+
+---
+
+## 23. Data tags are NOT auto-attached when setting custom fields under them
+
+In Capsule, custom-field definitions can live under a "data tag"
+(e.g. `Support Agreement Details` on a project gates a set of
+contract-related field definitions). The intuitive expectation is
+that setting a field under a data tag implicitly attaches the data
+tag to the entity. Capsule does NOT do this.
+
+Setting `Contract: Executed` (under `Support Agreement Details`)
+on a project successfully writes the field — and the row's
+internal `tagId` is populated. But the project's visible `tags`
+array remains empty unless you explicitly `add_tag` the data tag.
+A caller reading `get_project?embed=tags` after setting fields
+won't see the data tag.
+
+**Practical effect:** workflows that gate behaviour on "is this
+project tagged with X" need to call `add_tag` explicitly after
+setting fields; setting fields alone is not enough.
+
+**Where in our code:** [`src/tools/projects.ts`](src/tools/projects.ts)
+`update_project.fields` description includes a "Project-specific"
+note about this (the same effect applies to parties and
+opportunities but it's most operationally relevant to projects,
+where data tags gate Lifecycle / FIPS Rebrand workflows). Observed
+in alpha.10 verification.
+
+---
+
+## 24. Capsule's "already done" idempotency error wordings (catch list)
+
+For destructive ops where the target is already gone or never
+existed, Capsule returns one of a small set of specific 404/422
+error message strings. The connector's `idempotent()` helper
+(`src/capsule/idempotent.ts`) catches these to convert "already
+done" into a success shape.
+
+The exact wordings, captured from production verifications:
+
+- **`add_additional_party` re-adds:**
+  - `party is already a contact for this opportunity` (422)
+  - `party is already related to this opportunity` (422) — fires
+    when the target is the entity's MAIN party, not an additional.
+    Different message, same end-state ("link exists, no-op").
+- **`remove_*_by_id` on a not-attached row:**
+  - For party child arrays (email/phone/address/website): 404
+    (no specific message; Capsule's standard "doesn't exist")
+  - For tag detach (PUT with `_delete: true`): 422 with message
+    `tag not found to delete` — Capsule uses 422 here, not 404,
+    because the PUT itself succeeded at the API layer; only the
+    nested-collection mutation failed.
+- **DELETE on already-deleted parent:**
+  - All `delete_*` tools: 404 (Capsule's standard "doesn't exist")
+  - Captures messages like `party not found`, `task not found`,
+    `tag not found`.
+
+**Where in our code:** [`src/capsule/idempotent.ts`](src/capsule/idempotent.ts)
+defines two predicates — `isCapsule404` (default, covers most
+ops) and `isCapsuleTagNotFound` (used by `remove_tag_by_id` for
+the 422 case). Other 422s with different wording still surface
+as errors.
+
+**No Capsule docs page enumerates these error messages.** They
+were captured empirically through the production write-mode
+verifications (sections 9-12 of the bug-report runs).
+
+---
+
+## 25. Track instances are NOT cascaded when their parent opp/project is deleted
+
+Capsule's `DELETE /parties/{id}` cascades to linked notes, tasks,
+opportunities, projects (kases), and the additional-party links
+on those entities. But **track instances applied to those
+opportunities/projects survive the cascade** — they become orphan
+records, reachable only by track id via `GET /tracks/{id}`. The
+auto-tasks created by the track ARE cascaded (because tasks are
+opp/project children); the track instance itself is not.
+
+The same is true for direct `DELETE /opportunities/{id}` or
+`DELETE /kases/{id}`.
+
+**Practical impact:** negligible per delete. But repeated
+apply-track + delete-entity cycles accumulate orphan tracks in
+the tenant indefinitely. `list_entity_tracks` can't surface them
+(the entity is gone); only `show_track` by id does.
+
+**Workaround:** call `remove_track` explicitly before
+`delete_party` / `delete_opportunity` / `delete_project` on each
+applied track instance, if orphan accumulation matters.
+
+**Where in our code:** [`src/server.ts`](src/server.ts) —
+`delete_party`'s tool description warns about this quirk.
+Verified live in §13 of the production write-mode bug-report.
+
+**No Capsule docs page mentions this.** The cascade-on-delete
+behaviour is documented but tracks aren't called out as the
+exception.
+
+---
+
+## 26. Cross-pipeline / cross-board relocation is silently allowed
+
+Capsule does NOT validate that an opportunity's new `milestoneId`
+belongs to its current pipeline, nor that a project's new
+`stageId` belongs to its current board. Passing a milestoneId
+from a different pipeline on `update_opportunity` silently
+relocates the opportunity to that pipeline. Same shape for
+`update_project` and stageId.
+
+Worse: `lastOpenMilestone` (which Capsule maintains for "what
+stage did this die at" auditing) can end up referencing a
+milestone in the previous pipeline — broken cross-pipeline
+provenance.
+
+**Practical impact:** real risk for any workflow that constructs
+milestoneId values from caller input without first checking the
+opportunity's current pipeline. A typo or stale id can move a
+deal across the org's pipeline boundary without warning.
+
+**Workaround:** read the entity first; cross-check the new
+milestone's `pipeline` (or stage's `board`) before issuing the
+update.
+
+**Where in our code:** [`src/tools/opportunities.ts`](src/tools/opportunities.ts)
+`update_opportunity.milestoneId` and
+[`src/tools/projects.ts`](src/tools/projects.ts)
+`update_project.stageId` both carry a verbose WARNING in their
+descriptions. Captured as Bugs 6 and 7 in the §5-10
+production write-mode bug-report; closed by documentation
+(a connector-side pre-fetch validation was considered and rejected
+as overkill until someone gets bitten).
+
+**No Capsule docs page mentions this.** The relocation is
+accepted as if it were a normal update.
+
+---
+
 ## How to add to this file
 
 When you discover a new Capsule API quirk:
