@@ -10,7 +10,7 @@ import {
   CustomFieldWriteSchema,
   fieldsArrayDescriptor,
   mapFieldsForBody,
-} from "./_custom-fields.js";
+} from "./custom-field-helpers.js";
 
 // ── Read ────────────────────────────────────────────────────────────────────
 
@@ -148,8 +148,8 @@ export const updateProjectSchema = z.object({
     .optional()
     .describe(
       "Reassign owner: pass a user ID to set, or `null` to unassign (matches the 'Unassign' option in Capsule's web UI). " +
-        "When you supply `ownerId` WITHOUT a `teamId`, the connector fetches the project's current `team` and includes it in the PUT body — this preserves team scope across owner changes (without it, Capsule's PUT would clear the team). " +
-        "Supply `teamId` explicitly on the same call to change both at once, or `teamId: null` to clear the team as part of an owner change. " +
+        "When you supply `ownerId` WITHOUT a `teamId`, the connector fetches the project's current `team` AND `stage` and includes them in the PUT body — this preserves both across the owner change (without it, Capsule's PUT would clear team; stage carry is defensive against the symmetric clear). " +
+        "Supply `teamId` and/or `stageId` explicitly on the same call to change them instead. `teamId: null` clears the team as part of an owner change. " +
         "Constraints (Capsule enforces, 422 on violation): owner must be a member of the team if both are set; a project must always have at least one of {owner, team} set (cannot clear both).",
     ),
   teamId: z

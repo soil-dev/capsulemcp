@@ -26,9 +26,11 @@ import {
 //     created by the track stay (Capsule's behaviour)
 //
 // Entity for list_entity_tracks is "parties", "opportunities", or
-// "kases". For apply_track, only "kases" and "opportunities" are
-// typical (tracks model deal/project workflows, not party lifecycle),
-// but the API allows all three.
+// "kases". apply_track intentionally exposes only "kases" and
+// "opportunities" — tracks model deal/project workflows, not party
+// lifecycle, and we haven't seen a real workflow that needs party-
+// applied tracks. The Capsule API would accept "parties" too if
+// `applyTrackSchema.entity` were widened.
 
 const TrackEntity = z
   .enum(["parties", "opportunities", "kases"])
@@ -81,6 +83,7 @@ export const applyTrackSchema = z.object({
     ),
   startDate: z
     .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional()
     .describe(
       "Optional ISO-8601 date (YYYY-MM-DD) the track should start from — drives task due-date calculations (each task's `dueOn` is computed as startDate + the track-definition's `daysAfter` offset). Defaults to today if omitted. Useful for scheduling a renewal-queue track against a future contract end-date, or backfilling tracks for historical projects.",
@@ -101,9 +104,7 @@ export async function applyTrack(input: z.infer<typeof applyTrackSchema>) {
   // body field — same field, different name. Verified via NOTES-ON-
   // CAPSULE-API.md §2 (Capsule's verbatim POST /tracks example uses
   // `trackDateOn`). Sending `startDate` directly is silently ignored by
-  // Capsule (the field is dropped without error), which had `startDate`
-  // doing nothing in alpha.1 through alpha.11 — Bug 13 in the §11-12
-  // verification.
+  // Capsule (the field is dropped without error).
   const track: Record<string, unknown> = {
     definition: { id: input.trackDefinitionId },
     [target]: { id: input.entityId },
