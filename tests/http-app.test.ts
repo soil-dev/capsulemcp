@@ -16,7 +16,11 @@ import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { createHash } from "node:crypto";
 import { createApp } from "../src/http/app.js";
-import { OAuthProvider, FixedClientStore } from "../src/auth/provider.js";
+import {
+  OAuthProvider,
+  FixedClientStore,
+  InMemoryClientsStore,
+} from "../src/auth/provider.js";
 
 vi.mock("undici", () => ({ fetch: vi.fn() }));
 
@@ -313,6 +317,86 @@ describe("/authorize and /token", () => {
     expect(res.status).toBe(401);
     const json = (await res.json()) as Record<string, unknown>;
     expect(json["error"]).toBe("invalid_client");
+  });
+
+  it("/token still supports DCR public clients with token_endpoint_auth_method=none", async () => {
+    const provider = new OAuthProvider({
+      clientsStore: new InMemoryClientsStore(),
+      signingKey: SIGNING_KEY,
+      resourceUrl: new URL("http://localhost/mcp"),
+      enableAuthCodeGc: false,
+    });
+    const app = createApp({
+      oauthProvider: provider,
+      issuerUrl: new URL("http://localhost"),
+      jsonLimit: "1mb",
+      allowedOrigins: ["http://localhost"],
+    });
+    let publicServer: Server | undefined;
+    try {
+      await new Promise<void>((resolve) => {
+        publicServer = app.listen(0, () => resolve());
+      });
+      const addr = publicServer.address() as AddressInfo;
+      const publicBaseUrl = `http://127.0.0.1:${addr.port}`;
+
+      const registerRes = await fetch(`${publicBaseUrl}/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          redirect_uris: [REDIRECT_URI],
+          token_endpoint_auth_method: "none",
+          grant_types: ["authorization_code", "refresh_token"],
+          response_types: ["code"],
+        }),
+      });
+      expect(registerRes.status).toBe(201);
+      const client = (await registerRes.json()) as {
+        client_id: string;
+        client_secret?: string;
+      };
+      expect(client.client_secret).toBeUndefined();
+
+      const verifier = "public-client-verifier-padding-padding-padding";
+      const challenge = createHash("sha256")
+        .update(verifier)
+        .digest("base64url");
+      const authParams = new URLSearchParams({
+        response_type: "code",
+        client_id: client.client_id,
+        redirect_uri: REDIRECT_URI,
+        code_challenge: challenge,
+        code_challenge_method: "S256",
+      });
+      const authRes = await fetch(`${publicBaseUrl}/authorize?${authParams}`, {
+        redirect: "manual",
+      });
+      expect(authRes.status).toBe(302);
+      const code = new URL(authRes.headers.get("location") ?? "", "http://x")
+        .searchParams.get("code");
+
+      const tokenRes = await fetch(`${publicBaseUrl}/token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "authorization_code",
+          code: code ?? "",
+          client_id: client.client_id,
+          redirect_uri: REDIRECT_URI,
+          code_verifier: verifier,
+        }),
+      });
+      expect(tokenRes.status).toBe(200);
+      const tokens = (await tokenRes.json()) as { access_token?: string };
+      expect(tokens.access_token).toBeTruthy();
+    } finally {
+      provider.shutdown();
+      if (publicServer) {
+        await new Promise<void>((resolve, reject) =>
+          publicServer.close((err) => (err ? reject(err) : resolve())),
+        );
+      }
+    }
   });
 });
 
