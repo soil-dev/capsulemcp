@@ -62,17 +62,21 @@ versions adhere to [Semantic Versioning](https://semver.org).
   intuitive). Backdating tracks for historical records and
   scheduling tracks against future contract end-dates both work
   now. Caught in the §11-12 production write-mode verification.
-- **Bug 14** — class-level fix for transient hangs in `remove_*` /
-  `list_*` tools. Outbound Capsule HTTP requests now carry a
-  60-second timeout via AbortController; an aborted request is
-  converted to `CapsuleApiError(504)` with retry guidance,
-  instead of leaving the MCP client to hang the full 4-minute
-  transport timeout. Same shape covers the alpha.10 transient
-  `remove_tag_by_id` hang (Bug 11) and the alpha.11
-  `list_entity_tracks` hang (Bug 14). The hangs aren't fixed
-  upstream (Capsule's side stays slow when it does), but the
-  connector no longer multiplies the wait — a 60s outbound budget
-  caps how long a single tool call can block.
+- Outbound Capsule HTTP timeout (defense in depth). All outbound
+  requests now carry a 60-second timeout via AbortController; an
+  aborted request is converted to `CapsuleApiError(504)` with retry
+  guidance. Bug 14 in the §11-12 report and Bug 11 from the alpha.10
+  report were filed as transient hangs in `remove_tag_by_id` /
+  `list_entity_tracks` and prompted this work; in retrospect those
+  hangs were almost certainly higher up the stack — Claude.ai's
+  tool-approval prompt timing out while the user was away, before
+  the connector was ever invoked. The connector had no call to
+  time out. So this fix doesn't address those specific reports, but
+  it's still the right thing to ship: real Capsule slowness, DNS
+  hiccups, TCP keepalive holes, and Capsule outages that return
+  slowly all benefit from a bounded outbound budget. The
+  `AbortError → CapsuleApiError(504)` regression test in
+  `tests/rate-limit.test.ts` locks the conversion.
 
 ### Changed
 

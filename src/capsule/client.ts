@@ -189,21 +189,27 @@ async function parseErrorBody(res: Response): Promise<string> {
 }
 
 /**
- * Per-request timeout for outbound Capsule HTTP calls. Picked so a
- * slow / stuck Capsule response surfaces as a clean error in the MCP
- * client well before the MCP transport's own 4-minute hang timeout.
+ * Per-request timeout for outbound Capsule HTTP calls. Defense in
+ * depth: a slow or stuck Capsule response surfaces as a clean error
+ * to the caller instead of pinning the connection.
  *
  * Reaches into the `signal` slot on the fetch options unless the
  * caller already provided one. Tests that need to bypass the timeout
  * (e.g. fake-timer tests that drive the 429-retry delay) can pass
  * their own signal.
  *
- * Caught hangs observed under this:
- *   - Bug 11 (alpha.10) — `remove_tag_by_id` transient hang
- *   - Bug 14 (alpha.11) — `list_entity_tracks` transient hang
- * Both shaped like "Capsule response slow → MCP client hangs the
- * full 4-minute timeout". With this in place the connector errors
- * out at REQUEST_TIMEOUT_MS instead.
+ * Backstory: the alpha.10 / alpha.11 verification reports filed two
+ * transient hangs (Bug 11 on `remove_tag_by_id`, Bug 14 on
+ * `list_entity_tracks`) shaped like "tool call hung for ~4 minutes".
+ * At the time we attributed them to Capsule slowness and added this
+ * timeout to cap the wait at 60s. In retrospect those hangs were
+ * almost certainly higher up the stack — the Claude.ai tool-approval
+ * prompt's own timeout firing while the user was elsewhere, before
+ * the connector was ever invoked. Our endpoint had no call to time
+ * out. So this timeout doesn't address those specific reports, but
+ * it is still the right thing to have: real Capsule slowness, DNS
+ * hiccups, TCP keepalive holes, and Capsule outages that return
+ * slowly all benefit from a bounded outbound budget.
  */
 const REQUEST_TIMEOUT_MS = 60_000;
 
