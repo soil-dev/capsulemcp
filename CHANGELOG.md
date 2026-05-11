@@ -11,6 +11,20 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Documented
+
+- **BOOLEAN custom fields are observably two-state, not three-state.**
+  The beta.1 production verification of Bug 12 confirmed Capsule
+  still rejects `value: null` with 422 (as documented), AND added a
+  new datapoint: `value: false` is accepted but the row is then
+  **absent** on read-back via `embed='fields'`, not a row with
+  `value: false`. Updated `CustomFieldWriteSchema.value` description
+  and NOTES §21 to reflect: BOOLEAN states are "row with `true`" or
+  "no row"; callers should treat absent BOOLEAN rows as equivalent
+  to false; tri-state semantics aren't achievable through Capsule's
+  API (the previously-mentioned `_delete: true` workaround doesn't
+  help because `value: false` already produces the absent-row state).
+
 ## [1.0.0-beta.1] — 2026-05-11
 
 First beta. Closes the 20-alpha test-plan loop with a

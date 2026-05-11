@@ -34,7 +34,7 @@ export const CustomFieldWriteSchema = z.object({
     .union([z.string(), z.number(), z.boolean(), z.null()])
     .describe(
       "The new value. String for TEXT / DATE / LIST / LARGE_TEXT / LINK fields, number for NUMBER fields, boolean for BOOLEAN fields. " +
-        "Clearing: pass null for TEXT / NUMBER / DATE / LIST (Capsule removes the row). BOOLEAN does NOT accept null and Capsule responds 422 'invalid type for field'; set the BOOLEAN to false instead. " +
+        "Clearing: pass null for TEXT / NUMBER / DATE / LIST (Capsule removes the row). BOOLEAN does NOT accept null (Capsule returns 422 'invalid type for field'); use `value: false` instead. Note BOOLEAN fields are observably **two-state**: a row exists with `value: true`, or no row exists. Setting `value: false` removes the row entirely — readers should treat absent BOOLEAN rows as equivalent to false. Tri-state BOOLEAN semantics (true / false / unknown) are not achievable through Capsule's API. " +
         "Audit-log noise: sending value=null on a field that's already empty/cleared is accepted by Capsule but still bumps the parent entity's `updatedAt`. Read the current value via embed='fields' first if `updatedAt` is being used as a 'last meaningful change' signal. " +
         "NUMBER quirks: Capsule stores numerics correctly but the read-back via embed=fields returns them as STRINGS (e.g. value=3 reads as '3'); callers comparing values must coerce. " +
         "TEXT quirks: value='' has the same observable effect as value=null (row removed); empty-string and never-set are indistinguishable.",

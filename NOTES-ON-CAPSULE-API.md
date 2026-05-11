@@ -623,7 +623,7 @@ global tag id exists in Capsule's model.
 
 ---
 
-## 21. Custom-field clearing: `value: null` works for most types but rejects BOOLEAN
+## 21. Custom-field clearing: `value: null` works for most types but rejects BOOLEAN; BOOLEAN is two-state
 
 For `update_party`, `update_opportunity`, and `update_project`'s
 `fields` array, passing `value: null` on a row removes the value
@@ -634,21 +634,31 @@ for TEXT / NUMBER / DATE / LIST / LARGE_TEXT / LINK fields cleanly
 `{definition: {id}, value: null}` for a BOOLEAN field returns
 `422 field.value: invalid type for field`. Capsule rejects null
 specifically for booleans; the API has no other documented "clear"
-shape for them. Workaround: set the field to `false`, which is
-how most workflows model "the no value" anyway (`Auto-Renewal
-Ceased`, `IsActive`, etc.).
+shape for them. Workaround: set the field to `false`.
 
-If genuine tri-state BOOLEAN (true / false / unknown) is needed,
-the only path is the `_delete: true` row-shape (which requires
-knowing the row id, hence a GET-then-PUT) — same shape as the
-party-child-array removes in §18.
+**BOOLEAN fields are observably two-state, not three-state.**
+Verified live in the beta.1 verification: setting `value: false`
+on a BOOLEAN field is accepted by Capsule (200 OK, `updatedAt`
+advances), but the **read-back via `embed=fields` returns the
+row absent**, not a row with `value: false`. So the observable
+states for a BOOLEAN custom field are:
 
-**Where in our code:** [`src/tools/_custom-fields.ts`](src/tools/_custom-fields.ts)
+- A row exists with `value: true`
+- No row exists (achievable via either initial unset OR `value: false`)
+
+Callers comparing BOOLEAN values must treat absent rows as
+equivalent to false. Tri-state semantics (true / false / unknown)
+are not achievable through Capsule's API. (Earlier versions of
+this section suggested a `_delete: true` row-shape workaround for
+tri-state; that workaround doesn't actually help because the
+read-back from `value: false` is also row-absent.)
+
+**Where in our code:** [`src/tools/custom-field-helpers.ts`](src/tools/custom-field-helpers.ts)
 `CustomFieldWriteSchema.value` description spells out the
-BOOLEAN-specific rejection. Documented as Bug 12 in the alpha.10
-verification; closed by documentation.
+BOOLEAN-specific rejection and the two-state read-back.
 
-**No Capsule docs page mentions the BOOLEAN-null restriction.**
+**No Capsule docs page mentions the BOOLEAN-null restriction or
+the two-state observable behaviour.**
 
 ---
 
