@@ -143,6 +143,52 @@ describe("addNote", () => {
     expect(body.entry.opportunity).toEqual({ id: 3 });
   });
 
+  it("forwards entryAt verbatim for backdating", async () => {
+    mockFetch(201, { entry: { id: 4 } });
+    const { addNote } = await import("../src/tools/entries.js");
+    await addNote({
+      content: "Historical meeting",
+      partyId: 7,
+      entryAt: "2020-03-15T14:30:00Z",
+    });
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.entry.entryAt).toBe("2020-03-15T14:30:00Z");
+  });
+
+  it("maps creatorId → creator:{id} for on-behalf-of authoring", async () => {
+    mockFetch(201, { entry: { id: 5 } });
+    const { addNote } = await import("../src/tools/entries.js");
+    await addNote({
+      content: "Logged on behalf of Kajal",
+      partyId: 7,
+      creatorId: 99,
+    });
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.entry.creator).toEqual({ id: 99 });
+    expect(body.entry.creatorId).toBeUndefined();
+  });
+
+  it("rejects malformed entryAt at the schema layer", async () => {
+    const { addNoteSchema } = await import("../src/tools/entries.js");
+    expect(
+      addNoteSchema.safeParse({ content: "x", partyId: 1, entryAt: "not-a-date" })
+        .success,
+    ).toBe(false);
+    expect(
+      addNoteSchema.safeParse({ content: "x", partyId: 1, entryAt: "2024-03-15" })
+        .success,
+    ).toBe(false); // needs full ISO 8601, not just date
+    expect(
+      addNoteSchema.safeParse({
+        content: "x",
+        partyId: 1,
+        entryAt: "2024-03-15T14:30:00Z",
+      }).success,
+    ).toBe(true);
+  });
+
   it("throws if no link target is provided", async () => {
     const { addNote } = await import("../src/tools/entries.js");
     await expect(addNote({ content: "Orphan note" })).rejects.toThrow("exactly one");

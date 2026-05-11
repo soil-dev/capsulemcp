@@ -11,6 +11,58 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Added
+
+- `update_opportunity.lostReasonId` (optional). Closes Bug 8 from
+  the production write-mode bug report (sections 5–8): connector
+  had no way to set the lost reason, so every connector-driven
+  Lost-close left `lostReason: null` on the record. Discover
+  reason IDs via the existing `list_lostreasons` tool. Capsule
+  silently drops `lostReason` on non-Lost milestones, so it's safe
+  to include on any update; only meaningful when closing to Lost.
+- `add_note.entryAt` (optional ISO-8601 timestamp). Backdating
+  support for historical-note imports (migrating from another CRM)
+  and for logging meetings that happened earlier. Capsule preserves
+  `entryAt` across subsequent `update_entry` calls — only
+  `updatedAt` advances on edits. Schema validates the ISO-8601
+  format pre-call.
+- `add_note.creatorId` (optional user ID). On-behalf-of authoring:
+  log a note attributed to a specific Capsule user rather than the
+  API-token owner. Discover via `list_users`.
+
+### Changed
+
+- `update_opportunity.milestoneId` description rewritten to
+  document the closing-milestone side effects (auto-set `closedOn`
+  and `probability` to the milestone default; preserve
+  `lastOpenMilestone`; symmetric reverse on reopen) AND to warn
+  about cross-pipeline relocation: Capsule does NOT validate that
+  the new milestone belongs to the opportunity's current pipeline,
+  so passing a cross-pipeline ID silently relocates the opportunity
+  and may leave `lastOpenMilestone` referencing a milestone in the
+  previous pipeline. Closes Bug 6.
+- `update_project.stageId` description gains the same
+  cross-board-relocation warning: Capsule does not validate that
+  the new stage belongs to the project's current board; team and
+  other board-derived defaults are NOT updated to match the new
+  board. Closes Bug 7.
+- `create_opportunity.milestoneId` description now states
+  explicitly that the milestone implicitly determines the pipeline
+  (no separate `pipelineId` parameter).
+- `update_opportunity` tool description notes that closed (Won /
+  Lost) opportunities remain fully editable — Capsule does not
+  enforce closed-record immutability. Same note on `update_project`
+  for CLOSED projects.
+- `add_note.content` description now states the content is treated
+  as MARKDOWN (Capsule's web UI renders the markdown when
+  displaying). Pass markdown source, not HTML.
+- `update_entry.subject` description warns that on plain notes
+  Capsule accepts the call (advances `updatedAt`) but doesn't store
+  the subject — confusing if `updatedAt` is being used as a "last
+  meaningful change" signal. Notes preserve `entryAt` across edits;
+  use `entryAt` for "when did this happen" and `updatedAt` for
+  "last touched".
+
 ### Fixed
 
 - `remove_party_email_address_by_id`,

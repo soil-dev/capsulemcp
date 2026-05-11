@@ -432,7 +432,7 @@ export function createCapsuleMcpServer(): McpServer {
 
     server.tool(
       "update_opportunity",
-      "Update fields on an existing opportunity. Only the fields you provide are changed.",
+      "Update fields on an existing opportunity. Only the fields you provide are changed. Closed (Won/Lost) opportunities ARE editable — Capsule does not enforce closed-record immutability, so `value`, `description`, etc. can be changed on a Won opp without warning. If the workflow needs historical revenue numbers to be stable, enforce that caller-side.",
       updateOpportunitySchema.shape,
       async (input) => {
         const result = await updateOpportunity(input);
@@ -516,7 +516,7 @@ export function createCapsuleMcpServer(): McpServer {
 
     server.tool(
       "update_project",
-      "Update fields on an existing project. Only the fields you provide are changed. Use status='CLOSED' to close a project.",
+      "Update fields on an existing project. Only the fields you provide are changed. Use status='CLOSED' to close a project. CLOSED projects remain fully editable — Capsule does not enforce closed-record immutability. Stage moves and description edits on a CLOSED project are accepted without warning.",
       updateProjectSchema.shape,
       async (input) => {
         const result = await updateProject(input);

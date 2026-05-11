@@ -100,6 +100,22 @@ describe("updateOpportunity", () => {
     expect(url).toContain("/opportunities/20");
     expect((options as RequestInit).method).toBe("PUT");
   });
+
+  it("maps lostReasonId → lostReason:{id} for Lost closes", async () => {
+    // Production bug report: lostReason couldn't be set at all via this
+    // connector, so every connector-driven Lost-close left lostReason
+    // null. Now plumbed as a top-level param mirroring ownerId.
+    mockFetch(200, { opportunity: { id: 20 } });
+    const { updateOpportunity } = await import("../src/tools/opportunities.js");
+    await updateOpportunity({ id: 20, milestoneId: 7, lostReasonId: 42 });
+    const body = JSON.parse(
+      (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string,
+    );
+    expect(body.opportunity.milestone).toEqual({ id: 7 });
+    expect(body.opportunity.lostReason).toEqual({ id: 42 });
+    // user-facing field name doesn't leak into the API body
+    expect(body.opportunity.lostReasonId).toBeUndefined();
+  });
 });
 
 describe("getOpportunities (batch)", () => {

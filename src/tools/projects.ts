@@ -116,7 +116,7 @@ export const updateProjectSchema = z.object({
     .positive()
     .optional()
     .describe(
-      "Move the project to this stage (board column). Discover IDs via list_stages.",
+      "Move the project to this stage (board column). Discover IDs via list_stages. WARNING: Capsule does NOT validate that the new stage belongs to the project's current board — passing a stageId from a different board silently relocates the project across boards. Team and other board-derived defaults are NOT updated to match the new board. Verify against the project's current board (read the project first, list its board's stages) before passing a cross-board id.",
     ),
   expectedCloseOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("YYYY-MM-DD"),
 });

@@ -79,7 +79,13 @@ export async function getOpportunities(
 export const createOpportunitySchema = z.object({
   name: z.string().min(1),
   partyId: z.number().int().positive().describe("ID of the party this opportunity belongs to"),
-  milestoneId: z.number().int().positive().describe("ID of the pipeline milestone"),
+  milestoneId: z
+    .number()
+    .int()
+    .positive()
+    .describe(
+      "ID of the pipeline milestone to place this opportunity at. The milestone implicitly determines the pipeline — there is no separate pipelineId parameter. Discover via list_pipelines / list_milestones.",
+    ),
   description: z.string().optional(),
   value: OpportunityValueSchema.optional(),
   expectedCloseOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("YYYY-MM-DD"),
@@ -107,7 +113,16 @@ export async function createOpportunity(
 export const updateOpportunitySchema = z.object({
   id: z.number().int().positive(),
   name: z.string().min(1).optional(),
-  milestoneId: z.number().int().positive().optional(),
+  milestoneId: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      "Move the opportunity to this milestone. Side effects depend on the target: " +
+        "closing milestones (Won/Lost) auto-set `closedOn` to today and `probability` to the milestone default (100/0), preserving `lastOpenMilestone` as the previous open stage; moving back to an open milestone clears `closedOn` and re-applies the milestone's default probability (Won/Lost is reversible — no separate reopen tool). " +
+        "WARNING: Capsule does NOT validate that the new milestone belongs to the opportunity's current pipeline. Passing a milestoneId from a different pipeline silently relocates the opportunity across pipelines, and `lastOpenMilestone` may then reference a milestone in the previous pipeline. Verify against the opportunity's current pipeline (read the opp first, list its pipeline's milestones via list_milestones) before passing a cross-pipeline id.",
+    ),
   description: z.string().optional(),
   value: OpportunityValueSchema.optional(),
   expectedCloseOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -120,13 +135,21 @@ export const updateOpportunitySchema = z.object({
     .describe(
       "Win probability 0–100. On an open milestone this overrides the milestone's default probability. CANNOT be set in the same call as a closing milestone (Won/Lost) — Capsule processes the milestone change first, the opportunity becomes closed, then the probability update is rejected as edit-on-closed-opp with 422 'probability can be updated only for open opportunity'. To close an opportunity, leave probability out of the call: it auto-snaps to 100% (Won) or 0% (Lost).",
     ),
+  lostReasonId: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      "Reason the opportunity was lost. Only meaningful when transitioning to a Lost milestone — Capsule silently drops it for other milestones. Without this set, a connector-driven Lost-close leaves `lostReason: null`. Discover IDs via list_lostreasons.",
+    ),
   ownerId: z.number().int().positive().optional(),
 });
 
 export async function updateOpportunity(
   input: z.infer<typeof updateOpportunitySchema>,
 ) {
-  const { id, milestoneId, ownerId, ...rest } = input;
+  const { id, milestoneId, ownerId, lostReasonId, ...rest } = input;
 
   const body: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(rest)) {
@@ -134,6 +157,9 @@ export async function updateOpportunity(
   }
   if (milestoneId) body["milestone"] = { id: milestoneId };
   if (ownerId) body["owner"] = { id: ownerId };
+  // Capsule's body field is `lostReason: {id}`. Only meaningful when
+  // closing to Lost; for other milestones Capsule drops it silently.
+  if (lostReasonId) body["lostReason"] = { id: lostReasonId };
 
   return capsulePut<{ opportunity: unknown }>(`/opportunities/${id}`, {
     opportunity: body,

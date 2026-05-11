@@ -95,14 +95,34 @@ export async function listEntries(input: z.infer<typeof listEntriesSchema>) {
 
 // MCP SDK needs a plain ZodObject shape; enforce the exactly-one constraint in the handler.
 export const addNoteSchema = z.object({
-  content: z.string().min(1).describe("Note body text"),
+  content: z
+    .string()
+    .min(1)
+    .describe(
+      "Note body text. Stored verbatim and treated as MARKDOWN — Capsule's web UI renders the markdown when displaying. Pass markdown source ('# Heading', '**bold**', '- bullet'), not HTML.",
+    ),
   partyId: z.number().int().positive().optional().describe("Link note to a party (mutually exclusive with opportunityId/projectId)"),
   opportunityId: z.number().int().positive().optional().describe("Link note to an opportunity (mutually exclusive with partyId/projectId)"),
   projectId: z.number().int().positive().optional().describe("Link note to a project (mutually exclusive with partyId/opportunityId)"),
+  entryAt: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})$/)
+    .optional()
+    .describe(
+      "ISO-8601 timestamp for when this note actually happened (e.g. '2024-03-15T14:30:00Z'). Defaults to now. Use this for backdating historical notes when migrating from another system. `entryAt` is preserved across subsequent update_entry calls; only `updatedAt` advances on edits.",
+    ),
+  creatorId: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      "User ID to record as the note's creator. Defaults to the user owning the API token. Use this to log a note on behalf of a colleague (e.g. record that Kajal attended a meeting, attributed to Kajal, even though Anton is making the API call). Discover IDs via list_users.",
+    ),
 });
 
 export async function addNote(input: z.infer<typeof addNoteSchema>) {
-  const { content, partyId, opportunityId, projectId } = input;
+  const { content, partyId, opportunityId, projectId, entryAt, creatorId } = input;
 
   const linked = [partyId, opportunityId, projectId].filter(Boolean);
   if (linked.length !== 1) {
@@ -113,6 +133,8 @@ export async function addNote(input: z.infer<typeof addNoteSchema>) {
   if (partyId) body["party"] = { id: partyId };
   if (opportunityId) body["opportunity"] = { id: opportunityId };
   if (projectId) body["kase"] = { id: projectId };
+  if (entryAt !== undefined) body["entryAt"] = entryAt;
+  if (creatorId !== undefined) body["creator"] = { id: creatorId };
 
   return capsulePost<{ entry: unknown }>("/entries", { entry: body });
 }
@@ -138,7 +160,7 @@ export const updateEntrySchema = z.object({
     .string()
     .optional()
     .describe(
-      "New subject line. Mostly meaningful on email-type entries; ignored on plain notes.",
+      "New subject line. Mostly meaningful on email-type entries; on plain notes Capsule accepts the call (advances `updatedAt`) but does not store the subject — confusing if `updatedAt` is being used as a 'last meaningful change' signal. `entryAt` (when the note was authored) is preserved across edits; only `updatedAt` advances. To sort/filter by 'when did this happen', use `entryAt`; for 'last touched', use `updatedAt`.",
     ),
 });
 
