@@ -807,83 +807,119 @@ accepted as if it were a normal update.
 
 ---
 
-## 27. Project `owner` / `team` write semantics: absent fields are cleared, not preserved
+## 27. Project `owner` / `team` write semantics (asymmetric PUT, owner-dropping POST)
 
-Capsule's data model allows a project to have one of three
-ownership shapes:
+Capsule's data model allows a project to be in one of three
+ownership shapes — and Capsule enforces that one of them always
+holds:
 
 1. **`owner` alone** — owned by a specific user, no team scope.
 2. **`team` alone** — no owner, scoped to a team.
 3. **`owner` + `team`** — both set; the owner must be a member of
    the team (users can belong to multiple teams).
 
-Two non-obvious write-side rules govern how these shapes are
+Constraints (both 422 on violation):
+
+- **Owner-or-team-required.** A project cannot have both `owner`
+  and `team` set to null. Capsule returns `422 kase: owner or team
+  is required`.
+- **Owner-must-be-in-team.** When both are set, the owner must be
+  a member of the team. Capsule returns `422 kase: owner is not a
+  member of the team`.
+
+Three non-obvious write-side rules govern how these shapes are
 reached via the API:
 
-### Rule A — PUT `/kases/{id}`: `owner` and `team` are written as a pair
+### Rule A — PUT `/kases/{id}`: setting `owner` clears `team`, but setting `team` preserves `owner`
 
-When **either** `owner` or `team` appears in the PUT body, Capsule
-re-writes the (owner, team) pair atomically: whichever of the two
-is absent from the body is cleared to null. The §15-supplementary
-production verification observed this clearly: `update_project
-{ ownerId: U }` on a project with `team: T` produced `owner: U,
-team: null` even when user U was a member of team T (so the
-"compatibility" framing previously suspected here was wrong —
-the team clears regardless of compatibility, because the PUT body
-simply didn't mention `team`).
+The PUT semantic is **asymmetric**:
 
-A PUT body that touches **neither** `owner` nor `team` (e.g.
-updating only `name` or `status`) leaves both fields alone — the
-pair-rewrite is only triggered when one of them is in the body.
+- **`owner` in body, `team` absent** → Capsule clears `team` to
+  null. (`update_project { ownerId: U }` alone on a project with
+  `team: T` produces `owner: U, team: null` regardless of whether
+  U is in T.)
+- **`team` in body, `owner` absent** → Capsule preserves the
+  existing `owner` server-side and validates owner∈team.
+  (`update_project { teamId: T }` alone on a project owned by U
+  produces `owner: U, team: T`, or 422 if U ∉ T.)
+- **Both in body** → both are set; same membership constraint.
+- **Neither in body** (e.g. updating only `name`) → both fields
+  left alone.
 
-**Practical effect on update:** to change one half of the pair
-while preserving the other, the connector must send both in the
-body. The connector exposes `teamId` on `update_project` for
-exactly this — supply both `ownerId` and `teamId` together. To
-intentionally unassign one half, pass `null` (e.g. `update_project
-{ ownerId: null }`) — the connector forwards an explicit
-`owner: null` matching Capsule's web UI "Unassign" dropdown.
+The asymmetry was misdiagnosed twice before — see "Earlier wrong
+framings" at the bottom. The alpha.17-verification report
+established the actual behaviour through controlled probes.
 
-### Rule B — POST `/kases` resolves owner/team conflicts in favour of team
+### Rule B — POST `/kases` drops `owner` whenever `stage` is in the body
 
-Creating a project with `owner: { id: U }` AND a `stage` on a
-board whose default team is T: Capsule silently drops the owner
-and keeps the board's team. The resulting project has `owner:
-null, team: T`. This was §15-supplementary Bug 17: the connector
-forwards `ownerId` correctly, but Capsule itself overrides it
-when the board contributes a default team. The fix is to also
-supply an explicit `teamId` (which override is unclear without
-further probing, but the operator gets to be explicit).
+Creating a project with `owner: { id: U }` AND `stage: <stageId>`
+in the same POST: Capsule silently sets the owner to null. This
+is independent of `team` — supplying `team: { id: T }` explicitly
+alongside does NOT preserve the owner. The behaviour fires
+whenever `stage` is present in the create body, even when the
+chosen stage's board has no default team.
 
-**Practical effect on create:** to land at owner=U, team=T in one
-call, supply `ownerId: U` and `teamId: T` explicitly. Don't rely
-on `stageId` to imply the team.
+To land at owner+team+stage, the documented workaround is a
+two-call workflow:
+
+1. `create_project { ownerId, teamId }` (omit `stageId`) — lands
+   at owner+team+stage=null.
+2. `update_project { stageId }` afterwards — adds the board
+   placement, owner and team preserved per Rule A (no `owner` or
+   `team` in body).
+
+### Connector-side mitigation (alpha.18)
+
+`update_project` does a **read-modify-write** when the caller
+supplies `ownerId` without `teamId`: fetches the current project,
+reads its `team`, includes it in the PUT body. This neutralises
+Rule A's "owner-in-body clears team" half — the caller-visible
+behaviour becomes "supplying `ownerId` preserves the existing
+team scope" (with a server-side 422 if the new owner isn't in
+that team, which is a strictly better failure mode than the
+silent clear). Callers can still pass `teamId: null` to clear
+team alongside an owner change, or `teamId: <X>` to change it.
+
+No equivalent mitigation needed for `teamId` alone: Capsule
+already preserves owner server-side.
+
+`create_project` does NOT auto-do the two-call workaround for
+Rule B — the description on `create_project.ownerId` /
+`create_project.stageId` flags the limitation explicitly and
+walks the caller through the two-call pattern.
 
 ### Where in our code
 
 [`src/tools/projects.ts`](src/tools/projects.ts) —
-`create_project` and `update_project` both expose `ownerId` and
-`teamId`. Body builder sends `{owner: {id}, team: {id}}`
-explicitly when supplied. Descriptions on each parameter capture
-both rules with WARNING blocks.
+`update_project` and `create_project` both expose
+`ownerId` and `teamId` (nullable on update for explicit unassign).
+`update_project` does the RMW for ownerId-without-teamId.
+Descriptions capture the constraints and the create-time
+two-call workflow.
 
-Captured as Bug 16 (PUT clears absent team) and Bug 17 (POST
-drops owner when board-default team wins) in the §15 and §15-
-supplementary production bug reports; closed by adding the
-`teamId` parameter (alpha.17).
+Captured as Bug 16 (PUT-clears-team) and Bug 17 (POST-drops-owner)
+in the §15, §15-supplementary, and alpha.17-verification reports.
+Bug 16 closed at the connector level by the RMW; Bug 17 documented
+as a Capsule API limit with a two-call workaround.
 
-**Earlier framings of this rule were wrong** and worth flagging
-for future readers re-reading the alpha.16-era code:
-- "owner and team are mutually exclusive" (initial §15 report) —
-  wrong; the three shapes are all valid.
-- "team must be a team the owner belongs to or it clears"
-  (alpha.16 NOTES §27 attempt) — wrong; the team clears whenever
-  it's absent from the PUT body, irrespective of any compatibility
-  check.
+**Earlier wrong framings** worth flagging for future readers
+re-reading the alpha.{16,17}-era code:
+
+1. "owner and team are mutually exclusive" (initial §15 report) —
+   wrong; the three shapes are all valid.
+2. "team must be a team the owner belongs to or it clears"
+   (alpha.16 §27) — wrong; the asymmetry is structural to the
+   PUT, not a compatibility check.
+3. "PUT rewrites the (owner, team) pair atomically — absent half
+   is cleared" (alpha.17 §27) — wrong; the rule is asymmetric
+   (owner-in-body clears team; team-in-body preserves owner).
+4. "Bug 17 fixable by supplying `teamId` alongside `ownerId` at
+   create time" (alpha.17 descriptions) — wrong; Capsule drops
+   owner whenever `stage` is in the body, regardless of `teamId`.
 
 **No Capsule docs page mentions either rule explicitly.**
-Verified live in §15 and §15-supplementary production
-verification.
+Verified live in §15-supplementary and the alpha.17 verification
+report against production.
 
 ---
 
