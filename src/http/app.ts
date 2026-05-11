@@ -9,7 +9,9 @@
  * missing config, app.listen).
  */
 
+import { timingSafeEqual } from "node:crypto";
 import express from "express";
+import { rateLimit } from "express-rate-limit";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   mcpAuthRouter,
@@ -62,6 +64,68 @@ export function createApp(opts: AppOptions): express.Express {
   // MUST be set before mcpAuthRouter so the rate-limit middleware
   // inside the SDK's auth router sees the configured trust setting.
   app.set("trust proxy", trustProxy);
+
+  // Constant-time client_secret pre-check on /token. Mounted BEFORE
+  // mcpAuthRouter so we authenticate the client first; the SDK's own
+  // client-auth (which uses native `!==` and is therefore not
+  // constant-time) then runs on a known-valid secret, closing the
+  // timing channel for invalid-secret attackers.
+  //
+  // Reads client_secret_post only (form body) — the SDK's downstream
+  // auth doesn't support client_secret_basic, so supporting it here
+  // would create a half-working path. The FixedClientStore default of
+  // `token_endpoint_auth_method: "client_secret_post"` is what callers
+  // actually use.
+  //
+  // Wrapped as URL-encoded middleware because mcpAuthRouter installs
+  // its own body parser internally; we need access to req.body here,
+  // so we duplicate the small parse. Both parses are idempotent.
+  app.post(
+    "/token",
+    express.urlencoded({ extended: false }),
+    (req, res, next) => {
+      const sendInvalidClient = (description: string): void => {
+        res.status(401).json({
+          error: "invalid_client",
+          error_description: description,
+        });
+      };
+
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const clientId =
+        typeof body["client_id"] === "string" ? (body["client_id"] as string) : undefined;
+      const providedSecret =
+        typeof body["client_secret"] === "string"
+          ? (body["client_secret"] as string)
+          : undefined;
+
+      if (!clientId || providedSecret === undefined) {
+        sendInvalidClient("client credentials required");
+        return;
+      }
+
+      const expected = oauthProvider.clientsStore.getClient(clientId);
+      // Use a fake-but-fixed-length expected secret when the clientId
+      // doesn't resolve, so the comparison takes constant time
+      // regardless of whether the clientId is known. Otherwise an
+      // attacker could distinguish "unknown clientId" from "known
+      // clientId, wrong secret" by timing.
+      const expectedSecret =
+        expected && typeof expected.client_secret === "string"
+          ? expected.client_secret
+          : "x".repeat(providedSecret.length || 1);
+
+      const a = Buffer.from(providedSecret);
+      const b = Buffer.from(expectedSecret);
+      const ok =
+        a.length === b.length && timingSafeEqual(a, b) && expected !== undefined;
+      if (!ok) {
+        sendInvalidClient("client authentication failed");
+        return;
+      }
+      next();
+    },
+  );
 
   app.use(
     mcpAuthRouter({
@@ -119,6 +183,43 @@ export function createApp(opts: AppOptions): express.Express {
     next();
   };
 
+  // Per-client rate limit on /mcp. Keyed by the authenticated clientId
+  // (set by requireBearerAuth onto req.auth) so one abusive caller can't
+  // exhaust the shared Capsule API quota for everyone else on the same
+  // deployment. The window/ceiling here are intentionally generous —
+  // enough that a normal Claude session won't ever notice, low enough
+  // that a runaway loop trips before the upstream 4000-rph cap.
+  // Operators on heavy-tenant deployments can override via env. Tests
+  // disable it via MCP_HTTP_RATE_LIMIT_DISABLED.
+  const rateLimitWindowMs =
+    Number(process.env["MCP_HTTP_RATE_LIMIT_WINDOW_MS"]) || 60_000;
+  const rateLimitMax =
+    Number(process.env["MCP_HTTP_RATE_LIMIT_MAX"]) || 600;
+  const rateLimitDisabled =
+    process.env["MCP_HTTP_RATE_LIMIT_DISABLED"] === "1";
+  const mcpRateLimit = rateLimit({
+    windowMs: rateLimitWindowMs,
+    limit: rateLimitMax,
+    standardHeaders: "draft-7",
+    legacyHeaders: false,
+    keyGenerator: (req) => {
+      const clientId = (req as { auth?: { clientId?: string } }).auth?.clientId;
+      // Fallback to IP for unauthenticated paths (shouldn't reach here
+      // post-requireBearerAuth, but defensive). express-rate-limit's
+      // default IP key generator goes through `req.ip`, which respects
+      // the `trust proxy` setting we already configure.
+      return clientId ?? req.ip ?? "unknown";
+    },
+    skip: () => rateLimitDisabled,
+    handler: (_req, res) => {
+      res.status(429).json({
+        jsonrpc: "2.0",
+        error: { code: -32000, message: "Too Many Requests" },
+        id: null,
+      });
+    },
+  });
+
   const guardProtocolVersion: express.RequestHandler = (req, res, next) => {
     const protocolVersion = req.get("MCP-Protocol-Version");
     if (
@@ -145,6 +246,7 @@ export function createApp(opts: AppOptions): express.Express {
       verifier: oauthProvider,
       resourceMetadataUrl: mcpResourceMetadataUrl,
     }),
+    mcpRateLimit,
     guardProtocolVersion,
     express.json({ limit: jsonLimit }),
     async (req, res) => {
@@ -160,13 +262,24 @@ export function createApp(opts: AppOptions): express.Express {
         await server.connect(transport);
         await transport.handleRequest(req, res, req.body);
       } catch (err) {
-        // Log the full error to stderr (operator-visible) but return only
-        // a generic shape to the caller. The message can include Capsule
-        // response bodies / internal paths; even though the caller is
-        // authenticated, we don't want to echo upstream content into the
-        // MCP response unnecessarily.
-        const message = err instanceof Error ? err.message : String(err);
-        console.error(`[capsulemcp] /mcp error: ${message}`);
+        // Log a low-cardinality summary to stderr (operator-visible) but
+        // return only a generic shape to the caller. The full err.message
+        // can include Capsule response bodies (party names, validation
+        // strings, ...) which is operator-visible PII we don't want
+        // smearing across log aggregators by default. Set
+        // MCP_HTTP_DEBUG=1 to opt in to the verbose form on this path.
+        const name = err instanceof Error ? err.name : typeof err;
+        const status =
+          err && typeof err === "object" && "status" in err
+            ? Number((err as { status: number }).status)
+            : undefined;
+        const summary = status !== undefined ? `${name} ${status}` : name;
+        if (process.env["MCP_HTTP_DEBUG"] === "1") {
+          const message = err instanceof Error ? err.message : String(err);
+          console.error(`[capsulemcp] /mcp error: ${summary} — ${message}`);
+        } else {
+          console.error(`[capsulemcp] /mcp error: ${summary}`);
+        }
         if (!res.headersSent) {
           res.status(500).json({ error: "internal_error" });
         }
@@ -181,6 +294,7 @@ export function createApp(opts: AppOptions): express.Express {
       verifier: oauthProvider,
       resourceMetadataUrl: mcpResourceMetadataUrl,
     }),
+    mcpRateLimit,
     guardProtocolVersion,
     (_req, res) => {
       res
@@ -200,6 +314,7 @@ export function createApp(opts: AppOptions): express.Express {
       verifier: oauthProvider,
       resourceMetadataUrl: mcpResourceMetadataUrl,
     }),
+    mcpRateLimit,
     guardProtocolVersion,
     (_req, res) => {
       res

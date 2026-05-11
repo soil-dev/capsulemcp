@@ -276,38 +276,91 @@ describe("/authorize and /token", () => {
     const json = (await res.json()) as Record<string, unknown>;
     expect(json["error"]).toBe("invalid_client");
   });
+
+  it("/token with unknown client_id returns invalid_client (constant-time path)", async () => {
+    const body = new URLSearchParams({
+      grant_type: "authorization_code",
+      code: "doesnt-matter",
+      client_id: "never-registered-client",
+      client_secret: "x".repeat(CLIENT_SECRET.length),
+      redirect_uri: REDIRECT_URI,
+      code_verifier: CODE_VERIFIER,
+    });
+    const res = await fetch(`${baseUrl}/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString(),
+    });
+    expect(res.status).toBe(401);
+    const json = (await res.json()) as Record<string, unknown>;
+    expect(json["error"]).toBe("invalid_client");
+  });
+
+  it("/token without client_secret returns invalid_client (no fallthrough to SDK)", async () => {
+    const code = await getAuthCode();
+    const body = new URLSearchParams({
+      grant_type: "authorization_code",
+      code,
+      client_id: CLIENT_ID,
+      redirect_uri: REDIRECT_URI,
+      code_verifier: CODE_VERIFIER,
+    });
+    const res = await fetch(`${baseUrl}/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString(),
+    });
+    expect(res.status).toBe(401);
+    const json = (await res.json()) as Record<string, unknown>;
+    expect(json["error"]).toBe("invalid_client");
+  });
 });
 
 describe("/mcp 500 response is sanitized (does not echo internal err.message)", () => {
-  it("returns generic {error: 'internal_error'} with no message field", async () => {
-    // Force a 500 by sending malformed JSON-RPC after authenticating.
+  it("returns generic {error: 'internal_error'} with no message field on 500s", async () => {
+    // Deterministically trigger our `/mcp` catch block by stubbing the
+    // SDK transport to throw. Without this stub, malformed payloads
+    // may or may not reach the 500 path depending on SDK behaviour —
+    // making the test conditional and effectively non-asserting on the
+    // "happy" path. Stubbing forces the failure mode and proves the
+    // sanitization holds even when err.message contains internal text.
     const accessToken = await mintToken();
-    // Body that passes JSON parsing but breaks downstream MCP handling
-    // (missing required fields). The /mcp handler may throw inside the
-    // SDK's transport layer; we just need to confirm the 500 path
-    // doesn't echo internal text.
-    const res = await fetch(`${baseUrl}/mcp`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      },
-      // Trigger a 500 by feeding a request body that isn't a JSON-RPC
-      // envelope at all. The transport will reject it deep inside the
-      // SDK, hitting our catch block.
-      body: '{"this":"is not jsonrpc"}',
-    });
-    if (res.status === 500) {
+    const transportModule = await import(
+      "@modelcontextprotocol/sdk/server/streamableHttp.js"
+    );
+    const spy = vi
+      .spyOn(transportModule.StreamableHTTPServerTransport.prototype, "handleRequest")
+      .mockImplementation(async () => {
+        throw new Error(
+          "internal-detail-that-must-not-leak-to-client: party 12345, tenant abc",
+        );
+      });
+    try {
+      const res = await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "tools/list",
+          id: 1,
+        }),
+      });
+      expect(res.status).toBe(500);
       const body = (await res.json()) as Record<string, unknown>;
       expect(body["error"]).toBe("internal_error");
-      // The whole point of the fix: no `message` field on 500s.
       expect(body["message"]).toBeUndefined();
+      // Also assert the internal-detail string itself doesn't appear
+      // anywhere in the response — defends against future regressions
+      // that fold err.message into other fields.
+      const text = JSON.stringify(body);
+      expect(text).not.toContain("internal-detail-that-must-not-leak");
+      expect(text).not.toContain("party 12345");
+    } finally {
+      spy.mockRestore();
     }
-    // The SDK may turn this into a 200-with-error-payload instead of a
-    // 500; if so the sanitization isn't relevant for this specific
-    // input — the test is asserting the negative shape conditional on
-    // hitting the 500 path. Either outcome is acceptable; what we
-    // forbid is `{error: 'internal_error', message: '<…leaky…>'}`.
   });
 });
 
@@ -333,6 +386,108 @@ describe("Proxy trust (express-rate-limit behind X-Forwarded-For)", () => {
     expect(res.status).toBe(302);
     const location = res.headers.get("location");
     expect(location).toContain("code=");
+  });
+});
+
+describe("/mcp per-client rate limit", () => {
+  let lowLimitServer: import("node:http").Server;
+  let lowLimitBaseUrl: string;
+  const lowLimitSecret = "0123456789abcdef0123456789abcdef";
+  const lowLimitClientId = "rl-test-client";
+
+  beforeAll(async () => {
+    // Spawn a separate server with a 2-request-per-minute rate limit so
+    // we can exercise the 429 path without hammering the default 600/min.
+    process.env["MCP_HTTP_RATE_LIMIT_MAX"] = "2";
+    process.env["MCP_HTTP_RATE_LIMIT_WINDOW_MS"] = "60000";
+    const provider = new OAuthProvider({
+      clientsStore: new FixedClientStore({
+        clientId: lowLimitClientId,
+        clientSecret: lowLimitSecret,
+        redirectUris: [REDIRECT_URI],
+        clientName: "rate-limit test",
+      }),
+      signingKey: SIGNING_KEY,
+      resourceUrl: new URL("http://localhost/mcp"),
+      enableAuthCodeGc: false,
+    });
+    const app = createApp({
+      oauthProvider: provider,
+      issuerUrl: new URL("http://localhost"),
+      jsonLimit: "1mb",
+      allowedOrigins: ["http://localhost"],
+    });
+    await new Promise<void>((resolve) => {
+      lowLimitServer = app.listen(0, () => resolve());
+    });
+    const addr = lowLimitServer.address() as AddressInfo;
+    lowLimitBaseUrl = `http://127.0.0.1:${addr.port}`;
+  });
+
+  afterAll(async () => {
+    delete process.env["MCP_HTTP_RATE_LIMIT_MAX"];
+    delete process.env["MCP_HTTP_RATE_LIMIT_WINDOW_MS"];
+    await new Promise<void>((resolve, reject) =>
+      lowLimitServer.close((err) => (err ? reject(err) : resolve())),
+    );
+  });
+
+  it("returns 429 after the configured per-window ceiling", async () => {
+    // Mint a token against the low-limit server so the bearer auth gate
+    // passes and we actually exercise the rate limiter.
+    const verifier = Buffer.from("v".repeat(43)).toString();
+    const { createHash } = await import("node:crypto");
+    const challenge = createHash("sha256").update(verifier).digest("base64url");
+    const params = new URLSearchParams({
+      response_type: "code",
+      client_id: lowLimitClientId,
+      redirect_uri: REDIRECT_URI,
+      code_challenge: challenge,
+      code_challenge_method: "S256",
+      state: "rl",
+    });
+    const authRes = await fetch(`${lowLimitBaseUrl}/authorize?${params}`, {
+      redirect: "manual",
+    });
+    const code = new URL(authRes.headers.get("location") ?? "", "http://x")
+      .searchParams.get("code");
+    const tokRes = await fetch(`${lowLimitBaseUrl}/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code: code ?? "",
+        client_id: lowLimitClientId,
+        client_secret: lowLimitSecret,
+        redirect_uri: REDIRECT_URI,
+        code_verifier: verifier,
+      }),
+    });
+    const token = (await tokRes.json() as { access_token: string }).access_token;
+
+    const callMcp = (): Promise<Response> =>
+      fetch(`${lowLimitBaseUrl}/mcp`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          Accept: "application/json, text/event-stream",
+        },
+        body: JSON.stringify({ jsonrpc: "2.0", method: "tools/list", id: 1 }),
+      });
+
+    // First two within-window calls should pass the limiter (responses
+    // may be 200 with a JSON-RPC error inside; we only care that the
+    // limiter let them through, i.e. NOT 429).
+    const r1 = await callMcp();
+    expect(r1.status).not.toBe(429);
+    const r2 = await callMcp();
+    expect(r2.status).not.toBe(429);
+    // Third call within the same window should trip the limiter.
+    const r3 = await callMcp();
+    expect(r3.status).toBe(429);
+    const body = (await r3.json()) as { error?: { message?: string } };
+    expect(body.error?.message).toBe("Too Many Requests");
   });
 });
 
