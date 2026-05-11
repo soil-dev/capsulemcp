@@ -80,6 +80,35 @@ describe("createProject", () => {
     // The user-facing stageId field doesn't leak into the API body.
     expect(body.kase.stageId).toBeUndefined();
   });
+
+  it("maps teamId → team:{id} in the request body", async () => {
+    mockFetch(201, { kase: { id: 10, team: { id: 88, name: "Ops" } } });
+
+    const { createProject } = await import("../src/tools/projects.js");
+    await createProject({ name: "Onboarding", partyId: 5, teamId: 88 });
+
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.kase.team).toEqual({ id: 88 });
+    expect(body.kase.teamId).toBeUndefined();
+  });
+
+  it("sends both owner and team when ownerId+teamId supplied (USER+TEAM shape, Bug 17 fix)", async () => {
+    mockFetch(201, { kase: { id: 10 } });
+
+    const { createProject } = await import("../src/tools/projects.js");
+    await createProject({
+      name: "Onboarding",
+      partyId: 5,
+      ownerId: 7,
+      teamId: 88,
+    });
+
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.kase.owner).toEqual({ id: 7 });
+    expect(body.kase.team).toEqual({ id: 88 });
+  });
 });
 
 describe("deleteProject", () => {
@@ -157,6 +186,52 @@ describe("updateProject", () => {
     const body = JSON.parse((options as RequestInit).body as string);
     expect(body.kase.stage).toBe(99);
     expect(body.kase.stageId).toBeUndefined();
+  });
+
+  it("maps teamId → team:{id} on update", async () => {
+    mockFetch(200, { kase: { id: 10 } });
+
+    const { updateProject } = await import("../src/tools/projects.js");
+    await updateProject({ id: 10, teamId: 88 });
+
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.kase.team).toEqual({ id: 88 });
+    expect(body.kase.teamId).toBeUndefined();
+  });
+
+  it("sends both owner and team when ownerId+teamId supplied (Bug 16 fix — preserves team across owner change)", async () => {
+    mockFetch(200, { kase: { id: 10 } });
+
+    const { updateProject } = await import("../src/tools/projects.js");
+    await updateProject({ id: 10, ownerId: 7, teamId: 88 });
+
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.kase.owner).toEqual({ id: 7 });
+    expect(body.kase.team).toEqual({ id: 88 });
+  });
+
+  it("sends owner:null when ownerId=null (unassign — matches UI 'Unassign' option)", async () => {
+    mockFetch(200, { kase: { id: 10 } });
+
+    const { updateProject } = await import("../src/tools/projects.js");
+    await updateProject({ id: 10, ownerId: null });
+
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.kase).toHaveProperty("owner", null);
+  });
+
+  it("sends team:null when teamId=null (unassign)", async () => {
+    mockFetch(200, { kase: { id: 10 } });
+
+    const { updateProject } = await import("../src/tools/projects.js");
+    await updateProject({ id: 10, teamId: null });
+
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.kase).toHaveProperty("team", null);
   });
 });
 

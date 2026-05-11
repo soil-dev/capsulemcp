@@ -84,10 +84,20 @@ export const createProjectSchema = z.object({
     .positive()
     .optional()
     .describe(
-      "Assign to user ID. Defaults to NO owner when omitted (unlike create_party / create_opportunity / create_task which default to the API-token owner). The project's `team` field auto-populates from the board's default team if a stageId is supplied. " +
-        "Capsule's data model allows three combinations: owner alone, team alone, or owner + team (where the team must be one the owner belongs to — owners can be members of multiple teams). " +
-        "If you set `ownerId` to a user who is NOT a member of the team the project would otherwise inherit from the board, Capsule clears the team to null rather than keeping an invalid (owner not-in-team) combination. To keep a project both owned by a specific user AND scoped to a specific team, the chosen ownerId must be a user in that team. " +
-        "This connector cannot set `teamId` directly, so if the team is cleared by an incompatible owner, restoring it requires Capsule's web UI.",
+      "Assign to user ID. Defaults to NO owner when omitted (unlike create_party / create_opportunity / create_task which default to the API-token owner). " +
+        "WARNING: when `stageId` is also supplied and the chosen stage's board has a default team, Capsule's create endpoint silently drops `ownerId` and keeps the board's team — the resulting project has owner=null. " +
+        "To create a project with both an owner and a team, supply `ownerId` together with an explicit `teamId` (and either omit `stageId` or use a stage on a board with no default team). " +
+        "To set an owner on a board-driven project after the fact, create it first, then `update_project { ownerId, teamId }` together — supplying `ownerId` alone on update will clear the team.",
+    ),
+  teamId: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      "Assign to team ID (discover via list_teams). Capsule projects support three ownership shapes: owner alone, team alone, or owner+team (the user must be a member of the team — users can belong to multiple teams). " +
+        "Supplying `teamId` overrides any team that would otherwise be auto-inherited from the board's default. " +
+        "If you also supply `ownerId`, ensure the owner is a member of this team; otherwise Capsule rejects or silently coerces the combination.",
     ),
   stageId: z
     .number()
@@ -95,7 +105,7 @@ export const createProjectSchema = z.object({
     .positive()
     .optional()
     .describe(
-      "Stage (board column) to place the project on. Discover IDs via list_stages — each stage belongs to one Board, so picking a stageId implicitly picks the board. If omitted, the project is created with no stage assignment (and won't appear on any board). The board's default team is auto-applied to the project's `team` field. If `ownerId` is also set on this call and the chosen owner is NOT a member of the board's default team, Capsule clears the team rather than keeping the invalid combination — see `ownerId` for the full rule.",
+      "Stage (board column) to place the project on. Discover IDs via list_stages — each stage belongs to one Board, so picking a stageId implicitly picks the board. If omitted, the project is created with no stage assignment (and won't appear on any board). The board's default team is auto-applied to the project's `team` field unless you supply an explicit `teamId`. Capsule's create endpoint resolves owner/team conflicts in favour of team: if you supply `ownerId` alongside a stageId whose board has a default team and no explicit `teamId`, the owner is silently dropped — supply `teamId` explicitly to keep both.",
     ),
   expectedCloseOn: z
     .string()
@@ -105,7 +115,7 @@ export const createProjectSchema = z.object({
 });
 
 export async function createProject(input: z.infer<typeof createProjectSchema>) {
-  const { partyId, ownerId, status, stageId, ...rest } = input;
+  const { partyId, ownerId, teamId, status, stageId, ...rest } = input;
 
   // Default applied here (not via zod's .default()) so the inferred
   // input type keeps `status` optional. Same pattern as listTasks.
@@ -115,6 +125,7 @@ export async function createProject(input: z.infer<typeof createProjectSchema>) 
     party: { id: partyId },
   };
   if (ownerId) body["owner"] = { id: ownerId };
+  if (teamId) body["team"] = { id: teamId };
   // Capsule's create-case body uses `stage: <integer>` per the docs
   // example. The GET response uses the object form `stage: {id, name}`,
   // but we follow the documented request shape on the way in.
@@ -134,9 +145,27 @@ export const updateProjectSchema = z.object({
     .number()
     .int()
     .positive()
+    .nullable()
     .optional()
     .describe(
-      "Reassign owner to user ID. Capsule's data model requires that when both owner and team are set, the team be one the owner belongs to. If the new ownerId is NOT a member of the project's current team, Capsule clears the team to null rather than keeping an invalid (owner not-in-team) combination. To preserve a specific team-scope across an owner change, ensure the new owner is in that team. The connector cannot set `teamId` directly; if the team is cleared, restoring it requires Capsule's web UI. Once an owner is set, this connector also cannot clear it back to null — use Capsule's web UI for that.",
+      "Reassign owner: pass a user ID to set, or `null` to unassign (matches the 'Unassign' option in Capsule's web UI). " +
+        "WARNING: Capsule's PUT on /kases treats an absent `team` field in the request body as 'clear team to null', NOT 'leave unchanged'. " +
+        "So `update_project { ownerId }` on a project that currently has a team will clear that team as a side effect — even if the new owner is a valid member of it. " +
+        "To preserve (or change) team-scope across an owner change, supply `teamId` on the same call: `update_project { ownerId, teamId }`. " +
+        "When both are supplied the owner must be a member of the team (users can belong to multiple teams).",
+    ),
+  teamId: z
+    .number()
+    .int()
+    .positive()
+    .nullable()
+    .optional()
+    .describe(
+      "Reassign team: pass a team ID (discover via list_teams) to set, or `null` to unassign. " +
+        "WARNING: Capsule's PUT on /kases treats an absent `owner` field in the request body as 'clear owner to null', NOT 'leave unchanged'. " +
+        "So `update_project { teamId }` on a project that currently has an owner will clear that owner as a side effect. " +
+        "To preserve (or change) the owner across a team change, supply `ownerId` on the same call: `update_project { ownerId, teamId }`. " +
+        "When both are supplied the owner must be a member of the team.",
     ),
   stageId: z
     .number()
@@ -157,13 +186,18 @@ export const updateProjectSchema = z.object({
 });
 
 export async function updateProject(input: z.infer<typeof updateProjectSchema>) {
-  const { id, ownerId, stageId, fields, ...rest } = input;
+  const { id, ownerId, teamId, stageId, fields, ...rest } = input;
 
   const body: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(rest)) {
     if (v !== undefined) body[k] = v;
   }
-  if (ownerId) body["owner"] = { id: ownerId };
+  // `null` means "unassign" (matches Capsule's UI "Unassign" option);
+  // `undefined` means "don't touch this field in the body".
+  if (ownerId === null) body["owner"] = null;
+  else if (ownerId !== undefined) body["owner"] = { id: ownerId };
+  if (teamId === null) body["team"] = null;
+  else if (teamId !== undefined) body["team"] = { id: teamId };
   if (stageId) body["stage"] = stageId;
   const mappedFields = mapFieldsForBody(fields);
   if (mappedFields !== undefined) body["fields"] = mappedFields;
