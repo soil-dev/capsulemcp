@@ -261,7 +261,7 @@ export function createCapsuleMcpServer(): McpServer {
 
     server.tool(
       "delete_party",
-      "DESTRUCTIVE & IRREVERSIBLE: permanently delete a party (person or organisation). Cascades to all linked notes, tasks, opportunities, AND projects (kases). Deleting an organisation does NOT delete people linked to it via organisationId — their `organisation` field is silently cleared to null and they survive as standalone records. Requires confirm=true. Always read the party first with get_party and confirm with the user before calling.",
+      "DESTRUCTIVE & IRREVERSIBLE: permanently delete a party (person or organisation). Cascades to all linked notes, tasks, opportunities, AND projects (kases). Deleting an organisation does NOT delete people linked to it via organisationId — their `organisation` field is silently cleared to null and they survive as standalone records. Requires confirm=true. Always read the party first with get_party and confirm with the user before calling. Idempotent on retry: response is `{deleted: true, alreadyDeleted: false, id}` on a fresh delete or `{deleted: true, alreadyDeleted: true, id}` if the party was already gone (Capsule's 404 is caught internally so reconciliation loops can re-issue safely).",
       deletePartySchema.shape,
       async (input) => {
         const result = await deleteParty(input);
@@ -282,7 +282,7 @@ export function createCapsuleMcpServer(): McpServer {
 
     server.tool(
       "remove_party_email_address_by_id",
-      "Remove one email-address entry from a party by its row id. Atomic. Discover the id via get_party — each entry in the emailAddresses array carries one. Use this to replace an existing entry: remove the old id, then call add_party_email_address with the new value (any associated server-side metadata on the old row is discarded along with the row).",
+      "Remove one email-address entry from a party by its row id. Atomic. Discover the id via get_party — each entry in the emailAddresses array carries one. Use this to replace an existing entry: remove the old id, then call add_party_email_address with the new value (any associated server-side metadata on the old row is discarded along with the row). Idempotent on retry: response is `{removed: true, alreadyRemoved: false, partyId, emailAddressId, party}` on a fresh remove (the updated party shape is included) or `{removed: true, alreadyRemoved: true, partyId, emailAddressId}` if the row was already gone (Capsule's 404 is caught).",
       removePartyEmailAddressByIdSchema.shape,
       async (input) => {
         const result = await removePartyEmailAddressById(input);
@@ -302,7 +302,7 @@ export function createCapsuleMcpServer(): McpServer {
 
     server.tool(
       "remove_party_phone_number_by_id",
-      "Remove one phone-number entry from a party by its row id. Atomic. Discover the id via get_party.",
+      "Remove one phone-number entry from a party by its row id. Atomic. Discover the id via get_party. Idempotent on retry: response is `{removed: true, alreadyRemoved: false, partyId, phoneNumberId, party}` on a fresh remove or `{removed: true, alreadyRemoved: true, partyId, phoneNumberId}` if the row was already gone.",
       removePartyPhoneNumberByIdSchema.shape,
       async (input) => {
         const result = await removePartyPhoneNumberById(input);
@@ -322,7 +322,7 @@ export function createCapsuleMcpServer(): McpServer {
 
     server.tool(
       "remove_party_address_by_id",
-      "Remove one address entry from a party by its row id. Atomic. Discover the id via get_party.",
+      "Remove one address entry from a party by its row id. Atomic. Discover the id via get_party. Idempotent on retry: response is `{removed: true, alreadyRemoved: false, partyId, addressId, party}` on a fresh remove or `{removed: true, alreadyRemoved: true, partyId, addressId}` if the row was already gone.",
       removePartyAddressByIdSchema.shape,
       async (input) => {
         const result = await removePartyAddressById(input);
@@ -342,7 +342,7 @@ export function createCapsuleMcpServer(): McpServer {
 
     server.tool(
       "remove_party_website_by_id",
-      "Remove one website entry from a party by its row id. Atomic. Discover the id via get_party.",
+      "Remove one website entry from a party by its row id. Atomic. Discover the id via get_party. Idempotent on retry: response is `{removed: true, alreadyRemoved: false, partyId, websiteId, party}` on a fresh remove or `{removed: true, alreadyRemoved: true, partyId, websiteId}` if the row was already gone.",
       removePartyWebsiteByIdSchema.shape,
       async (input) => {
         const result = await removePartyWebsiteById(input);
@@ -446,7 +446,7 @@ export function createCapsuleMcpServer(): McpServer {
 
     server.tool(
       "delete_opportunity",
-      "DESTRUCTIVE & IRREVERSIBLE: permanently delete an opportunity. Requires confirm=true. Always read the opportunity first with get_opportunity and confirm with the user before calling.",
+      "DESTRUCTIVE & IRREVERSIBLE: permanently delete an opportunity. Requires confirm=true. Always read the opportunity first with get_opportunity and confirm with the user before calling. Idempotent on retry: response is `{deleted: true, alreadyDeleted: false, id}` on a fresh delete or `{deleted: true, alreadyDeleted: true, id}` if the opportunity was already gone.",
       deleteOpportunitySchema.shape,
       async (input) => {
         const result = await deleteOpportunity(input);
@@ -530,7 +530,7 @@ export function createCapsuleMcpServer(): McpServer {
 
     server.tool(
       "delete_project",
-      "DESTRUCTIVE & IRREVERSIBLE: permanently delete a project (case). Prefer update_project with status='CLOSED' to close a project while preserving history. Requires confirm=true. Always read the project first with get_project and confirm with the user before calling.",
+      "DESTRUCTIVE & IRREVERSIBLE: permanently delete a project (case). Prefer update_project with status='CLOSED' to close a project while preserving history. Requires confirm=true. Always read the project first with get_project and confirm with the user before calling. Idempotent on retry: response is `{deleted: true, alreadyDeleted: false, id}` on a fresh delete or `{deleted: true, alreadyDeleted: true, id}` if the project was already gone.",
       deleteProjectSchema.shape,
       async (input) => {
         const result = await deleteProject(input);
@@ -552,7 +552,7 @@ export function createCapsuleMcpServer(): McpServer {
 
     server.tool(
       "remove_additional_party",
-      "Remove an additional-party link between an opportunity/project and a party. The party itself is NOT deleted. Requires confirm=true. Reversible by re-adding via add_additional_party.",
+      "Remove an additional-party link between an opportunity/project and a party. The party itself is NOT deleted. Requires confirm=true. Reversible by re-adding via add_additional_party. Idempotent on retry: response is `{removed: true, alreadyRemoved: false, entity, entityId, partyId}` on a fresh remove or `{removed: true, alreadyRemoved: true, ...}` if the link was already gone (Capsule's 404 is caught and converted).",
       removeAdditionalPartySchema.shape,
       async (input) => {
         const result = await removeAdditionalParty(input);
@@ -584,7 +584,7 @@ export function createCapsuleMcpServer(): McpServer {
 
     server.tool(
       "remove_track",
-      "Remove a track instance from its entity. Tasks already created by the track stay on the entity and must be deleted separately if desired. Requires confirm=true.",
+      "Remove a track instance from its entity. Tasks already created by the track stay on the entity and must be deleted separately if desired. Requires confirm=true. Idempotent on retry: response is `{removed: true, alreadyRemoved: false, trackId}` on a fresh remove or `{removed: true, alreadyRemoved: true, trackId}` if the track was already gone.",
       removeTrackSchema.shape,
       async (input) => {
         const result = await removeTrack(input);
@@ -658,7 +658,7 @@ export function createCapsuleMcpServer(): McpServer {
 
     server.tool(
       "delete_task",
-      "DESTRUCTIVE & IRREVERSIBLE: permanently delete a task. Prefer complete_task to mark a task done while keeping it in history. Requires confirm=true.",
+      "DESTRUCTIVE & IRREVERSIBLE: permanently delete a task. Prefer complete_task to mark a task done while keeping it in history. Requires confirm=true. Idempotent on retry: response is `{deleted: true, alreadyDeleted: false, id}` on a fresh delete or `{deleted: true, alreadyDeleted: true, id}` if the task was already gone.",
       deleteTaskSchema.shape,
       async (input) => {
         const result = await deleteTask(input);
@@ -850,7 +850,7 @@ export function createCapsuleMcpServer(): McpServer {
 
     server.tool(
       "delete_entry",
-      "DESTRUCTIVE & IRREVERSIBLE: permanently delete a note (or other entry) by its ID. Requires confirm=true.",
+      "DESTRUCTIVE & IRREVERSIBLE: permanently delete a note (or other entry) by its ID. Requires confirm=true. Idempotent on retry: response is `{deleted: true, alreadyDeleted: false, id}` on a fresh delete or `{deleted: true, alreadyDeleted: true, id}` if the entry was already gone.",
       deleteEntrySchema.shape,
       async (input) => {
         const result = await deleteEntry(input);
@@ -970,7 +970,7 @@ export function createCapsuleMcpServer(): McpServer {
 
   server.tool(
     "show_track",
-    "Fetch a single track instance by id. Returns the track's link to its trackDefinition, the entity it's applied to, dates, and completion status.",
+    "Fetch a single track instance by id. Returns the minimal Capsule projection: id, description, trackDateOn, direction, and the array of tasks attached to the track. Capsule's GET /tracks/{id} does NOT include a trackDefinition link, an entity reference, or a completion field — to find the entity a track is applied to, use list_entity_tracks (which lists track instances by their parent entity); to check completion, the track-tasks' own statuses are the proxy.",
     showTrackSchema.shape,
     async (input) => {
       const result = await showTrack(input);
@@ -1045,7 +1045,7 @@ export function createCapsuleMcpServer(): McpServer {
 
     server.tool(
       "remove_tag_by_id",
-      "Detach a tag from a party, opportunity, or project (kase). Atomic — one PUT to Capsule. The `tagId` parameter is the tag's id, readable via get_party/get_opportunity/get_project with embed='tags' (list_tags returns the same ids and also works, but reading via embed first confirms the tag is actually attached to this entity — otherwise Capsule returns 422 'tag not found to delete'). The tag definition itself remains in the tenant for other entities that still share it.",
+      "Detach a tag from a party, opportunity, or project (kase). Atomic — one PUT to Capsule. The `tagId` parameter is the tag's id, readable via get_party/get_opportunity/get_project with embed='tags' (list_tags returns the same ids and also works, but reading via embed first confirms the tag is actually attached to this entity). The tag definition itself remains in the tenant for other entities that still share it. Idempotent on retry: response is `{removed: true, alreadyRemoved: false, entity, entityId, tagId, ...<updated entity>}` on a fresh detach or `{removed: true, alreadyRemoved: true, entity, entityId, tagId}` if the tag was already detached (Capsule's 422 'tag not found to delete' is caught and converted).",
       removeTagByIdSchema.shape,
       async (input) => {
         const result = await removeTagById(input);

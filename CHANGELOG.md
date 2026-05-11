@@ -11,6 +11,27 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Changed
+
+- `show_track` description corrected — alpha.12's text claimed the
+  response carries the track's link to its trackDefinition, the
+  entity it's applied to, and completion status. Capsule's GET
+  `/tracks/{id}` actually returns a much smaller projection:
+  `id`, `description`, `trackDateOn`, `direction`, and the array of
+  `tasks` attached. Description now matches the runtime and points
+  callers at `list_entity_tracks` for the entity-reference path and
+  at the tasks' own statuses as the completion proxy. Drift caught
+  in the alpha.12 verification.
+- All 12 destructive tools (`delete_party`, `delete_opportunity`,
+  `delete_project`, `delete_task`, `delete_entry`,
+  `remove_additional_party`, `remove_track`, `remove_tag_by_id`,
+  and the four `remove_party_*_by_id` tools) now document their
+  `alreadyDeleted` / `alreadyRemoved` response fields in the
+  schema descriptions. The behaviour shipped in alpha.12; the
+  documentation gap was flagged in the alpha.12 verification with
+  the same shape as the alpha.9 → alpha.10 follow-up on
+  `add_additional_party.alreadyLinked`.
+
 ## [1.0.0-alpha.12] — 2026-05-11
 
 ### Changed
