@@ -2,7 +2,7 @@
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server for [Capsule CRM](https://capsulecrm.com). Connect Claude (Desktop, Code, or web Projects via Custom Connector) to your CRM and let it answer natural-language questions across the full record graph: contacts, organisations, opportunities, projects, tasks, and timeline activity. Beyond the basics it covers structured filters with field/operator conditions, saved searches with sort, workflow tracks (templates and instances), file attachments (read + write), audit of deleted records, and batch fetches up to 10 records per call.
 
-- **79 tools** across the Capsule resource graph (49 in read-only mode) — full read coverage plus careful, confirm-gated writes
+- **81 tools** across the Capsule resource graph (49 in read-only mode) — full read coverage plus careful, confirm-gated writes
 - **Two transports**: stdio for local installs (Claude Desktop / Code), HTTP+OAuth for hosted Custom Connectors
 - **Read-only mode** as a one-env-var flag; works alongside read-scoped Capsule tokens
 - **Apache 2.0**
@@ -62,7 +62,7 @@ That's it. The first launch takes ~30 seconds while npx clones and builds; subse
 | Tracks (workflow instances) | `list_track_definitions`, `list_entity_tracks`, `show_track` | `apply_track`, `update_track`, `remove_track` |
 | Saved filters | `list_saved_filters`, `run_saved_filter` | — |
 | Custom fields (schema) | `list_custom_fields`, `get_custom_field` | — |
-| Tags | `list_tags` | — |
+| Tags | `list_tags` | `add_tag`, `remove_tag_by_id` |
 | Users & teams | `list_users`, `get_current_user`, `list_teams` | — |
 | Reference metadata | `list_lostreasons`, `list_activitytypes`, `list_categories`, `list_goals`, `get_site` | — |
 

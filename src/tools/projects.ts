@@ -119,10 +119,21 @@ export const updateProjectSchema = z.object({
       "Move the project to this stage (board column). Discover IDs via list_stages. WARNING: Capsule does NOT validate that the new stage belongs to the project's current board — passing a stageId from a different board silently relocates the project across boards. Team and other board-derived defaults are NOT updated to match the new board. Verify against the project's current board (read the project first, list its board's stages) before passing a cross-board id.",
     ),
   expectedCloseOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("YYYY-MM-DD"),
+  fields: z
+    .array(
+      z.object({
+        definitionId: z.number().int().positive(),
+        value: z.union([z.string(), z.number(), z.boolean(), z.null()]),
+      }),
+    )
+    .optional()
+    .describe(
+      "Set custom field values on this project. PARTIAL UPDATE: only the definitions you list are touched; any field NOT in this array is left unchanged. Discover available definitions via list_custom_fields; read current values via get_project with embed='fields'. Pass value:null to attempt clearing a field.",
+    ),
 });
 
 export async function updateProject(input: z.infer<typeof updateProjectSchema>) {
-  const { id, ownerId, stageId, ...rest } = input;
+  const { id, ownerId, stageId, fields, ...rest } = input;
 
   const body: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(rest)) {
@@ -130,6 +141,12 @@ export async function updateProject(input: z.infer<typeof updateProjectSchema>) 
   }
   if (ownerId) body["owner"] = { id: ownerId };
   if (stageId) body["stage"] = stageId;
+  if (fields !== undefined) {
+    body["fields"] = fields.map((f) => ({
+      definition: { id: f.definitionId },
+      value: f.value,
+    }));
+  }
 
   return capsulePut<{ kase: unknown }>(`/kases/${id}`, { kase: body });
 }

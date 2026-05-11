@@ -229,6 +229,36 @@ export async function createParty(input: z.infer<typeof createPartySchema>) {
 
 // ───────────────────────────────────────────────────────────────────────────
 
+// Custom-field write shape. Capsule's PUT body accepts:
+//   {definition: {id: <definitionId>}, value: <value>}  // set/create
+//   {id: <rowId>, value: <newValue>}                    // update existing row
+//   {id: <rowId>, _delete: true}                        // remove the row
+//
+// We expose only the first form: caller addresses a field by its
+// definitionId (discoverable via list_custom_fields). Capsule resolves
+// whether the value already exists for this entity and updates or
+// creates accordingly. To clear a value, pass `value: null` — Capsule's
+// docs don't explicitly document the clear shape, but null is the
+// natural caller-facing semantic; if Capsule needs `_delete: true`
+// instead, the handler can map it in a followup.
+export const CustomFieldWriteSchema = z.object({
+  definitionId: z
+    .number()
+    .int()
+    .positive()
+    .describe(
+      "The custom-field definition id from list_custom_fields. Identifies which field on the entity to set.",
+    ),
+  value: z
+    .union([z.string(), z.number(), z.boolean(), z.null()])
+    .describe(
+      "The new value. String for text/date/list/large-text/link fields, number for numeric fields, boolean for boolean fields. Pass null to attempt clearing.",
+    ),
+});
+
+const CustomFieldsArrayDescriptor =
+  "Set custom field values on this record. PARTIAL UPDATE: only the definitions you list are touched; any field NOT in this array is left unchanged. Discover available definitions via list_custom_fields; read current values via get_party / get_opportunity / get_project with embed='fields'.";
+
 export const updatePartySchema = z.object({
   id: z.number().int().positive(),
   firstName: z.string().optional(),
@@ -236,17 +266,27 @@ export const updatePartySchema = z.object({
   title: z.string().optional(),
   jobTitle: z.string().optional(),
   name: z.string().optional(),
+  fields: z
+    .array(CustomFieldWriteSchema)
+    .optional()
+    .describe(CustomFieldsArrayDescriptor),
   ...PartyWriteBaseSchema,
 });
 
 export async function updateParty(input: z.infer<typeof updatePartySchema>) {
-  const { id, ownerId, ...rest } = input;
+  const { id, ownerId, fields, ...rest } = input;
 
   const body: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(rest)) {
     if (v !== undefined) body[k] = v;
   }
   if (ownerId) body["owner"] = { id: ownerId };
+  if (fields !== undefined) {
+    body["fields"] = fields.map((f) => ({
+      definition: { id: f.definitionId },
+      value: f.value,
+    }));
+  }
 
   return capsulePut<{ party: unknown }>(`/parties/${id}`, { party: body });
 }

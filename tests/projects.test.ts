@@ -128,6 +128,25 @@ describe("updateProject", () => {
     expect(body.kase.ownerId).toBeUndefined();
   });
 
+  it("maps fields:[{definitionId,value}] → fields:[{definition:{id},value}]", async () => {
+    mockFetch(200, { kase: { id: 10 } });
+    const { updateProject } = await import("../src/tools/projects.js");
+    await updateProject({
+      id: 10,
+      fields: [
+        { definitionId: 2, value: "Premium" },
+        { definitionId: 3, value: 365 },
+      ],
+    });
+    const body = JSON.parse(
+      (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string,
+    );
+    expect(body.kase.fields).toEqual([
+      { definition: { id: 2 }, value: "Premium" },
+      { definition: { id: 3 }, value: 365 },
+    ]);
+  });
+
   it("maps stageId → stage:<integer> for moving a project across stages", async () => {
     mockFetch(200, { kase: { id: 10, stage: { id: 99, name: "Live" } } });
 

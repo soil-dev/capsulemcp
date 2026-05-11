@@ -11,6 +11,50 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Added
+
+- **Tag writes — two new atomic tools** for attaching and detaching
+  tags on parties, opportunities, and projects. Closes the largest
+  open missing-capability gap from the production write-mode
+  bug-report (§7). Generic with an `entity` discriminator
+  (`parties` / `opportunities` / `kases`) so the surface stays
+  compact: 2 tools, not 6 per-entity pairs.
+  - `add_tag(entity, entityId, tagName)` — PUT with
+    `{tags: [{name}]}`. Capsule resolves the name against the
+    tenant's tag dictionary: matches an existing tag if one with
+    that name exists, otherwise creates the tag and attaches it.
+    Idempotent — re-attaching an already-attached tag is harmless.
+  - `remove_tag_by_id(entity, entityId, tagId)` — PUT with
+    `{tags: [{id, _delete: true}]}`. The `tagId` is the
+    **per-entity tag LINK id** (from get_party / get_opportunity /
+    get_project with `embed=tags`), NOT the global tag id from
+    list_tags. The schema description spells this out — Capsule's
+    docs are easy to mis-read here. The global tag persists in the
+    tenant for other entities that share it.
+- **Custom-field value writes** via a new optional `fields`
+  parameter on `update_party`, `update_opportunity`, and
+  `update_project`. Closes the second-largest gap from §7 (Lifecycle
+  contract data lives entirely in custom fields). Shape:
+  `fields: [{definitionId, value}]` where `value` is
+  string / number / boolean / null. Partial update — only the
+  definitions you list are touched; any field NOT in the array is
+  left unchanged. The handler maps each entry to Capsule's
+  `{definition: {id}, value}` body form. Discover definition IDs
+  via the existing `list_custom_fields` tool; read current values
+  via `get_*` with `embed=fields`. Pass `value: null` to attempt
+  clearing (Capsule's docs don't explicitly document a clear shape;
+  if null doesn't work for some field type we'll add an explicit
+  `_delete: true` path in a followup).
+
+12 new regression tests cover both write paths (5 for tags across
+entities including schema-layer rejection of empty names and
+unknown entities; 4 for custom fields covering the body-shape
+mapping and type-union rejection on each of the three update tools).
+
+Tool count goes 79 → 81; read-only count stays at 49 (both tag
+write tools are gated by `if (!readOnly)` and `capsulePut` already
+refuses writes when `CAPSULE_MCP_READONLY=1`).
+
 ## [1.0.0-alpha.9] — 2026-05-11
 
 ### Fixed

@@ -145,6 +145,8 @@ describe("tools/list", () => {
       "remove_track",
       "add_additional_party",
       "remove_additional_party",
+      "add_tag",
+      "remove_tag_by_id",
     ]) {
       expect(names).toContain(w);
     }
@@ -168,6 +170,8 @@ describe("tools/list", () => {
       "add_note",
       "add_additional_party",
       "remove_additional_party",
+      "add_tag",
+      "remove_tag_by_id",
       "apply_track",
       "remove_track",
       "upload_attachment",

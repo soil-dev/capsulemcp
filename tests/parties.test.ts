@@ -324,6 +324,49 @@ describe("deleteParty", () => {
   });
 });
 
+describe("updateParty custom fields", () => {
+  it("maps fields:[{definitionId,value}] → fields:[{definition:{id},value}]", async () => {
+    mockFetch(200, { party: { id: 5 } });
+    const { updateParty } = await import("../src/tools/parties.js");
+    await updateParty({
+      id: 5,
+      fields: [
+        { definitionId: 18, value: "Account Manager" },
+        { definitionId: 22, value: 42 },
+        { definitionId: 23, value: true },
+        { definitionId: 24, value: null },
+      ],
+    });
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.party.fields).toEqual([
+      { definition: { id: 18 }, value: "Account Manager" },
+      { definition: { id: 22 }, value: 42 },
+      { definition: { id: 23 }, value: true },
+      { definition: { id: 24 }, value: null },
+    ]);
+    // The user-facing definitionId doesn't leak into the API body.
+    expect(body.party.fields[0].definitionId).toBeUndefined();
+  });
+
+  it("schema rejects fields with unsupported value types", async () => {
+    const { updatePartySchema } = await import("../src/tools/parties.js");
+    // Arrays and objects are not in the union (string/number/boolean/null)
+    expect(
+      updatePartySchema.safeParse({
+        id: 5,
+        fields: [{ definitionId: 1, value: { nested: true } }],
+      }).success,
+    ).toBe(false);
+    expect(
+      updatePartySchema.safeParse({
+        id: 5,
+        fields: [{ definitionId: 1, value: [1, 2] }],
+      }).success,
+    ).toBe(false);
+  });
+});
+
 describe("updateParty", () => {
   it("puts to /parties/:id with only provided fields", async () => {
     const updated = { party: { id: 5, type: "person", jobTitle: "CTO" } };

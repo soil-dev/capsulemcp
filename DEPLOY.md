@@ -186,7 +186,7 @@ In Claude.ai admin → **Settings → Connectors → Custom Connectors → Add c
 | Client ID | `MCP_OAUTH_CLIENT_ID` you set during deploy |
 | Client Secret | `MCP_OAUTH_CLIENT_SECRET` you set during deploy |
 
-Save. Anthropic walks the OAuth dance silently; on success the connector page shows the tools (49 if `CAPSULE_MCP_READONLY=1`, 79 if not).
+Save. Anthropic walks the OAuth dance silently; on success the connector page shows the tools (49 if `CAPSULE_MCP_READONLY=1`, 81 if not).
 
 ## Wire up a shared Project
 

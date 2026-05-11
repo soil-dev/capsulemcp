@@ -144,12 +144,23 @@ export const updateOpportunitySchema = z.object({
       "Reason the opportunity was lost. Only meaningful when transitioning to a Lost milestone — Capsule silently drops it for other milestones. Without this set, a connector-driven Lost-close leaves `lostReason: null`. Discover IDs via list_lostreasons.",
     ),
   ownerId: z.number().int().positive().optional(),
+  fields: z
+    .array(
+      z.object({
+        definitionId: z.number().int().positive(),
+        value: z.union([z.string(), z.number(), z.boolean(), z.null()]),
+      }),
+    )
+    .optional()
+    .describe(
+      "Set custom field values on this opportunity. PARTIAL UPDATE: only the definitions you list are touched; any field NOT in this array is left unchanged. Discover available definitions via list_custom_fields; read current values via get_opportunity with embed='fields'. Pass value:null to attempt clearing a field.",
+    ),
 });
 
 export async function updateOpportunity(
   input: z.infer<typeof updateOpportunitySchema>,
 ) {
-  const { id, milestoneId, ownerId, lostReasonId, ...rest } = input;
+  const { id, milestoneId, ownerId, lostReasonId, fields, ...rest } = input;
 
   const body: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(rest)) {
@@ -160,6 +171,12 @@ export async function updateOpportunity(
   // Capsule's body field is `lostReason: {id}`. Only meaningful when
   // closing to Lost; for other milestones Capsule drops it silently.
   if (lostReasonId) body["lostReason"] = { id: lostReasonId };
+  if (fields !== undefined) {
+    body["fields"] = fields.map((f) => ({
+      definition: { id: f.definitionId },
+      value: f.value,
+    }));
+  }
 
   return capsulePut<{ opportunity: unknown }>(`/opportunities/${id}`, {
     opportunity: body,

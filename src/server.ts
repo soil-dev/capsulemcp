@@ -61,7 +61,11 @@ import {
 } from "./tools/entries.js";
 import { listPipelinesSchema, listPipelines, listMilestonesSchema, listMilestones } from "./tools/pipelines.js";
 import { listBoardsSchema, listBoards, listStagesSchema, listStages } from "./tools/boards.js";
-import { listTagsSchema, listTags } from "./tools/tags.js";
+import {
+  listTagsSchema, listTags,
+  addTagSchema, addTag,
+  removeTagByIdSchema, removeTagById,
+} from "./tools/tags.js";
 import {
   listUsersSchema, listUsers,
   getCurrentUserSchema, getCurrentUser,
@@ -1027,6 +1031,28 @@ export function createCapsuleMcpServer(): McpServer {
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     },
   );
+
+  if (!readOnly) {
+    server.tool(
+      "add_tag",
+      "Attach a tag to a party, opportunity, or project (kase) by NAME. Capsule resolves to an existing tag in the tenant or creates a fresh one with this name. Idempotent — re-attaching an already-attached tag is harmless. Use list_tags first if you need to avoid accidentally creating a near-duplicate (e.g. 'Zendesk' vs 'zendesk'). To DETACH a tag, use remove_tag_by_id and pass the per-entity link id (NOT the global tag id from list_tags).",
+      addTagSchema.shape,
+      async (input) => {
+        const result = await addTag(input);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      },
+    );
+
+    server.tool(
+      "remove_tag_by_id",
+      "Detach a tag from a party, opportunity, or project (kase). Atomic — one PUT to Capsule. The `tagId` parameter is the PER-ENTITY tag LINK id (read via get_party/get_opportunity/get_project with embed='tags'), NOT the global tag id from list_tags. The tag itself remains in the tenant for other entities that still share it.",
+      removeTagByIdSchema.shape,
+      async (input) => {
+        const result = await removeTagById(input);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      },
+    );
+  }
 
   // ── Users ─────────────────────────────────────────────────────────────────
 

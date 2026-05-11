@@ -101,6 +101,25 @@ describe("updateOpportunity", () => {
     expect((options as RequestInit).method).toBe("PUT");
   });
 
+  it("maps fields:[{definitionId,value}] → fields:[{definition:{id},value}]", async () => {
+    mockFetch(200, { opportunity: { id: 20 } });
+    const { updateOpportunity } = await import("../src/tools/opportunities.js");
+    await updateOpportunity({
+      id: 20,
+      fields: [
+        { definitionId: 5, value: "2025-11-28" },
+        { definitionId: 6, value: null },
+      ],
+    });
+    const body = JSON.parse(
+      (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string,
+    );
+    expect(body.opportunity.fields).toEqual([
+      { definition: { id: 5 }, value: "2025-11-28" },
+      { definition: { id: 6 }, value: null },
+    ]);
+  });
+
   it("maps lostReasonId → lostReason:{id} for Lost closes", async () => {
     // Production bug report: lostReason couldn't be set at all via this
     // connector, so every connector-driven Lost-close left lostReason
