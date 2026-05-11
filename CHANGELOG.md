@@ -11,12 +11,18 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
-Pre-beta polish pass. Beta-readiness review across four angles
-(schema-description vs handler, top-level docs vs code, test
-hygiene, and security) drove a coordinated cleanup. No
-behavioural regressions; one new connector-layer protection
-(per-client rate limit on `/mcp`), two new defence-in-depth
-hardenings, and a thorough schema-description / docs sync.
+## [1.0.0-beta.1] — 2026-05-11
+
+First beta. Closes the 20-alpha test-plan loop with a
+coordinated beta-readiness polish pass across four review
+angles (schema-description vs handler, top-level docs vs code,
+test hygiene, and security) and the follow-up patches from
+PR #20. No behavioural regressions; one new connector-layer
+protection (per-client rate limit on `/mcp`), three new
+defence-in-depth hardenings, three latent fixes uncovered by
+review (async-store-safe `/token` precheck, public-DCR-client
+passthrough, broader `update_project` stage carry), and a
+thorough schema-description / docs sync.
 
 ### Added
 
