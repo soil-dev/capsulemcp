@@ -11,8 +11,9 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
-Pending — slated for the next alpha cut. Two strands of work
-since alpha.18:
+## [1.0.0-alpha.19] — 2026-05-11
+
+Two strands of work since alpha.18:
 
 ### Fixed
 
