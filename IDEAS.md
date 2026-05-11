@@ -220,43 +220,46 @@ schema based on a transcript or workshop output.
 
 ---
 
-## Explicit `teamId` on write tools
+## Explicit `teamId` on write tools — partially implemented (projects only)
 
 Capsule's `team` is the access-control scope — multi-team tenants
 use it to partition data so only members of a given team can see
 or edit records owned by that team. The connector exposes `ownerId`
-on every write tool but **does not expose `teamId`**.
+on every write tool but historically did **not** expose `teamId`.
 
-For project creation the implicit path covers most workflows:
-creating a project on a board whose default team is, say,
-"Region X" inherits that team automatically. Capsule does the
-assignment without the connector touching `team` at all.
+**Status (alpha.17):** `teamId` is now wired on `create_project`
+and `update_project`. The §15-supplementary production
+verification surfaced two project-side bugs (Bug 16 PUT clearing
+team because absent fields are treated as "clear"; Bug 17 POST
+dropping owner when board-default team wins) whose only clean fix
+was to expose `teamId`. See [NOTES-ON-CAPSULE-API.md §27](NOTES-ON-CAPSULE-API.md)
+for the full rule.
 
-The implicit path falls short in three cases:
+**Still not exposed on:** `create_party`, `update_party`,
+`create_opportunity`, `update_opportunity`, `create_task`,
+`update_task`. The original three motivating cases for those are
+still valid:
 
 1. **Parties and opportunities have no board concept**, so
-   `create_party` / `create_opportunity` lands with `team: null`. A
-   team-gated party can't be created through the connector.
-2. **Cross-team moves on existing records** — you can't change a
-   project's team by changing its board (each board belongs to one
-   team), and `update_*` has no `team` parameter, so there's no
-   write path at all.
+   `create_party` / `create_opportunity` lands with `team: null`.
+2. **Cross-team moves on existing records** — `update_party` /
+   `update_opportunity` has no team parameter.
 3. **Standalone tasks** have no anchor to inherit from.
 
-**Implementation** (small): optional
-`teamId: z.number().int().positive()` on `create_party`,
-`update_party`, `create_opportunity`, `update_opportunity`,
-`create_project`, `update_project`, and possibly `create_task` /
-`update_task`. Maps to Capsule's body shape `team: {id: teamId}`,
-mirroring the existing `ownerId` pattern. Discover IDs via the
-existing `list_teams` tool.
+**Implementation** (small): mirror the projects pattern —
+optional `teamId: z.number().int().positive()` on the remaining
+write tools, mapped to body shape `team: {id: teamId}`. Same
+absent-fields-cleared PUT semantic likely applies to these
+entities too; if so, the descriptions need the same WARNING
+blocks projects got.
 
-**When to consider**: a deployment that wants connector-driven
-records on a team scope other than the implicit board default, or
-that needs to move records between teams without using Capsule's
-web UI. For deployments where team partitioning is purely
-board-level, the implicit path is sufficient and adding the
-parameter is unnecessary surface.
+**When to consider**: a deployment hits the same
+team-membership write gap for parties / opportunities / tasks
+that the §15-supplementary report found for projects. Worth
+deferring until concrete production demand surfaces, since adding
+`teamId` to parties/opportunities likely uncovers the same
+absent-field-clearing behaviour and requires the same WARNING
+boilerplate.
 
 ---
 
