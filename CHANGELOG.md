@@ -11,6 +11,8 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.0.0-alpha.10] — 2026-05-11
+
 ### Added
 
 - **Tag writes — two new atomic tools** for attaching and detaching
