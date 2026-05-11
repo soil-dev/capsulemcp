@@ -832,7 +832,7 @@ reached via the API:
 
 ### Rule A — PUT `/kases/{id}`: setting `owner` clears `team`, but setting `team` preserves `owner`
 
-The PUT semantic is **asymmetric**:
+The owner/team half of the PUT semantic is **asymmetric**:
 
 - **`owner` in body, `team` absent** → Capsule clears `team` to
   null. (`update_project { ownerId: U }` alone on a project with
@@ -843,50 +843,60 @@ The PUT semantic is **asymmetric**:
   (`update_project { teamId: T }` alone on a project owned by U
   produces `owner: U, team: T`, or 422 if U ∉ T.)
 - **Both in body** → both are set; same membership constraint.
-- **Neither in body** (e.g. updating only `name`) → both fields
-  left alone.
+- **Neither in body** (e.g. updating only `name`) → owner/team
+  both preserved.
 
-The asymmetry was misdiagnosed twice before — see "Earlier wrong
-framings" at the bottom. The alpha.17-verification report
-established the actual behaviour through controlled probes.
+### Rule B — PUT `/kases/{id}`: `stage` in body clears `owner`
 
-### Rule B — POST `/kases` drops `owner` whenever `stage` is in the body
+When `stage` is in the PUT body, Capsule clears `owner` to null,
+**regardless of whether `owner` is also in the body**. So even
+`update_project { ownerId: U, stageId: S }` results in
+`owner: null`. There is no body shape that includes `stage` and
+produces a non-null `owner` in one call.
 
-Creating a project with `owner: { id: U }` AND `stage: <stageId>`
-in the same POST: Capsule silently sets the owner to null. This
-is independent of `team` — supplying `team: { id: T }` explicitly
-alongside does NOT preserve the owner. The behaviour fires
-whenever `stage` is present in the create body, even when the
-chosen stage's board has no default team.
+Team appears to be preserved across stage-only updates (the
+alpha.18 verification didn't flag team clearing in this path).
 
-To land at owner+team+stage, the documented workaround is a
-two-call workflow:
+### Rule C — POST `/kases`: `stage` in body clears `owner`
 
-1. `create_project { ownerId, teamId }` (omit `stageId`) — lands
-   at owner+team+stage=null.
-2. `update_project { stageId }` afterwards — adds the board
-   placement, owner and team preserved per Rule A (no `owner` or
-   `team` in body).
+Symmetric to Rule B but at create time. POSTing
+`{ owner: {id: U}, stage: <S> }` produces `owner: null, team:
+<board-default>, stage: <S>`. The owner-clearing fires whenever
+`stage` is present in the create body, regardless of `team`.
 
-### Connector-side mitigation (alpha.18)
+### How to reach `owner + team + stage` end state
+
+There is **no single API call** that reaches this state. The
+working workflow is **stage-first, owner-second**:
+
+1. `create_project { partyId, stageId }` (omit `ownerId` and
+   `teamId`) → `owner: null, team: <board default>, stage: <S>`.
+2. `update_project { ownerId: U }` (optionally `+ teamId: T` to
+   change away from the board default) → connector's RMW carries
+   the current team forward; Capsule preserves stage because
+   `stage` is not in this PUT body; owner is set.
+
+The reverse order ("create with owner+team, update with stage")
+does NOT work — the stage-only update clears the owner per
+Rule B.
+
+`create_project { partyId, stageId, teamId }` (with an explicit
+non-default team but no owner) also fails: Capsule appears to
+implicitly attach the API-token user as owner and 422 on
+owner-must-be-in-team. So `teamId` at create time is only safe
+when combined with a compatible `ownerId` AND without `stageId`.
+
+### Connector-side mitigation (alpha.18, refined in alpha.19)
 
 `update_project` does a **read-modify-write** when the caller
 supplies `ownerId` without `teamId`: fetches the current project,
 reads its `team`, includes it in the PUT body. This neutralises
-Rule A's "owner-in-body clears team" half — the caller-visible
-behaviour becomes "supplying `ownerId` preserves the existing
-team scope" (with a server-side 422 if the new owner isn't in
-that team, which is a strictly better failure mode than the
-silent clear). Callers can still pass `teamId: null` to clear
-team alongside an owner change, or `teamId: <X>` to change it.
+Rule A's "owner-in-body clears team" half.
 
-No equivalent mitigation needed for `teamId` alone: Capsule
-already preserves owner server-side.
-
-`create_project` does NOT auto-do the two-call workaround for
-Rule B — the description on `create_project.ownerId` /
-`create_project.stageId` flags the limitation explicitly and
-walks the caller through the two-call pattern.
+No equivalent mitigation for `teamId` alone (Capsule preserves
+owner server-side per Rule A) or `stageId` alone (the
+owner-clearing per Rule B is independent of body shape — adding
+`owner` to the same body doesn't preserve it, so RMW can't help).
 
 ### Where in our code
 
@@ -894,16 +904,19 @@ walks the caller through the two-call pattern.
 `update_project` and `create_project` both expose
 `ownerId` and `teamId` (nullable on update for explicit unassign).
 `update_project` does the RMW for ownerId-without-teamId.
-Descriptions capture the constraints and the create-time
-two-call workflow.
+Descriptions on `create_project.stageId` and
+`update_project.stageId` walk callers through the stage-first
+workflow.
 
-Captured as Bug 16 (PUT-clears-team) and Bug 17 (POST-drops-owner)
-in the §15, §15-supplementary, and alpha.17-verification reports.
-Bug 16 closed at the connector level by the RMW; Bug 17 documented
-as a Capsule API limit with a two-call workaround.
+Captured as Bug 16 (Rule A PUT-clears-team), Bug 17 (Rule C
+POST-drops-owner), and an unnumbered Rule B clarification across
+the §15, §15-supplementary, alpha.17, and alpha.18 verification
+reports. Bug 16 closed at the connector level by RMW; Bugs 17
+and the Rule B / Rule C cluster documented as Capsule API limits
+with the stage-first workaround.
 
 **Earlier wrong framings** worth flagging for future readers
-re-reading the alpha.{16,17}-era code:
+re-reading the alpha.{16,17,18}-era code:
 
 1. "owner and team are mutually exclusive" (initial §15 report) —
    wrong; the three shapes are all valid.
@@ -911,11 +924,15 @@ re-reading the alpha.{16,17}-era code:
    (alpha.16 §27) — wrong; the asymmetry is structural to the
    PUT, not a compatibility check.
 3. "PUT rewrites the (owner, team) pair atomically — absent half
-   is cleared" (alpha.17 §27) — wrong; the rule is asymmetric
-   (owner-in-body clears team; team-in-body preserves owner).
+   is cleared" (alpha.17 §27) — wrong; Rule A is asymmetric, not
+   pair-rewrite.
 4. "Bug 17 fixable by supplying `teamId` alongside `ownerId` at
-   create time" (alpha.17 descriptions) — wrong; Capsule drops
-   owner whenever `stage` is in the body, regardless of `teamId`.
+   create time" (alpha.17 descriptions) — wrong; Rule C fires
+   regardless of `teamId`.
+5. "Two-call workflow: create without stageId, then update with
+   stageId" (alpha.18 descriptions) — wrong; the update-with-stage
+   leg clears owner per Rule B. The actual workflow is stage-first,
+   owner-second.
 
 **No Capsule docs page mentions either rule explicitly.**
 Verified live in §15-supplementary and the alpha.17 verification
