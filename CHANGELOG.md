@@ -11,6 +11,26 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Changed
+
+- `delete_party` description now documents the **track-instance
+  orphan quirk** surfaced in the §13 cascade audit: track instances
+  applied to cascaded opportunities/projects are NOT cleaned up by
+  Capsule when the parent party is deleted — they survive as
+  unreachable-from-normal-navigation records, only findable by
+  track id via `show_track`. Callers who care about orphan
+  accumulation should `remove_track` explicitly before
+  `delete_party`. Document-only fix (recommendation option 1 from
+  the §13 report); a connector-side pre-cascade is overkill for a
+  low-impact quirk.
+- The five atomic `remove_*_by_id` tools (email/phone/address/website
+  /tag) now spell out the "atomic + reversible = no confirm gate"
+  policy in their descriptions, with a pointer to the matching
+  `add_*` tool for re-attach. Closes the §14 documentation gap
+  where callers saw seven destructive tools requiring `confirm:
+  true` and five not, with no explanation of when each protection
+  applies.
+
 ## [1.0.0-alpha.14] — 2026-05-11
 
 ### Security

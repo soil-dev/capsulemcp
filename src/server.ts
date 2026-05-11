@@ -198,7 +198,7 @@ export function createCapsuleMcpServer(): McpServer {
       updatePartySchema, updateParty);
 
     registerTool(server, "delete_party",
-      "DESTRUCTIVE & IRREVERSIBLE: permanently delete a party (person or organisation). Cascades to all linked notes, tasks, opportunities, AND projects (kases). Deleting an organisation does NOT delete people linked to it via organisationId — their `organisation` field is silently cleared to null and they survive as standalone records. Requires confirm=true. Always read the party first with get_party and confirm with the user before calling. Idempotent on retry: response is `{deleted: true, alreadyDeleted: false, id}` on a fresh delete or `{deleted: true, alreadyDeleted: true, id}` if the party was already gone (Capsule's 404 is caught internally so reconciliation loops can re-issue safely).",
+      "DESTRUCTIVE & IRREVERSIBLE: permanently delete a party (person or organisation). Cascades to all linked notes, tasks, opportunities, AND projects (kases). Deleting an organisation does NOT delete people linked to it via organisationId — their `organisation` field is silently cleared to null and they survive as standalone records. TRACK INSTANCES applied to cascaded opportunities/projects are NOT cleaned up either — they survive as orphan records reachable only by track id via show_track. Use remove_track on each track explicitly before deleting the parent party if orphan accumulation matters (rare in practice — orphans are unreachable from normal navigation). Requires confirm=true. Always read the party first with get_party and confirm with the user before calling. Idempotent on retry: response is `{deleted: true, alreadyDeleted: false, id}` on a fresh delete or `{deleted: true, alreadyDeleted: true, id}` if the party was already gone (Capsule's 404 is caught internally so reconciliation loops can re-issue safely).",
       deletePartySchema, deleteParty);
 
     // ── Atomic child-array operations (avoid append-only surprises) ─────
@@ -207,7 +207,7 @@ export function createCapsuleMcpServer(): McpServer {
       addPartyEmailAddressSchema, addPartyEmailAddress);
 
     registerTool(server, "remove_party_email_address_by_id",
-      "Remove one email-address entry from a party by its row id. Atomic. Discover the id via get_party — each entry in the emailAddresses array carries one. Use this to replace an existing entry: remove the old id, then call add_party_email_address with the new value (any associated server-side metadata on the old row is discarded along with the row). Idempotent on retry: response is `{removed: true, alreadyRemoved: false, partyId, emailAddressId, party}` on a fresh remove (the updated party shape is included) or `{removed: true, alreadyRemoved: true, partyId, emailAddressId}` if the row was already gone (Capsule's 404 is caught).",
+      "Remove one email-address entry from a party by its row id. Atomic and reversible — no `confirm: true` gate (re-add with add_party_email_address). Discover the id via get_party — each entry in the emailAddresses array carries one. Use this to replace an existing entry: remove the old id, then call add_party_email_address with the new value (any associated server-side metadata on the old row is discarded along with the row). Idempotent on retry: response is `{removed: true, alreadyRemoved: false, partyId, emailAddressId, party}` on a fresh remove (the updated party shape is included) or `{removed: true, alreadyRemoved: true, partyId, emailAddressId}` if the row was already gone (Capsule's 404 is caught).",
       removePartyEmailAddressByIdSchema, removePartyEmailAddressById);
 
     registerTool(server, "add_party_phone_number",
@@ -215,7 +215,7 @@ export function createCapsuleMcpServer(): McpServer {
       addPartyPhoneNumberSchema, addPartyPhoneNumber);
 
     registerTool(server, "remove_party_phone_number_by_id",
-      "Remove one phone-number entry from a party by its row id. Atomic. Discover the id via get_party. Idempotent on retry: response is `{removed: true, alreadyRemoved: false, partyId, phoneNumberId, party}` on a fresh remove or `{removed: true, alreadyRemoved: true, partyId, phoneNumberId}` if the row was already gone.",
+      "Remove one phone-number entry from a party by its row id. Atomic and reversible — no `confirm: true` gate (re-add with add_party_phone_number). Discover the id via get_party. Idempotent on retry: response is `{removed: true, alreadyRemoved: false, partyId, phoneNumberId, party}` on a fresh remove or `{removed: true, alreadyRemoved: true, partyId, phoneNumberId}` if the row was already gone.",
       removePartyPhoneNumberByIdSchema, removePartyPhoneNumberById);
 
     registerTool(server, "add_party_address",
@@ -223,7 +223,7 @@ export function createCapsuleMcpServer(): McpServer {
       addPartyAddressSchema, addPartyAddress);
 
     registerTool(server, "remove_party_address_by_id",
-      "Remove one address entry from a party by its row id. Atomic. Discover the id via get_party. Idempotent on retry: response is `{removed: true, alreadyRemoved: false, partyId, addressId, party}` on a fresh remove or `{removed: true, alreadyRemoved: true, partyId, addressId}` if the row was already gone.",
+      "Remove one address entry from a party by its row id. Atomic and reversible — no `confirm: true` gate (re-add with add_party_address). Discover the id via get_party. Idempotent on retry: response is `{removed: true, alreadyRemoved: false, partyId, addressId, party}` on a fresh remove or `{removed: true, alreadyRemoved: true, partyId, addressId}` if the row was already gone.",
       removePartyAddressByIdSchema, removePartyAddressById);
 
     registerTool(server, "add_party_website",
@@ -231,7 +231,7 @@ export function createCapsuleMcpServer(): McpServer {
       addPartyWebsiteSchema, addPartyWebsite);
 
     registerTool(server, "remove_party_website_by_id",
-      "Remove one website entry from a party by its row id. Atomic. Discover the id via get_party. Idempotent on retry: response is `{removed: true, alreadyRemoved: false, partyId, websiteId, party}` on a fresh remove or `{removed: true, alreadyRemoved: true, partyId, websiteId}` if the row was already gone.",
+      "Remove one website entry from a party by its row id. Atomic and reversible — no `confirm: true` gate (re-add with add_party_website). Discover the id via get_party. Idempotent on retry: response is `{removed: true, alreadyRemoved: false, partyId, websiteId, party}` on a fresh remove or `{removed: true, alreadyRemoved: true, partyId, websiteId}` if the row was already gone.",
       removePartyWebsiteByIdSchema, removePartyWebsiteById);
   }
 
@@ -597,7 +597,7 @@ export function createCapsuleMcpServer(): McpServer {
       addTagSchema, addTag);
 
     registerTool(server, "remove_tag_by_id",
-      "Detach a tag from a party, opportunity, or project (kase). Atomic — one PUT to Capsule. The `tagId` parameter is the tag's id, readable via get_party/get_opportunity/get_project with embed='tags' (list_tags returns the same ids and also works, but reading via embed first confirms the tag is actually attached to this entity). The tag definition itself remains in the tenant for other entities that still share it. Idempotent on retry: response is `{removed: true, alreadyRemoved: false, entity, entityId, tagId, ...<updated entity>}` on a fresh detach or `{removed: true, alreadyRemoved: true, entity, entityId, tagId}` if the tag was already detached (Capsule's 422 'tag not found to delete' is caught and converted).",
+      "Detach a tag from a party, opportunity, or project (kase). Atomic — one PUT to Capsule. Reversible — no `confirm: true` gate (re-attach with add_tag using the same tag name). The `tagId` parameter is the tag's id, readable via get_party/get_opportunity/get_project with embed='tags' (list_tags returns the same ids and also works, but reading via embed first confirms the tag is actually attached to this entity). The tag definition itself remains in the tenant for other entities that still share it. Idempotent on retry: response is `{removed: true, alreadyRemoved: false, entity, entityId, tagId, ...<updated entity>}` on a fresh detach or `{removed: true, alreadyRemoved: true, entity, entityId, tagId}` if the tag was already detached (Capsule's 422 'tag not found to delete' is caught and converted).",
       removeTagByIdSchema, removeTagById);
   }
 
