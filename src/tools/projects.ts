@@ -70,6 +70,31 @@ export async function getProjects(input: z.infer<typeof getProjectsSchema>) {
 
 // ── Write ───────────────────────────────────────────────────────────────────
 
+// Refinement: Capsule's POST silently drops `ownerId` whenever `stageId`
+// is in the create body, producing owner=null regardless of any other
+// inputs. The connector cannot work around this in-call (the drop happens
+// inside Capsule, not at our serialisation layer), so we reject the bad
+// shape at schema level with an actionable error pointing callers at the
+// stage-first workflow. See NOTES-ON-CAPSULE-API.md §27 Rule C and #14.
+const rejectOwnerWithStageAtCreate = <T extends { ownerId?: number; stageId?: number }>(
+  data: T,
+  ctx: z.RefinementCtx,
+) => {
+  if (data.ownerId !== undefined && data.stageId !== undefined) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["ownerId"],
+      message:
+        "Cannot supply `ownerId` and `stageId` together at create time — " +
+        "Capsule's create endpoint silently drops `ownerId` whenever `stage` is in the body, " +
+        "producing `owner: null` regardless of other inputs. Use the stage-first workflow: " +
+        "(1) create_project { partyId, stageId } (omit ownerId), " +
+        "(2) update_project { ownerId } afterwards — the connector's read-modify-write " +
+        "preserves team and stage on the second call. See `create_project.stageId` for the full rule.",
+    });
+  }
+};
+
 export const createProjectSchema = z.object({
   name: z.string().min(1),
   partyId: z.number().int().positive().describe("ID of the party linked to this project"),
@@ -116,7 +141,7 @@ export const createProjectSchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional()
     .describe("YYYY-MM-DD"),
-});
+}).superRefine(rejectOwnerWithStageAtCreate);
 
 export async function createProject(input: z.infer<typeof createProjectSchema>) {
   const { partyId, ownerId, teamId, status, stageId, ...rest } = input;

@@ -93,6 +93,43 @@ describe("createProject", () => {
     expect(body.kase.teamId).toBeUndefined();
   });
 
+  it("rejects ownerId + stageId together at schema level (#14)", async () => {
+    const { createProjectSchema } = await import("../src/tools/projects.js");
+    const result = createProjectSchema.safeParse({
+      name: "Onboarding",
+      partyId: 5,
+      ownerId: 7,
+      stageId: 42,
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const msg = result.error.issues[0]!.message;
+      expect(msg).toMatch(/Cannot supply `ownerId` and `stageId` together/);
+      expect(msg).toMatch(/stage-first workflow/);
+      expect(result.error.issues[0]!.path).toEqual(["ownerId"]);
+    }
+  });
+
+  it("accepts ownerId alone (no stageId) — single-owner create stays valid", async () => {
+    const { createProjectSchema } = await import("../src/tools/projects.js");
+    const result = createProjectSchema.safeParse({
+      name: "Onboarding",
+      partyId: 5,
+      ownerId: 7,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts stageId alone (no ownerId) — stage-first create stays valid", async () => {
+    const { createProjectSchema } = await import("../src/tools/projects.js");
+    const result = createProjectSchema.safeParse({
+      name: "Onboarding",
+      partyId: 5,
+      stageId: 42,
+    });
+    expect(result.success).toBe(true);
+  });
+
   it("sends both owner and team when ownerId+teamId supplied (USER+TEAM shape, Bug 17 fix)", async () => {
     mockFetch(201, { kase: { id: 10 } });
 
