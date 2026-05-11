@@ -230,9 +230,9 @@ Numbers:
   production verification proved two earlier assumptions wrong:
   - `add_tag.tagName`: previously said *"Names are case-sensitive
     and tenant-global."* Verified live that Capsule matches
-    case-INSENSITIVELY ('Zendesk' and 'zendesk' attach the same
-    tag, preserving the canonical casing from whichever variant
-    was created first). Description and example updated.
+    case-INSENSITIVELY ('VIP' and 'vip' attach the same tag,
+    preserving the canonical casing from whichever variant was
+    created first). Description and example updated.
   - `remove_tag_by_id.tagId`: previously warned the parameter was
     the "per-entity LINK id, NOT the global tag id from list_tags".
     Verified live that the two are the same id — both sources work.
@@ -260,10 +260,11 @@ Numbers:
     same observable effect as `value: null`; empty-string and
     never-set are indistinguishable in Capsule's storage.
   - **Data-tag membership is implicit** — setting a custom field
-    that lives under a data tag (e.g. `Support Agreement Details`
-    on a project) populates the field row's internal tagId but
-    does NOT auto-add the data tag to the project's tags array.
-    `add_tag` it explicitly if you want it visible via
+    whose definition lives under a data tag (Capsule's mechanism
+    for gating a related set of fields, e.g. all contract-related
+    fields under one data tag) populates the field row's internal
+    tagId but does NOT auto-add the data tag to the entity's tags
+    array. `add_tag` it explicitly if you want it visible via
     `embed=tags`. (Documented on `update_project.fields` only,
     where this is most relevant.)
 
@@ -624,7 +625,7 @@ tests.
   the schema field `url` → `address`, dropped the `.url()` validator
   (a string is correct), and added regression tests that lock both
   the new name and the old shape's rejection. Caught by a production
-  write-mode test against OpenSSL Corp's Capsule.
+  write-mode test against a production Capsule tenant.
 
 ### Changed
 
@@ -870,9 +871,9 @@ v1.0.0; release notes are listed below.
   small `autoApproveProvider()` helper.
 - `MCP_SHARED_SECRET` env-var fallback for `MCP_OAUTH_SIGNING_KEY`
   removed. It was carrying compatibility for v0.1.0-era deployments
-  that don't exist outside of OpenSSL's (which already migrated to
-  `MCP_OAUTH_SIGNING_KEY` long ago). Error message and DEPLOY.md
-  table updated to drop the fallback reference.
+  that the only known operator had already migrated off long ago.
+  Error message and DEPLOY.md table updated to drop the fallback
+  reference.
 - Dependency bumps via Dependabot security advisories:
   `express-rate-limit` 8.5.0 → 8.5.1, transitive `ip-address`
   10.1.0 → 10.2.0 (PR #1); `esbuild` 0.21 → 0.27/0.28 and `vitest`

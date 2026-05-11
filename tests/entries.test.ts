@@ -158,11 +158,11 @@ describe("addNote", () => {
 
   it("does NOT expose creatorId — note attribution flows to the API-token owner only", async () => {
     // creatorId was briefly shipped in alpha.8 to support
-    // on-behalf-of authoring (e.g. log a note attributed to Kajal
-    // even though Anton owns the API token), but removed in
-    // alpha.13 after a security review (issue #11) flagged it as
-    // an audit-attribution-spoofing surface on shared-connector
-    // deployments. The schema must NOT accept it; passing it to
+    // on-behalf-of authoring (log a note attributed to a colleague
+    // even though the connector's service token is making the
+    // call), but removed in alpha.13 after a security review
+    // (issue #11) flagged it as an audit-attribution-spoofing
+    // surface on shared-connector deployments. The schema must NOT accept it; passing it to
     // safeParse should drop it (zod strips unknown keys by default).
     const { addNoteSchema } = await import("../src/tools/entries.js");
     const parsed = addNoteSchema.safeParse({

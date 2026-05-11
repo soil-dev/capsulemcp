@@ -47,13 +47,13 @@ describe("addTag — atomic attach by name", () => {
       const { addTag } = await import("../src/tools/tags.js");
 
       const entityId = Number(expectedPath.split("/").pop());
-      await addTag({ entity, entityId, tagName: "Zendesk" });
+      await addTag({ entity, entityId, tagName: "VIP" });
 
       const [url, opts] = vi.mocked(fetch).mock.calls[0]!;
       expect(url).toContain(expectedPath);
       expect((opts as RequestInit).method).toBe("PUT");
       const body = JSON.parse((opts as RequestInit).body as string);
-      expect(body[wrapper].tags).toEqual([{ name: "Zendesk" }]);
+      expect(body[wrapper].tags).toEqual([{ name: "VIP" }]);
       // No id, no _delete on an add
       expect(body[wrapper].tags[0].id).toBeUndefined();
       expect(body[wrapper].tags[0]._delete).toBeUndefined();

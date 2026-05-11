@@ -84,7 +84,7 @@ export const addTagSchema = z.object({
     .string()
     .min(1)
     .describe(
-      "Name of the tag to attach. Capsule resolves by name: if a tag with this name already exists in the tenant it is attached to the entity; if not, Capsule creates the tag and attaches it. Names are tenant-global. Capsule matches case-INSENSITIVELY when resolving (so 'Zendesk' and 'zendesk' attach the same tag), preserving the canonical casing from whichever variant was created first. To ensure consistent casing in your tag list, call list_tags first and reuse the exact name from there. Idempotent — re-attaching an already-attached tag is harmless.",
+      "Name of the tag to attach. Capsule resolves by name: if a tag with this name already exists in the tenant it is attached to the entity; if not, Capsule creates the tag and attaches it. Names are tenant-global. Capsule matches case-INSENSITIVELY when resolving (so 'VIP' and 'vip' attach the same tag), preserving the canonical casing from whichever variant was created first. To ensure consistent casing in your tag list, call list_tags first and reuse the exact name from there. Idempotent — re-attaching an already-attached tag is harmless.",
     ),
 });
 

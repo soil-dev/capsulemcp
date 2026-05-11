@@ -24,7 +24,7 @@ afterEach(() => {
 
 describe("listSavedFilters", () => {
   it("GETs /<entity>/filters per entity", async () => {
-    mockFetch(200, { filters: [{ id: 338778, name: "Zendesk People" }] });
+    mockFetch(200, { filters: [{ id: 338778, name: "VIP Customers" }] });
     const { listSavedFilters } = await import("../src/tools/saved-filters.js");
     await listSavedFilters({ entity: "parties" });
     const [url] = vi.mocked(fetch).mock.calls[0]!;

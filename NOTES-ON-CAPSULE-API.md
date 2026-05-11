@@ -615,15 +615,11 @@ read confirms the tag is actually attached to the entity — a
 list_tags id for a tag NOT on this entity would 422).
 
 **Empirical confirmation** (alpha.10 production verification):
-
-| Tag name              | list_tags id | embed=tags id |
-|---|---|---|
-| Zendesk               | 5440182      | 5440182       |
-| ZZZ-A10-TestTag       | 5834607      | 5834607       |
-| zzz-completely-different | 5834608   | 5834608       |
-
-Plus: attaching the same tag to two different parties — both show
-the same id on their respective tag entries.
+three tags read via `list_tags` and via `get_party?embed=tags`
+returned identical ids in both responses. Attaching the same tag
+to two different parties resulted in both parties' tag entries
+carrying the same id. No per-entity link id distinct from the
+global tag id exists in Capsule's model.
 
 ---
 
@@ -678,28 +674,28 @@ Observed in alpha.10 verification.
 ## 23. Data tags are NOT auto-attached when setting custom fields under them
 
 In Capsule, custom-field definitions can live under a "data tag"
-(e.g. `Support Agreement Details` on a project gates a set of
-contract-related field definitions). The intuitive expectation is
+that gates a set of related field definitions (e.g. an account
+might have a `Contract Details` data tag gating contract-related
+fields like dates, pricing, terms). The intuitive expectation is
 that setting a field under a data tag implicitly attaches the data
 tag to the entity. Capsule does NOT do this.
 
-Setting `Contract: Executed` (under `Support Agreement Details`)
-on a project successfully writes the field — and the row's
-internal `tagId` is populated. But the project's visible `tags`
-array remains empty unless you explicitly `add_tag` the data tag.
-A caller reading `get_project?embed=tags` after setting fields
-won't see the data tag.
+Setting a custom field under a data tag successfully writes the
+field — and the row's internal `tagId` is populated — but the
+entity's visible `tags` array remains empty unless you explicitly
+`add_tag` the data tag. A caller reading `get_project?embed=tags`
+after setting fields won't see the data tag.
 
 **Practical effect:** workflows that gate behaviour on "is this
-project tagged with X" need to call `add_tag` explicitly after
+record tagged with X" need to call `add_tag` explicitly after
 setting fields; setting fields alone is not enough.
 
 **Where in our code:** [`src/tools/projects.ts`](src/tools/projects.ts)
 `update_project.fields` description includes a "Project-specific"
-note about this (the same effect applies to parties and
+note about this. The same effect applies to parties and
 opportunities but it's most operationally relevant to projects,
-where data tags gate Lifecycle / FIPS Rebrand workflows). Observed
-in alpha.10 verification.
+where data tags commonly gate lifecycle workflows. Observed in
+alpha.10 verification.
 
 ---
 

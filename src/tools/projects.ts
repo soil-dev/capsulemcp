@@ -135,7 +135,7 @@ export const updateProjectSchema = z.object({
     .optional()
     .describe(
       fieldsArrayDescriptor("get_project") +
-        " Project-specific: setting a field under a 'data tag' (e.g. Support Agreement Details) populates the row's internal tagId but does NOT auto-add the data tag to the project's tags array — use add_tag explicitly if you want it visible via embed=tags.",
+        " Project-specific: setting a field whose definition lives under a 'data tag' populates the row's internal tagId but does NOT auto-add the data tag to the project's tags array — use add_tag explicitly if you want it visible via embed=tags.",
     ),
 });
 

@@ -297,11 +297,12 @@ cleanup is the documented path.
 
 `creatorId` shipped briefly on `add_note` in alpha.8 to support
 logging notes attributed to a specific Capsule user other than the
-API-token owner — e.g. recording that Kajal attended a meeting,
-attributed to Kajal, even though Anton's token is making the call.
-Removed in alpha.13 after a security review (issue #11) found that
-the override + natural-language write access + a shared connector =
-trivial audit-attribution spoofing.
+API-token owner — e.g. recording that a colleague attended a
+meeting, attributed to that colleague, even though the connector's
+service token is making the call. Removed in alpha.13 after a
+security review (issue #11) found that the override + natural-
+language write access + a shared connector = trivial audit-
+attribution spoofing.
 
 The legitimate use cases haven't gone away:
 - Migrating historical notes from another CRM where authorship is

@@ -57,12 +57,12 @@ describe("listActivityTypes", () => {
 
 describe("getSite", () => {
   it("GETs /site and returns the site object", async () => {
-    mockFetch(200, { site: { name: "OpenSSL", subdomain: "openssl" } });
+    mockFetch(200, { site: { name: "Acme", subdomain: "acme" } });
     const { getSite } = await import("../src/tools/metadata.js");
     const result = await getSite({});
     const [url] = vi.mocked(fetch).mock.calls[0]!;
     expect(url).toContain("/site");
-    expect((result as { site: { subdomain: string } }).site.subdomain).toBe("openssl");
+    expect((result as { site: { subdomain: string } }).site.subdomain).toBe("acme");
   });
 });
 
