@@ -11,19 +11,38 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.0.0-alpha.16] — 2026-05-11
+
+Closes the §15-16 final batch of the production write-mode test
+plan. One new bug (Bug 16, ownerId-clears-team on projects) +
+several per-entity ownerId-default documentation gaps; both
+description-only fixes per the report's recommendations.
+
+**The 16-section production test plan is now fully run.** Final
+tally: 16 numbered bugs across the series, **14 resolved**, 2
+documented as Capsule API limits with workarounds (Bug 12 BOOLEAN
+null-clearing, Bug 16 owner/team mutual exclusivity on projects).
+
 ### Documented
 
-- **Bug 16** — setting `ownerId` on a project silently clears its
-  team membership. Capsule's data model treats `owner` and `team`
-  as mutually exclusive on projects, but the connector did not
-  surface this side effect. The team membership cannot be
-  restored via the connector once cleared — only Capsule's web UI
-  can re-assign. Documented as verbose WARNINGs on both
+- **Bug 16** — setting `ownerId` on a project can silently clear
+  its team membership. The behaviour is a consequence of Capsule's
+  actual data-model rule: a project can have **owner alone**,
+  **team alone**, or **owner + team where the team is one the
+  owner belongs to** (users can be in multiple teams, so this is
+  expressible whenever the operator has organised users into teams
+  sensibly). What's NOT allowed is owner+team where the owner
+  isn't in that team; Capsule resolves writes that would create
+  that state by clearing the team rather than rejecting the
+  request. The §15 production verification observed this when
+  setting an owner who wasn't in the project's current team
+  (initial bug report framed the rule as "owner and team are
+  mutually exclusive" — that framing was wrong; the actual rule is
+  "team must be one the owner belongs to"). The connector can't
+  set `teamId` directly, so once a team is cleared, restoring it
+  requires Capsule's web UI. Documented in verbose detail on both
   `create_project.ownerId` and `update_project.ownerId`, plus a
-  new section in `NOTES-ON-CAPSULE-API.md` (§27). A behavioural
-  fix (reject ownerId writes when team is set, require an
-  explicit `clearTeam: true` opt-in) was considered but deferred
-  until a workflow surfaces that warrants the friction.
+  new section in `NOTES-ON-CAPSULE-API.md` (§27).
 - Per-entity **`ownerId` default inconsistency** documented on
   every `create_*.ownerId` description:
   - `create_party.ownerId`, `create_opportunity.ownerId`,

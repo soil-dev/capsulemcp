@@ -807,39 +807,48 @@ accepted as if it were a normal update.
 
 ---
 
-## 27. On projects, setting `owner` silently clears `team` (mutually exclusive)
+## 27. Project `owner` + `team` constraint: team must be one the owner belongs to
 
-Capsule's data model treats a project's `owner` and `team` as
-mutually exclusive — a project can be owned by a specific user OR
-scoped to a team, never both. Writing `owner` on a project that
-currently has a team membership clears the team to null without
-warning. The reverse is true in principle too (setting a team
-would clear the owner) but the connector can't set `team` directly
-in any case.
+Capsule's data model allows a project to have one of three
+combinations:
 
-There is **no connector-side path to restore the team after
-clearing.** Re-setting the stage (even to the same value) does not
-re-trigger the board's default-team behaviour — that fires only on
-project creation. The only path back to a team-scoped project is
-Capsule's web UI.
+1. **`owner` alone** — owned by a specific user, no team scope.
+2. **`team` alone** — no owner, scoped to a team.
+3. **`owner` + `team`** — both set, with the constraint that the
+   team must be a team the owner is a member of. Users can be
+   members of multiple teams, so this combination is
+   straightforwardly expressible whenever the operator has
+   organised users into teams sensibly.
 
-**Practical effect:** the "owned by user X AND visible to team Y"
-shape can't be expressed via this connector. If a workflow needs
-team-scoping, create the project on a board whose default team
-matches the desired scope and DO NOT set ownerId on this or any
-later update_project call.
+What's NOT allowed: `owner + team` where the owner is not in that
+team. Capsule resolves this in writes by **clearing the team to
+null** rather than rejecting the request. The §15 production
+verification observed exactly this — `update_project { ownerId: <user X> }`
+on a project with `team: <Team Y>` resulted in `team: null` when
+user X wasn't a member of Team Y.
+
+**Practical effect:** caller intuition is often "setting an owner
+shouldn't affect the team". It does, when the new owner isn't in
+the current team. Workflows that need a specific (owner, team)
+pair require choosing an owner who is in the team. If the team
+gets cleared as a side effect of an owner change, the connector
+can NOT restore it — there is no `teamId` parameter on any tool,
+and re-setting the stage doesn't re-trigger the board's default-
+team behaviour (that fires only on project creation). Restoring
+a team membership requires Capsule's web UI.
 
 **Where in our code:** [`src/tools/projects.ts`](src/tools/projects.ts)
-`create_project.ownerId` and `update_project.ownerId` both carry
-verbose WARNINGs about the team-clearing side effect. Captured as
-Bug 16 in the §15-16 production write-mode bug-report; closed by
-documentation. A behavioural fix (reject the ownerId write when
-team is set, require an explicit `clearTeam: true` opt-in) was
-considered but deferred until a workflow surfaces that warrants
-the friction.
+`create_project.ownerId` and `update_project.ownerId` describe
+the full rule and the team-clearing-as-side-effect behaviour.
+Captured as Bug 16 in the §15-16 production write-mode bug-report;
+closed by documentation. (The bug report initially framed the
+constraint as "owner and team are mutually exclusive" — that
+framing was wrong; the actual rule is "team must be a team the
+owner belongs to", and the §15 observation was the consequence of
+the chosen owner not being in the project's team.)
 
-**No Capsule docs page mentions this constraint.** Verified live
-in §15 production verification (alpha.15).
+**No Capsule docs page mentions this constraint explicitly.**
+Verified live in §15 production verification (alpha.15).
 
 ---
 
