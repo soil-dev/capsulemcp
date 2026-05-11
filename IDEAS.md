@@ -220,4 +220,44 @@ schema based on a transcript or workshop output.
 
 ---
 
+## Explicit `teamId` on write tools
+
+Capsule's `team` is the access-control scope — multi-team tenants
+use it to partition data so only members of a given team can see
+or edit records owned by that team. The connector exposes `ownerId`
+on every write tool but **does not expose `teamId`**.
+
+For project creation the implicit path covers most workflows:
+creating a project on a board whose default team is, say,
+"Region X" inherits that team automatically. Capsule does the
+assignment without the connector touching `team` at all.
+
+The implicit path falls short in three cases:
+
+1. **Parties and opportunities have no board concept**, so
+   `create_party` / `create_opportunity` lands with `team: null`. A
+   team-gated party can't be created through the connector.
+2. **Cross-team moves on existing records** — you can't change a
+   project's team by changing its board (each board belongs to one
+   team), and `update_*` has no `team` parameter, so there's no
+   write path at all.
+3. **Standalone tasks** have no anchor to inherit from.
+
+**Implementation** (small): optional
+`teamId: z.number().int().positive()` on `create_party`,
+`update_party`, `create_opportunity`, `update_opportunity`,
+`create_project`, `update_project`, and possibly `create_task` /
+`update_task`. Maps to Capsule's body shape `team: {id: teamId}`,
+mirroring the existing `ownerId` pattern. Discover IDs via the
+existing `list_teams` tool.
+
+**When to consider**: a deployment that wants connector-driven
+records on a team scope other than the implicit board default, or
+that needs to move records between teams without using Capsule's
+web UI. For deployments where team partitioning is purely
+board-level, the implicit path is sufficient and adding the
+parameter is unnecessary surface.
+
+---
+
 ## (Add new entries above this line.)
