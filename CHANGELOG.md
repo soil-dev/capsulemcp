@@ -11,6 +11,22 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.0.0-alpha.8] — 2026-05-11
+
+Two follow-up commits on top of alpha.7, both surfaced by
+continued production write-mode testing.
+
+> **Bug 9 (alpha.7) — `remove_party_*_by_id` tools were
+> non-functional.** All four atomic-remove tools shipped in
+> alpha.7 sent `{id, _destroy: true}` (Rails convention) but
+> Capsule's v2 API spells the flag `_delete: true`. Capsule
+> silently ignored the destroy and returned 200 OK with the row
+> still present. Anyone who used the remove tools on alpha.7
+> believes they removed rows that are still there — worth a quick
+> audit of any party touched via those tools (read the party,
+> compare the current child-array state to expectations). Fixed
+> in this alpha; verified via the updated unit tests.
+
 ### Added
 
 - `update_opportunity.lostReasonId` (optional). Closes Bug 8 from
