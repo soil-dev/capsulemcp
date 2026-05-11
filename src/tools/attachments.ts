@@ -39,6 +39,7 @@ import {
 // ceiling of 25 MB.
 const DEFAULT_MAX_SIZE_BYTES = 5 * 1024 * 1024;
 const HARD_MAX_SIZE_BYTES = 25 * 1024 * 1024;
+const HARD_MAX_BASE64_CHARS = Math.ceil(HARD_MAX_SIZE_BYTES / 3) * 4;
 
 export const getAttachmentSchema = z.object({
   id: z.number().int().positive().describe("Attachment ID."),
@@ -98,8 +99,9 @@ export const uploadAttachmentSchema = z.object({
   dataBase64: z
     .string()
     .min(1)
+    .max(HARD_MAX_BASE64_CHARS)
     .describe(
-      "File contents, base64-encoded. Decoded server-side and uploaded as the request body. Maximum 25 MB per attachment (Capsule's documented limit); the connector's inbound HTTP body limit is ~35 MB which leaves room for the base64 expansion of a 25 MB binary. Oversized requests are rejected by Capsule with 4xx.",
+      "File contents, base64-encoded. Decoded server-side and uploaded as the request body. Maximum 25 MB per attachment (Capsule's documented limit); the connector rejects oversized base64 before uploading. The inbound HTTP body limit is ~35 MB which leaves room for the base64 expansion of a 25 MB binary.",
     ),
   content: z
     .string()
@@ -133,6 +135,11 @@ function isValidBase64(s: string): boolean {
   return true;
 }
 
+function decodedBase64Size(s: string): number {
+  const padding = s.endsWith("==") ? 2 : s.endsWith("=") ? 1 : 0;
+  return (s.length / 4) * 3 - padding;
+}
+
 export async function uploadAttachment(
   input: z.infer<typeof uploadAttachmentSchema>,
 ) {
@@ -147,6 +154,12 @@ export async function uploadAttachment(
   if (!isValidBase64(input.dataBase64)) {
     throw new Error(
       "upload_attachment: dataBase64 is not valid base64 — Node's tolerant decoder would silently produce corrupt bytes. Verify the encoding (RFC 4648, padded with '=' to a multiple of 4 chars).",
+    );
+  }
+  const decodedBytes = decodedBase64Size(input.dataBase64);
+  if (decodedBytes > HARD_MAX_SIZE_BYTES) {
+    throw new Error(
+      `upload_attachment: decoded file is ${decodedBytes} bytes, exceeding the ${HARD_MAX_SIZE_BYTES} byte attachment limit. Split or shrink the file before uploading.`,
     );
   }
 

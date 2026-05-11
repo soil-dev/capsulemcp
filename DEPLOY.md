@@ -78,7 +78,7 @@ gcloud projects add-iam-policy-binding $PROJECT \
 
 Without this, `gcloud run deploy --source` fails with `PERMISSION_DENIED: Build failed because the default service account is missing required IAM permissions`.
 
-**2. (Sometimes) Override `iam.allowedPolicyMemberDomains`.** This GWS-default constraint blocks `allUsers` IAM bindings, which would silently make your Cloud Run service inaccessible. capsulemcp uses Cloud Run v2's `--no-allow-unauthenticated` deployment combined with `--ingress=all` and a special "invoker IAM disabled" flag (set via the `gcp.cloudrunv2.Service` `invoker_iam_disabled=True` field if you use Pulumi). The `gcloud run deploy --allow-unauthenticated` shorthand uses an `allUsers` binding under the hood, which the org policy may block. See the troubleshooting matrix at the bottom.
+**2. (Sometimes) Override `iam.allowedPolicyMemberDomains`.** This GWS-default constraint blocks `allUsers` IAM bindings, which can make the simple `gcloud run deploy --allow-unauthenticated` path below fail or leave the service inaccessible. If your org blocks `allUsers`, either get a project-level org-policy exception, or deploy with Cloud Run v2's `invoker_iam_disabled=True` setting (for example via Pulumi's `gcp.cloudrunv2.Service`) instead of relying on the `--allow-unauthenticated` shorthand. See the troubleshooting matrix at the bottom.
 
 ## Deploy: worked example with Cloud Run
 

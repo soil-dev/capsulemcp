@@ -118,8 +118,8 @@ export class InMemoryClientsStore implements OAuthRegisteredClientsStore {
  * via env vars. Note the absence of `registerClient` — that signals
  * the SDK to not expose /register, so DCR is unavailable.
  *
- * Verifying client_secret uses constant-time compare to defend against
- * timing oracles on the secret value.
+ * Client-secret verification is handled by the MCP SDK auth router
+ * after it reads this store's client metadata.
  */
 export class FixedClientStore implements OAuthRegisteredClientsStore {
   private readonly client: OAuthClientInformationFull;

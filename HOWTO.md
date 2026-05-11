@@ -171,16 +171,19 @@ Register it in `src/server.ts`:
 ```ts
 import { countPartiesSchema, countParties, ... } from "./tools/parties.js";
 // ...
-server.tool(
+registerTool(
+  server,
   "count_parties",
   "Return the total number of parties in the Capsule tenant.",
-  countPartiesSchema.shape,
-  async (input) => {
-    const result = await countParties(input);
-    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-  },
+  countPartiesSchema,
+  countParties,
 );
 ```
+
+Use the local `registerTool` helper for normal JSON-returning tools. It
+passes the full Zod object schema to the MCP SDK; using
+`server.tool(..., schema.shape, ...)` drops object-level refinements such
+as `superRefine`.
 
 For a write tool:
 

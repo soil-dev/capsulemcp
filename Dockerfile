@@ -12,10 +12,13 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts
 
-# Build
+# Build. Use the same script as local builds so generated files such as
+# src/icon.ts are refreshed from assets/icon.svg before bundling.
 COPY tsup.config.ts tsconfig.json ./
+COPY scripts ./scripts
+COPY assets ./assets
 COPY src ./src
-RUN npx tsup
+RUN npm run build
 
 # ─────────────────────────────────────────────────────────────────────────────
 

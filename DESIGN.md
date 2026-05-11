@@ -142,8 +142,8 @@ there.
 
 Tokens are HMAC-signed and stateless. We can't blacklist a single
 leaked token without invalidating every outstanding token (by
-rotating the signing key). The 30-day access-token TTL bounds the
-window of any individual leak.
+rotating the signing key). The 1-day access-token TTL and 30-day
+refresh-token TTL bound the window of any individual leak.
 
 A revocation list would require either persisted state (nullifies
 the stateless property) or a secondary HMAC over a per-token jti
