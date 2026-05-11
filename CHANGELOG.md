@@ -11,6 +11,8 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.0.0-alpha.20] — 2026-05-11
+
 The alpha.19-R re-verification against the production tenant
 with **board automations disabled** materially recasts four
 releases worth of project-ownership findings. The bulk of what
@@ -19,6 +21,18 @@ we'd been treating as Capsule API quirks (Bug 17, the
 `ownerId + stageId`) were tenant-specific board automation
 rules, not Capsule API behaviours. Capsule's API itself
 preserves whatever you POST.
+
+### Fixed
+
+- **#16: registerTool now uses the SDK config-form
+  `server.registerTool({ inputSchema })` instead of the
+  deprecated `server.tool(name, desc, schema.shape, ...)`
+  overload.** The old path rebuilt `z.object(schema.shape)`
+  internally and dropped object-level refinements
+  (`superRefine`, whole-object `refine`). Today there are no
+  such refinements in the codebase, but the bug would have
+  silently re-emerged the moment one was added. Architectural
+  hygiene fix.
 
 ### Reverted
 
