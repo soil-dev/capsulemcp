@@ -116,7 +116,7 @@ describe("createProject", () => {
     expect(body.kase.stage).toBe(42);
   });
 
-  it("sends both owner and team when ownerId+teamId supplied (USER+TEAM shape, Bug 17 fix)", async () => {
+  it("sends both owner and team when ownerId+teamId supplied (USER+TEAM ownership shape)", async () => {
     mockFetch(201, { kase: { id: 10 } });
 
     const { createProject } = await import("../src/tools/projects.js");

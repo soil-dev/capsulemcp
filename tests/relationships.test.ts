@@ -94,11 +94,11 @@ describe("addAdditionalParty", () => {
     expect(headers["Content-Type"]).toBeUndefined();
   });
 
-  // Bug 10 from production write-mode bug report: tool description
-  // claimed "idempotent — re-adding is harmless" but a Capsule 422
-  // ("party is already a contact for this opportunity") propagated
-  // straight through to the caller. Now caught and converted to
-  // a success-shape result with `alreadyLinked: true`.
+  // The tool description claims "idempotent — re-adding is
+  // harmless". Capsule's 422 ("party is already a contact for this
+  // opportunity") is caught at the connector layer and converted to
+  // a success-shape result with `alreadyLinked: true`, so the
+  // description matches runtime.
 
   it("treats Capsule's 'already a contact' 422 as idempotent success", async () => {
     mockFetch(422, {

@@ -198,10 +198,10 @@ async function parseErrorBody(res: Response): Promise<string> {
  * (e.g. fake-timer tests that drive the 429-retry delay) can pass
  * their own signal.
  *
- * Backstory: the alpha.10 / alpha.11 verification reports filed two
- * transient hangs (Bug 11 on `remove_tag_by_id`, Bug 14 on
- * `list_entity_tracks`) shaped like "tool call hung for ~4 minutes".
- * At the time we attributed them to Capsule slowness and added this
+ * Backstory: early alpha verification surfaced two transient hangs
+ * (on `remove_tag_by_id` and `list_entity_tracks`) shaped like "tool
+ * call hung for ~4 minutes". At the time we attributed them to
+ * Capsule slowness and added this
  * timeout to cap the wait at 60s. In retrospect those hangs were
  * almost certainly higher up the stack — the Claude.ai tool-approval
  * prompt's own timeout firing while the user was elsewhere, before

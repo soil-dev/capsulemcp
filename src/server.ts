@@ -498,7 +498,7 @@ export function createCapsuleMcpServer(): McpServer {
 
   if (!readOnly) {
     registerTool(server, "add_note",
-      "Add a note to a party, opportunity, or project. Provide exactly one of partyId, opportunityId, or projectId. The note is always attributed to the API-token owner — there is no override for the author (a `creatorId` override existed briefly in alpha.8 but was removed in alpha.13 after a security review found it enabled audit-attribution spoofing). Optional `entryAt` lets you backdate the note's authored-at timestamp for legitimate historical-import workflows.",
+      "Add a note to a party, opportunity, or project. Provide exactly one of partyId, opportunityId, or projectId. The note is always attributed to the API-token owner — there is no override for the author (a `creatorId` parameter would enable audit-attribution spoofing on shared-connector deployments, so it is intentionally not exposed). Optional `entryAt` lets you backdate the note's authored-at timestamp for legitimate historical-import workflows.",
       addNoteSchema, addNote);
 
     registerTool(server, "update_entry",

@@ -85,13 +85,11 @@ describe("applyTrack", () => {
   });
 
   it("maps user-facing startDate → Capsule's trackDateOn body field", async () => {
-    // Bug 13 from the §11-12 verification: Capsule's API field is
-    // `trackDateOn`, not `startDate`. Sending `startDate` directly
-    // gets silently dropped by Capsule (the alpha.1-through-alpha.11
-    // behaviour) and tasks land at today + daysAfter instead of
-    // <startDate> + daysAfter. The user-facing parameter name stays
-    // `startDate` (more intuitive); the handler renames to
-    // `trackDateOn` on the way out.
+    // Capsule's API field is `trackDateOn`, not `startDate`. Sending
+    // `startDate` directly gets silently dropped (tasks then land at
+    // today + daysAfter instead of <startDate> + daysAfter). The
+    // user-facing parameter name stays `startDate` (more intuitive);
+    // the handler renames to `trackDateOn` on the way out.
     mockFetch(200, { track: { id: 1 } });
     const { applyTrack } = await import("../src/tools/tracks.js");
     await applyTrack({

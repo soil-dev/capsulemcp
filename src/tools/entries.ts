@@ -110,7 +110,7 @@ export const addNoteSchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})$/)
     .optional()
     .describe(
-      "ISO-8601 timestamp for when this note actually happened (e.g. '2024-03-15T14:30:00Z'). Defaults to now. Use this for backdating historical notes when migrating from another system. `entryAt` is preserved across subsequent update_entry calls; only `updatedAt` advances on edits. Note attribution still flows to the API-token owner — there is no way to record a note as authored by a different user via this connector (a `creatorId` override was shipped briefly in alpha.8 but removed in alpha.13 after a security review found it enables audit-attribution spoofing on shared-connector deployments).",
+      "ISO-8601 timestamp for when this note actually happened (e.g. '2024-03-15T14:30:00Z'). Defaults to now. Use this for backdating historical notes when migrating from another system. `entryAt` is preserved across subsequent update_entry calls; only `updatedAt` advances on edits. Note attribution flows to the API-token owner — there is no way to record a note as authored by a different user via this connector (a `creatorId` parameter would enable audit-attribution spoofing on shared-connector deployments, so it is intentionally not exposed).",
     ),
 });
 

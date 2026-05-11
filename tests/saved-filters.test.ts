@@ -77,4 +77,15 @@ describe("runSavedFilter", () => {
     const [url] = vi.mocked(fetch).mock.calls[0]!;
     expect(url).toContain("embed=tags%2Cfields");
   });
+
+  it("sort is intentionally not exposed as a parameter — orderBy lives on the saved filter itself", async () => {
+    // Capsule's saved-filter sort is configured in the web UI at save
+    // time (the orderBy is part of the saved filter definition). The
+    // run endpoint doesn't accept a client-side sort override — and
+    // we deliberately don't expose one on this tool. Pinning the
+    // schema surface so a contributor doesn't add a `sort` param
+    // without first verifying Capsule accepts it on the run endpoint.
+    const { runSavedFilterSchema } = await import("../src/tools/saved-filters.js");
+    expect("sort" in (runSavedFilterSchema.shape as Record<string, unknown>)).toBe(false);
+  });
 });

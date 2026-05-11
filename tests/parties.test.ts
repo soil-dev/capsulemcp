@@ -82,8 +82,7 @@ describe("atomic child-array operations", () => {
   // contract: an entry without `_delete` is added, an entry
   // `{id, _delete: true}` is removed. (The field is `_delete`, NOT
   // the Rails-style `_destroy` — Capsule silently ignores the latter.
-  // See NOTES-ON-CAPSULE-API.md §18 and the alpha.7 verification
-  // bug report, Bug 9.)
+  // See NOTES-ON-CAPSULE-API.md §18.)
 
   it("add_party_email_address PUTs one item with no id, no _delete", async () => {
     mockFetch(200, { party: { id: 99 } });
