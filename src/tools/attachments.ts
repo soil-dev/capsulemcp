@@ -86,18 +86,20 @@ export const uploadAttachmentSchema = z.object({
   filename: z
     .string()
     .min(1)
-    .describe("Filename Capsule should record (e.g. 'contract.pdf')."),
+    .describe(
+      "Filename Capsule should record (e.g. 'contract.pdf'). Capsule does NOT validate consistency between filename, contentType, and the actual bytes — a typo in either is accepted and the file is stored as labelled.",
+    ),
   contentType: z
     .string()
     .min(1)
     .describe(
-      "MIME type of the file (e.g. 'application/pdf', 'image/png', 'text/plain').",
+      "MIME type of the file (e.g. 'application/pdf', 'image/png', 'text/plain'). Trusted by Capsule verbatim; not cross-checked against `filename` or the actual bytes.",
     ),
   dataBase64: z
     .string()
     .min(1)
     .describe(
-      "File contents, base64-encoded. Decoded server-side and uploaded as the request body.",
+      "File contents, base64-encoded. Decoded server-side and uploaded as the request body. Maximum 25 MB per attachment (Capsule's documented limit); the connector's inbound HTTP body limit is ~35 MB which leaves room for the base64 expansion of a 25 MB binary. Oversized requests are rejected by Capsule with 4xx.",
     ),
   content: z
     .string()

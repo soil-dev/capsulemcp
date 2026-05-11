@@ -11,6 +11,36 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Fixed
+
+- `add_additional_party` is now actually idempotent. Tool description
+  has claimed *"Idempotent — re-adding a linked party is harmless"*
+  since v0.x, but Capsule's API responds with `422 party is already
+  a contact for this opportunity` (or `... already related to this
+  opportunity` if the target is the entity's main party) on a
+  re-add. The handler now catches those two specific 422 messages
+  and converts them to a success-shape result with the new
+  `alreadyLinked: true` flag, so callers can re-add freely without
+  arming their own retry-on-422 logic. Other 422s (validation
+  failures unrelated to existing links) and all other error classes
+  surface unchanged. Closes Bug 10 from the production write-mode
+  bug-report (sections 5–10).
+
+### Changed
+
+- `delete_party` description now lists projects (kases) in the
+  cascade and documents that deleting an ORGANISATION does NOT
+  cascade-delete people linked to it via `organisationId` — those
+  people survive as standalone records with their `organisation`
+  field silently cleared to null. Caller-facing surprise eliminated
+  for both common audit-trail and "what did I just delete" cases.
+- `upload_attachment` schema descriptions now state the **25 MB
+  per-attachment Capsule limit** explicitly, note the connector's
+  ~35 MB inbound body budget (which leaves room for the base64
+  expansion of a 25 MB binary), and warn that Capsule does NOT
+  cross-check `filename` / `contentType` / actual-bytes consistency:
+  a typo in either is accepted and the file is stored as labelled.
+
 ## [1.0.0-alpha.8] — 2026-05-11
 
 Two follow-up commits on top of alpha.7, both surfaced by

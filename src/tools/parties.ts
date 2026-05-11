@@ -257,7 +257,11 @@ export const deletePartySchema = z.object({
   id: z.number().int().positive(),
   confirm: z
     .literal(true)
-    .describe("Must be set to true. Deletes the party AND all linked notes/tasks/opportunities. Irreversible."),
+    .describe(
+      "Must be set to true. Deletes the party AND all linked notes, tasks, opportunities, and projects (kases). " +
+        "Deleting an ORGANISATION does NOT delete people linked to it via organisationId — their `organisation` field is silently cleared to null and they survive as standalone records. " +
+        "Irreversible.",
+    ),
 });
 
 export async function deleteParty(input: z.infer<typeof deletePartySchema>) {

@@ -257,7 +257,7 @@ export function createCapsuleMcpServer(): McpServer {
 
     server.tool(
       "delete_party",
-      "DESTRUCTIVE & IRREVERSIBLE: permanently delete a party (person or organisation). This also removes all linked notes, tasks, and opportunities. Requires confirm=true. Always read the party first with get_party and confirm with the user before calling.",
+      "DESTRUCTIVE & IRREVERSIBLE: permanently delete a party (person or organisation). Cascades to all linked notes, tasks, opportunities, AND projects (kases). Deleting an organisation does NOT delete people linked to it via organisationId — their `organisation` field is silently cleared to null and they survive as standalone records. Requires confirm=true. Always read the party first with get_party and confirm with the user before calling.",
       deletePartySchema.shape,
       async (input) => {
         const result = await deleteParty(input);

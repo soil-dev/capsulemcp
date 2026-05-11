@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  CapsuleApiError,
   capsuleDelete,
   capsuleGet,
   capsulePostNoContent,
@@ -68,15 +69,47 @@ export async function addAdditionalParty(
 ) {
   // Capsule returns 204 No Content on success — there's no JSON body
   // to parse. `capsulePostNoContent` handles the empty response cleanly.
-  await capsulePostNoContent(
-    `/${input.entity}/${input.entityId}/parties/${input.partyId}`,
-  );
-  return {
-    linked: true,
-    entity: input.entity,
-    entityId: input.entityId,
-    partyId: input.partyId,
-  };
+  //
+  // Idempotency: Capsule rejects a re-add of an already-linked party
+  // with `422 party is already a contact for this opportunity` (or the
+  // equivalent on kases). We catch that specific 422 and convert it to
+  // a success shape with `alreadyLinked: true`, so the tool delivers
+  // on the "idempotent — re-adding is harmless" promise in its
+  // description. Other 422s (and any other error class) still surface.
+  //
+  // Also catches the symmetric `party is already related to this
+  // opportunity` case (Capsule's wording when the target party is the
+  // MAIN party on the entity, not an additional). Different error
+  // message, same end-state ("link exists, no-op").
+  try {
+    await capsulePostNoContent(
+      `/${input.entity}/${input.entityId}/parties/${input.partyId}`,
+    );
+    return {
+      linked: true,
+      alreadyLinked: false,
+      entity: input.entity,
+      entityId: input.entityId,
+      partyId: input.partyId,
+    };
+  } catch (err) {
+    if (err instanceof CapsuleApiError && err.status === 422) {
+      const msg = err.message.toLowerCase();
+      if (
+        msg.includes("already a contact") ||
+        msg.includes("already related")
+      ) {
+        return {
+          linked: true,
+          alreadyLinked: true,
+          entity: input.entity,
+          entityId: input.entityId,
+          partyId: input.partyId,
+        };
+      }
+    }
+    throw err;
+  }
 }
 
 // ── Remove additional party ─────────────────────────────────────────────────
