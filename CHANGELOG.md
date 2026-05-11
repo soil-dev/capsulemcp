@@ -11,6 +11,8 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.0.0-alpha.12] — 2026-05-11
+
 ### Changed
 
 - **Destructive-op idempotency unified across all 12 tools.** §12 of
