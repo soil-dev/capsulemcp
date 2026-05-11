@@ -19,6 +19,7 @@
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { z, ZodRawShape } from "zod";
 
 /** Wrap a handler's return value in the MCP `content: [{text}]` shape. */
@@ -42,8 +43,17 @@ export function registerTool<Schema extends z.ZodObject<ZodRawShape>>(
   schema: Schema,
   handler: (input: z.infer<Schema>) => Promise<unknown>,
 ): void {
-  server.tool(name, description, schema.shape, async (input) => {
-    const result = await handler(input as z.infer<Schema>);
+  // Use the SDK config-form registerTool with the full Zod schema. The
+  // deprecated shape overload rebuilds z.object(schema.shape), which drops
+  // object-level refinements such as superRefine.
+  const registerWithSchema = server.registerTool.bind(server) as (
+    toolName: string,
+    config: { description: string; inputSchema: Schema },
+    callback: (input: z.infer<Schema>) => Promise<CallToolResult>,
+  ) => void;
+
+  registerWithSchema(name, { description, inputSchema: schema }, async (input) => {
+    const result = await handler(input);
     return wrapAsText(result);
   });
 }
