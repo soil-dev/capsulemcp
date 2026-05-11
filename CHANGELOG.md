@@ -11,6 +11,52 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+Pending — slated for the next alpha cut. Two strands of work
+since alpha.18:
+
+### Fixed
+
+- **Issue #14: `create_project { ownerId, stageId }` rejected at
+  schema level.** Capsule's POST silently drops `ownerId`
+  whenever `stage` is in the body, producing a project with
+  `owner: null` regardless of the caller's intent. The connector
+  cannot work around this in a single call. The schema now
+  rejects the combo with an actionable error pointing callers at
+  the stage-first workflow (create with `stageId`, then
+  `update_project { ownerId }`).
+- **Issue #15: HTTP-date Retry-After test made deterministic.**
+  The test relied on real timers + whole-second precision in
+  `toUTCString()`, which could give `parseRetryAfter` a ≤0 delta
+  and fall back to the 5s default — racing the 5s vitest timeout.
+  Converted to fake timers + pinned system time (matches the
+  pattern other rate-limit tests already use). Same flake-class
+  fix applied to the X-RateLimit-Reset test, which had the same
+  real-timer + epoch-second-rounding race.
+
+### Documented
+
+- The alpha.18 schema descriptions claimed a "create without
+  stageId, then update_project { stageId }" two-call workflow
+  reaches owner+team+stage. **The update-with-stage leg actually
+  clears the owner** — Capsule has a third clear rule beyond
+  the two known in alpha.18:
+  - **Rule B (PUT):** `stage` in body clears `owner`, regardless
+    of whether `owner` is also in the body.
+  - **Rule C (POST):** symmetric clear at create time (this is
+    the original Bug 17).
+  No connector-side fix exists for Rules B/C — Capsule's
+  clearing is independent of body shape, so RMW can't help.
+- `create_project.stageId` and `update_project.stageId`
+  descriptions rewritten around the working **stage-first,
+  owner-second** workflow.
+- `create_project.teamId` notes the
+  `create_project { partyId, stageId, teamId }` → 422 case
+  (Capsule appears to implicitly attach an owner and validate
+  against the team).
+- **NOTES-ON-CAPSULE-API.md §27** rewritten (fifth pass) around
+  three rules (A, B, C) plus the working workflow. All five
+  prior wrong framings listed explicitly for future readers.
+
 ## [1.0.0-alpha.18] — 2026-05-11
 
 Follow-through on the alpha.17-verification report. Three
