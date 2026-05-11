@@ -6,7 +6,6 @@ dist
 .env
 *.log
 tests
-scripts
 PLAN.md
 README.md
 LICENSE

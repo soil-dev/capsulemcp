@@ -11,6 +11,42 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.0.0-beta.3] — 2026-05-11
+
+Container-image-build fix. v1.0.0-beta.1 and v1.0.0-beta.2
+**published successfully on npm/GitHub but their container-image
+builds failed silently** — the production Cloud Run service has
+been running the v1.0.0-alpha.20 image since the alpha.20 deploy,
+despite the deployed service's `serverInfo.version` claiming
+"beta.1" / "beta.2".
+
+Root cause: PR #19 added `COPY scripts ./scripts` to the
+Dockerfile so the container build could run the same
+`npm run build` script as local builds (which chains
+`build:icon`). But the matching `.dockerignore` entry for
+`scripts/` was never removed, so the `COPY` step failed with
+`no items matching glob "scripts"` — exit 125. The image build
+GitHub workflow reported `conclusion: failure`, but the local
+`gh run watch --exit-status | tail -3` invocation masked the
+non-zero exit through the pipe, so the pre-deploy "wait for
+build" step appeared to succeed. Cloud Run's `:latest` digest
+hadn't moved since alpha.20, and Pulumi cheerfully resolved and
+deployed that stale digest twice in a row.
+
+This release bumps to beta.3 (the previous tags' content is
+fine — only the container builds were stuck) and:
+
+- Removes `scripts` from `.dockerignore` so `COPY scripts ./scripts`
+  succeeds.
+- HOWTO release checklist gains a "verify the workflow run's
+  conclusion, not just exit status" line so the masking via
+  `tail` can't recur.
+
+No code changes. The behavioural improvements documented under
+beta.1 and beta.2 **become actually live** with this release —
+constant-time client_secret, /mcp rate limit, sanitized error
+logs, stage carry, Zod token validation, stdio fail-fast.
+
 ## [1.0.0-beta.2] — 2026-05-11
 
 Long-tail housekeeping after the beta.1 production verification

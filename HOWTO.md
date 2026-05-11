@@ -249,6 +249,7 @@ Easy things to forget that have bitten us before:
 - [ ] **HOWTO test count and bundle sizes** reflect reality (greppable: `npm test 2>&1 | tail -3` and `npm run build 2>&1 | tail -5`).
 - [ ] **README "N tools / N read-only" counts** still match — bumping a tool count without bumping these numbers silently drifts. `grep -c "registerTool(server" src/server.ts` and `awk` over `if (!readOnly)` blocks.
 - [ ] **Tag exists before triggering downstream builds**: any image-build pipeline that takes a git ref expects the tag to already be on GitHub.
+- [ ] **Verify the image-build workflow's `conclusion`, not just exit status.** Piping `gh run watch --exit-status` through `tail` (or any non-pipefail shell) silently swallows the non-zero exit. Use `gh run view <id> --json conclusion --jq .conclusion` or `gh run list --workflow=... --limit=1 --json conclusion --jq '.[0].conclusion'` after the watch returns, and gate the deploy on the result being `"success"`. The beta.1/beta.2 deploys both shipped because the workflow had `conclusion: failure` but the local `tail` pipe masked the exit code.
 
 Versioning convention:
 
