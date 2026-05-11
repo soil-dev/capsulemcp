@@ -201,15 +201,18 @@ async function parseErrorBody(res: Response): Promise<string> {
  * Backstory: early alpha verification surfaced two transient hangs
  * (on `remove_tag_by_id` and `list_entity_tracks`) shaped like "tool
  * call hung for ~4 minutes". At the time we attributed them to
- * Capsule slowness and added this
- * timeout to cap the wait at 60s. In retrospect those hangs were
- * almost certainly higher up the stack — the Claude.ai tool-approval
- * prompt's own timeout firing while the user was elsewhere, before
- * the connector was ever invoked. Our endpoint had no call to time
- * out. So this timeout doesn't address those specific reports, but
- * it is still the right thing to have: real Capsule slowness, DNS
- * hiccups, TCP keepalive holes, and Capsule outages that return
- * slowly all benefit from a bounded outbound budget.
+ * Capsule slowness and added this timeout to cap the wait at 60s.
+ * Subsequent verification rounds couldn't reproduce either hang —
+ * the beta.1 stress loop ran 24 back-to-back `remove_tag_by_id`
+ * calls on the same party with zero anomalies. The original
+ * observations were almost certainly higher up the stack — the
+ * Claude.ai tool-approval prompt's own timeout firing while the
+ * user was elsewhere, before the connector was ever invoked. Our
+ * endpoint had no call to time out. So this timeout doesn't
+ * address those specific reports (they weren't real connector
+ * hangs), but it is still the right thing to have: real Capsule
+ * slowness, DNS hiccups, TCP keepalive holes, and Capsule outages
+ * that return slowly all benefit from a bounded outbound budget.
  */
 const REQUEST_TIMEOUT_MS = 60_000;
 

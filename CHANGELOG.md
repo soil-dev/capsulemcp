@@ -11,6 +11,21 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Closed (long-tail housekeeping)
+
+- **Bug 11 — `remove_tag_by_id` transient hang.** Observed once
+  in early alpha and unreproducible since. The beta.1 stress
+  loop ran **24 back-to-back `remove_tag_by_id` calls** on the
+  same party (across three iterations of add-8-tags / read /
+  remove-8-tags) with zero anomalies — no hangs, no timeouts,
+  no errors, no latency outliers. Closed as unreproducible; the
+  original observation is attributed to a transient upstream
+  Capsule hiccup or the Claude.ai tool-approval prompt's own
+  timeout firing higher up the stack, not a connector defect.
+  The 60s outbound timeout in `src/capsule/client.ts` stays —
+  it remains the right defence against real upstream slowness
+  even though the original hangs weren't its target.
+
 ### Documented
 
 - **BOOLEAN custom fields are observably two-state, not three-state.**
