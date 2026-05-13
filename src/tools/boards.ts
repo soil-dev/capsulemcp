@@ -43,10 +43,7 @@ export const listStagesSchema = z.object({
 });
 
 export async function listStages(input: z.infer<typeof listStagesSchema>) {
-  const path =
-    input.boardId !== undefined
-      ? `/boards/${input.boardId}/stages`
-      : "/stages";
+  const path = input.boardId !== undefined ? `/boards/${input.boardId}/stages` : "/stages";
   const { data, nextPage } = await capsuleGet<{ stages: unknown[] }>(path, {
     page: input.page ?? 1,
     perPage: input.perPage ?? 100,

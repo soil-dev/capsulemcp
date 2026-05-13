@@ -4,8 +4,13 @@ import { fetch } from "undici";
 
 vi.mock("undici", () => ({ fetch: vi.fn() }));
 
-beforeEach(() => { process.env["CAPSULE_API_TOKEN"] = "test-token"; });
-afterEach(() => { vi.clearAllMocks(); delete process.env["CAPSULE_API_TOKEN"]; });
+beforeEach(() => {
+  process.env["CAPSULE_API_TOKEN"] = "test-token";
+});
+afterEach(() => {
+  vi.clearAllMocks();
+  delete process.env["CAPSULE_API_TOKEN"];
+});
 
 describe("listPipelines", () => {
   it("returns pipelines array", async () => {
@@ -40,8 +45,6 @@ describe("listMilestones", () => {
     mockFetch(404, { message: "Pipeline not found" });
 
     const { listMilestones } = await import("../src/tools/pipelines.js");
-    await expect(listMilestones({ pipelineId: 99999 })).rejects.toThrow(
-      /Capsule API error 404/,
-    );
+    await expect(listMilestones({ pipelineId: 99999 })).rejects.toThrow(/Capsule API error 404/);
   });
 });

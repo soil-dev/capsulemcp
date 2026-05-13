@@ -2,22 +2,14 @@ import { z } from "zod";
 import { EMBED_ATTACHMENTS_PARTICIPANTS_DESCRIPTION } from "./descriptions.js";
 import { confirmFlag } from "./confirm-flag.js";
 import { idempotent } from "../capsule/idempotent.js";
-import {
-  capsuleDelete,
-  capsuleGet,
-  capsulePost,
-  capsulePut,
-} from "../capsule/client.js";
+import { capsuleDelete, capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
 
 // ── Read ────────────────────────────────────────────────────────────────────
 
 const listEntriesPagination = {
   page: z.number().int().positive().optional().default(1),
   perPage: z.number().int().min(1).max(100).optional().default(25),
-  embed: z
-    .string()
-    .optional()
-    .describe(EMBED_ATTACHMENTS_PARTICIPANTS_DESCRIPTION),
+  embed: z.string().optional().describe(EMBED_ATTACHMENTS_PARTICIPANTS_DESCRIPTION),
 };
 
 export const listPartyEntriesSchema = z.object({
@@ -38,9 +30,7 @@ export const listOpportunityEntriesSchema = z.object({
   ...listEntriesPagination,
 });
 
-export async function listOpportunityEntries(
-  input: z.infer<typeof listOpportunityEntriesSchema>,
-) {
+export async function listOpportunityEntries(input: z.infer<typeof listOpportunityEntriesSchema>) {
   const { data, nextPage } = await capsuleGet<{ entries: unknown[] }>(
     `/opportunities/${input.opportunityId}/entries`,
     { embed: input.embed, page: input.page, perPage: input.perPage },
@@ -53,9 +43,7 @@ export const listProjectEntriesSchema = z.object({
   ...listEntriesPagination,
 });
 
-export async function listProjectEntries(
-  input: z.infer<typeof listProjectEntriesSchema>,
-) {
+export async function listProjectEntries(input: z.infer<typeof listProjectEntriesSchema>) {
   const { data, nextPage } = await capsuleGet<{ entries: unknown[] }>(
     `/kases/${input.projectId}/entries`,
     { embed: input.embed, page: input.page, perPage: input.perPage },
@@ -87,10 +75,11 @@ export const listEntriesSchema = z.object({
 });
 
 export async function listEntries(input: z.infer<typeof listEntriesSchema>) {
-  const { data, nextPage } = await capsuleGet<{ entries: unknown[] }>(
-    "/entries",
-    { embed: input.embed, page: input.page, perPage: input.perPage },
-  );
+  const { data, nextPage } = await capsuleGet<{ entries: unknown[] }>("/entries", {
+    embed: input.embed,
+    page: input.page,
+    perPage: input.perPage,
+  });
   return { ...data, nextPage };
 }
 
@@ -104,9 +93,24 @@ export const addNoteSchema = z.object({
     .describe(
       "Note body text. Stored verbatim and treated as MARKDOWN — Capsule's web UI renders the markdown when displaying. Pass markdown source ('# Heading', '**bold**', '- bullet'), not HTML.",
     ),
-  partyId: z.number().int().positive().optional().describe("Link note to a party (mutually exclusive with opportunityId/projectId)"),
-  opportunityId: z.number().int().positive().optional().describe("Link note to an opportunity (mutually exclusive with partyId/projectId)"),
-  projectId: z.number().int().positive().optional().describe("Link note to a project (mutually exclusive with partyId/opportunityId)"),
+  partyId: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe("Link note to a party (mutually exclusive with opportunityId/projectId)"),
+  opportunityId: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe("Link note to an opportunity (mutually exclusive with partyId/projectId)"),
+  projectId: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe("Link note to a project (mutually exclusive with partyId/opportunityId)"),
   entryAt: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})$/)
@@ -165,9 +169,7 @@ export async function updateEntry(input: z.infer<typeof updateEntrySchema>) {
   if (rest.subject !== undefined) body["subject"] = rest.subject;
 
   if (Object.keys(body).length === 0) {
-    throw new Error(
-      "update_entry: provide at least one field to update (content or subject)",
-    );
+    throw new Error("update_entry: provide at least one field to update (content or subject)");
   }
 
   return capsulePut<{ entry: unknown }>(`/entries/${id}`, { entry: body });
@@ -177,8 +179,9 @@ export async function updateEntry(input: z.infer<typeof updateEntrySchema>) {
 
 export const deleteEntrySchema = z.object({
   id: z.number().int().positive().describe("Entry (note/email/task-record) ID"),
-  confirm: confirmFlag()
-    .describe("Must be set to true. Permanently deletes the entry — use this to remove a note from a party/opportunity/project. Irreversible."),
+  confirm: confirmFlag().describe(
+    "Must be set to true. Permanently deletes the entry — use this to remove a note from a party/opportunity/project. Irreversible.",
+  ),
 });
 
 export async function deleteEntry(input: z.infer<typeof deleteEntrySchema>) {

@@ -31,9 +31,7 @@ import { idempotent } from "../capsule/idempotent.js";
 
 const RelationshipEntity = z
   .enum(["opportunities", "kases"])
-  .describe(
-    "Which entity has the additional-party links. Use 'kases' for projects.",
-  );
+  .describe("Which entity has the additional-party links. Use 'kases' for projects.");
 
 // ── List additional parties ─────────────────────────────────────────────────
 
@@ -45,9 +43,7 @@ export const listAdditionalPartiesSchema = z.object({
   perPage: z.number().int().min(1).max(100).optional().default(25),
 });
 
-export async function listAdditionalParties(
-  input: z.infer<typeof listAdditionalPartiesSchema>,
-) {
+export async function listAdditionalParties(input: z.infer<typeof listAdditionalPartiesSchema>) {
   const { data, nextPage } = await capsuleGet<{ parties: unknown[] }>(
     `/${input.entity}/${input.entityId}/parties`,
     { embed: input.embed, page: input.page, perPage: input.perPage },
@@ -67,9 +63,7 @@ export const addAdditionalPartySchema = z.object({
     .describe("ID of the party (person or organisation) to link as an additional party."),
 });
 
-export async function addAdditionalParty(
-  input: z.infer<typeof addAdditionalPartySchema>,
-) {
+export async function addAdditionalParty(input: z.infer<typeof addAdditionalPartySchema>) {
   // Capsule returns 204 No Content on success — there's no JSON body
   // to parse. `capsulePostNoContent` handles the empty response cleanly.
   //
@@ -85,9 +79,7 @@ export async function addAdditionalParty(
   // MAIN party on the entity, not an additional). Different error
   // message, same end-state ("link exists, no-op").
   try {
-    await capsulePostNoContent(
-      `/${input.entity}/${input.entityId}/parties/${input.partyId}`,
-    );
+    await capsulePostNoContent(`/${input.entity}/${input.entityId}/parties/${input.partyId}`);
     return {
       linked: true,
       alreadyLinked: false,
@@ -98,10 +90,7 @@ export async function addAdditionalParty(
   } catch (err) {
     if (err instanceof CapsuleApiError && err.status === 422) {
       const msg = err.message.toLowerCase();
-      if (
-        msg.includes("already a contact") ||
-        msg.includes("already related")
-      ) {
+      if (msg.includes("already a contact") || msg.includes("already related")) {
         return {
           linked: true,
           alreadyLinked: true,
@@ -121,15 +110,12 @@ export const removeAdditionalPartySchema = z.object({
   entity: RelationshipEntity,
   entityId: z.number().int().positive(),
   partyId: z.number().int().positive(),
-  confirm: confirmFlag()
-    .describe(
-      "Must be set to true. Removes the link between the entity and the additional party. The party itself is not deleted. Reversible by re-adding the link.",
-    ),
+  confirm: confirmFlag().describe(
+    "Must be set to true. Removes the link between the entity and the additional party. The party itself is not deleted. Reversible by re-adding the link.",
+  ),
 });
 
-export async function removeAdditionalParty(
-  input: z.infer<typeof removeAdditionalPartySchema>,
-) {
+export async function removeAdditionalParty(input: z.infer<typeof removeAdditionalPartySchema>) {
   if (input.confirm !== true) {
     throw new Error("remove_additional_party requires confirm: true");
   }
@@ -137,10 +123,7 @@ export async function removeAdditionalParty(
   // isn't linked to this entity" — both are observationally "the link
   // doesn't exist", treat both as already-removed.
   return idempotent(
-    () =>
-      capsuleDelete(
-        `/${input.entity}/${input.entityId}/parties/${input.partyId}`,
-      ),
+    () => capsuleDelete(`/${input.entity}/${input.entityId}/parties/${input.partyId}`),
     () => ({
       removed: true,
       alreadyRemoved: false,
@@ -167,9 +150,7 @@ export const listAssociatedProjectsSchema = z.object({
   perPage: z.number().int().min(1).max(100).optional().default(25),
 });
 
-export async function listAssociatedProjects(
-  input: z.infer<typeof listAssociatedProjectsSchema>,
-) {
+export async function listAssociatedProjects(input: z.infer<typeof listAssociatedProjectsSchema>) {
   // Capsule's API uses /kases for projects.
   const { data, nextPage } = await capsuleGet<{ kases: unknown[] }>(
     `/opportunities/${input.opportunityId}/kases`,

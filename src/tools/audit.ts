@@ -54,9 +54,7 @@ const DeletedPagination = {
 
 export const listDeletedPartiesSchema = z.object(DeletedPagination);
 
-export async function listDeletedParties(
-  input: z.infer<typeof listDeletedPartiesSchema>,
-) {
+export async function listDeletedParties(input: z.infer<typeof listDeletedPartiesSchema>) {
   const { data, nextPage } = await capsuleGet<{
     parties: unknown[];
     restrictedParties?: unknown[];
@@ -86,9 +84,7 @@ export async function listDeletedOpportunities(
 
 export const listDeletedProjectsSchema = z.object(DeletedPagination);
 
-export async function listDeletedProjects(
-  input: z.infer<typeof listDeletedProjectsSchema>,
-) {
+export async function listDeletedProjects(input: z.infer<typeof listDeletedProjectsSchema>) {
   // Capsule's API uses /kases for projects.
   const { data, nextPage } = await capsuleGet<{
     kases: unknown[];

@@ -67,8 +67,7 @@ export function createApp(opts: AppOptions): express.Express {
   // metadata URL in WWW-Authenticate on /mcp's 401s so generic
   // OAuth/MCP clients can discover it without baked-in knowledge.
   const mcpResourceUrl = new URL("/mcp", issuerUrl);
-  const mcpResourceMetadataUrl =
-    getOAuthProtectedResourceMetadataUrl(mcpResourceUrl);
+  const mcpResourceMetadataUrl = getOAuthProtectedResourceMetadataUrl(mcpResourceUrl);
 
   const app = express();
   // MUST be set before mcpAuthRouter so the rate-limit middleware
@@ -90,83 +89,66 @@ export function createApp(opts: AppOptions): express.Express {
   // Wrapped as URL-encoded middleware because mcpAuthRouter installs
   // its own body parser internally; we need access to req.body here,
   // so we duplicate the small parse. Both parses are idempotent.
-  app.post(
-    "/token",
-    express.urlencoded({ extended: false }),
-    async (req, res, next) => {
-      const sendInvalidClient = (description: string): void => {
-        res.status(401).json({
-          error: "invalid_client",
-          error_description: description,
-        });
-      };
+  app.post("/token", express.urlencoded({ extended: false }), async (req, res, next) => {
+    const sendInvalidClient = (description: string): void => {
+      res.status(401).json({
+        error: "invalid_client",
+        error_description: description,
+      });
+    };
 
-      const body = (req.body ?? {}) as Record<string, unknown>;
-      const clientId =
-        typeof body["client_id"] === "string"
-          ? (body["client_id"] as string)
-          : undefined;
-      const providedSecret =
-        typeof body["client_secret"] === "string"
-          ? (body["client_secret"] as string)
-          : undefined;
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const clientId =
+      typeof body["client_id"] === "string" ? (body["client_id"] as string) : undefined;
+    const providedSecret =
+      typeof body["client_secret"] === "string" ? (body["client_secret"] as string) : undefined;
 
-      if (!clientId) {
-        sendInvalidClient("client credentials required");
-        return;
-      }
+    if (!clientId) {
+      sendInvalidClient("client credentials required");
+      return;
+    }
 
-      let expected: Awaited<
-        ReturnType<typeof oauthProvider.clientsStore.getClient>
-      >;
-      try {
-        expected = await oauthProvider.clientsStore.getClient(clientId);
-      } catch {
-        res.status(500).json({
-          error: "server_error",
-          error_description: "client lookup failed",
-        });
-        return;
-      }
+    let expected: Awaited<ReturnType<typeof oauthProvider.clientsStore.getClient>>;
+    try {
+      expected = await oauthProvider.clientsStore.getClient(clientId);
+    } catch {
+      res.status(500).json({
+        error: "server_error",
+        error_description: "client lookup failed",
+      });
+      return;
+    }
 
-      // Always run a fixed-width digest comparison before branching on
-      // whether the client exists. Otherwise an attacker could distinguish
-      // "unknown clientId" from "known clientId, wrong secret" by timing.
-      const expectedSecret =
-        expected &&
-        typeof expected.client_secret === "string" &&
-        expected.client_secret
-          ? expected.client_secret
-          : "";
-      const secretsMatch = timingSafeSecretEqual(
-        providedSecret ?? "",
-        expectedSecret,
-      );
-      if (!expected) {
-        sendInvalidClient("client authentication failed");
-        return;
-      }
+    // Always run a fixed-width digest comparison before branching on
+    // whether the client exists. Otherwise an attacker could distinguish
+    // "unknown clientId" from "known clientId, wrong secret" by timing.
+    const expectedSecret =
+      expected && typeof expected.client_secret === "string" && expected.client_secret
+        ? expected.client_secret
+        : "";
+    const secretsMatch = timingSafeSecretEqual(providedSecret ?? "", expectedSecret);
+    if (!expected) {
+      sendInvalidClient("client authentication failed");
+      return;
+    }
 
-      // Public DCR clients (`token_endpoint_auth_method: "none"`) have no
-      // client_secret. Let the SDK's downstream auth middleware handle that
-      // standards path; the pre-check only replaces secret-bearing compares.
-      if (!expectedSecret) {
-        next();
-        return;
-      }
-
-      const expiresAt = expected.client_secret_expires_at;
-      const secretExpired =
-        typeof expiresAt === "number" &&
-        expiresAt !== 0 &&
-        expiresAt < Math.floor(Date.now() / 1000);
-      if (providedSecret === undefined || !secretsMatch || secretExpired) {
-        sendInvalidClient("client authentication failed");
-        return;
-      }
+    // Public DCR clients (`token_endpoint_auth_method: "none"`) have no
+    // client_secret. Let the SDK's downstream auth middleware handle that
+    // standards path; the pre-check only replaces secret-bearing compares.
+    if (!expectedSecret) {
       next();
-    },
-  );
+      return;
+    }
+
+    const expiresAt = expected.client_secret_expires_at;
+    const secretExpired =
+      typeof expiresAt === "number" && expiresAt !== 0 && expiresAt < Math.floor(Date.now() / 1000);
+    if (providedSecret === undefined || !secretsMatch || secretExpired) {
+      sendInvalidClient("client authentication failed");
+      return;
+    }
+    next();
+  });
 
   app.use(
     mcpAuthRouter({
@@ -183,10 +165,7 @@ export function createApp(opts: AppOptions): express.Express {
   // it from the MCP serverInfo payload. Serve our SVG at both /icon.svg and
   // /favicon.ico (browsers default-fetch the latter). 24h cache — the icon
   // rotates approximately never.
-  const iconHandler = (
-    _req: express.Request,
-    res: express.Response,
-  ): void => {
+  const iconHandler = (_req: express.Request, res: express.Response): void => {
     res
       .set("Content-Type", "image/svg+xml")
       .set("Cache-Control", "public, max-age=86400")
@@ -232,12 +211,9 @@ export function createApp(opts: AppOptions): express.Express {
   // that a runaway loop trips before the upstream 4000-rph cap.
   // Operators on heavy-tenant deployments can override via env. Tests
   // disable it via MCP_HTTP_RATE_LIMIT_DISABLED.
-  const rateLimitWindowMs =
-    Number(process.env["MCP_HTTP_RATE_LIMIT_WINDOW_MS"]) || 60_000;
-  const rateLimitMax =
-    Number(process.env["MCP_HTTP_RATE_LIMIT_MAX"]) || 600;
-  const rateLimitDisabled =
-    process.env["MCP_HTTP_RATE_LIMIT_DISABLED"] === "1";
+  const rateLimitWindowMs = Number(process.env["MCP_HTTP_RATE_LIMIT_WINDOW_MS"]) || 60_000;
+  const rateLimitMax = Number(process.env["MCP_HTTP_RATE_LIMIT_MAX"]) || 600;
+  const rateLimitDisabled = process.env["MCP_HTTP_RATE_LIMIT_DISABLED"] === "1";
   const mcpRateLimit = rateLimit({
     windowMs: rateLimitWindowMs,
     limit: rateLimitMax,
@@ -263,10 +239,7 @@ export function createApp(opts: AppOptions): express.Express {
 
   const guardProtocolVersion: express.RequestHandler = (req, res, next) => {
     const protocolVersion = req.get("MCP-Protocol-Version");
-    if (
-      protocolVersion &&
-      !SUPPORTED_PROTOCOL_VERSIONS.includes(protocolVersion)
-    ) {
+    if (protocolVersion && !SUPPORTED_PROTOCOL_VERSIONS.includes(protocolVersion)) {
       res.status(400).json({
         jsonrpc: "2.0",
         error: {
@@ -338,14 +311,10 @@ export function createApp(opts: AppOptions): express.Express {
     mcpRateLimit,
     guardProtocolVersion,
     (_req, res) => {
-      res
-        .set("Allow", "POST")
-        .status(405)
-        .json({
-          error: "method_not_allowed",
-          message:
-            "Use POST for MCP requests; this server runs in stateless mode.",
-        });
+      res.set("Allow", "POST").status(405).json({
+        error: "method_not_allowed",
+        message: "Use POST for MCP requests; this server runs in stateless mode.",
+      });
     },
   );
   app.delete(
@@ -358,14 +327,10 @@ export function createApp(opts: AppOptions): express.Express {
     mcpRateLimit,
     guardProtocolVersion,
     (_req, res) => {
-      res
-        .set("Allow", "POST")
-        .status(405)
-        .json({
-          error: "method_not_allowed",
-          message:
-            "Use POST for MCP requests; this server runs in stateless mode.",
-        });
+      res.set("Allow", "POST").status(405).json({
+        error: "method_not_allowed",
+        message: "Use POST for MCP requests; this server runs in stateless mode.",
+      });
     },
   );
 

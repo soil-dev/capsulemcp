@@ -4,8 +4,13 @@ import { fetch } from "undici";
 
 vi.mock("undici", () => ({ fetch: vi.fn() }));
 
-beforeEach(() => { process.env["CAPSULE_API_TOKEN"] = "test-token"; });
-afterEach(() => { vi.clearAllMocks(); delete process.env["CAPSULE_API_TOKEN"]; });
+beforeEach(() => {
+  process.env["CAPSULE_API_TOKEN"] = "test-token";
+});
+afterEach(() => {
+  vi.clearAllMocks();
+  delete process.env["CAPSULE_API_TOKEN"];
+});
 
 describe("searchOpportunities", () => {
   it("routes to /opportunities/search when q is provided", async () => {
@@ -20,9 +25,13 @@ describe("searchOpportunities", () => {
   });
 
   it("routes to /opportunities when q is omitted", async () => {
-    mockFetch(200, { opportunities: [] }, {
-      Link: '<https://api.capsulecrm.com/api/v2/opportunities?page=2&perPage=25>; rel="next"',
-    });
+    mockFetch(
+      200,
+      { opportunities: [] },
+      {
+        Link: '<https://api.capsulecrm.com/api/v2/opportunities?page=2&perPage=25>; rel="next"',
+      },
+    );
 
     const { searchOpportunities } = await import("../src/tools/opportunities.js");
     const result = await searchOpportunities({ page: 1, perPage: 25 });
@@ -102,9 +111,7 @@ describe("updateOpportunity", () => {
         { definitionId: 6, value: null },
       ],
     });
-    const body = JSON.parse(
-      (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string,
-    );
+    const body = JSON.parse((vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string);
     expect(body.opportunity.fields).toEqual([
       { definition: { id: 5 }, value: "2025-11-28" },
       { definition: { id: 6 }, value: null },
@@ -118,9 +125,7 @@ describe("updateOpportunity", () => {
     mockFetch(200, { opportunity: { id: 20 } });
     const { updateOpportunity } = await import("../src/tools/opportunities.js");
     await updateOpportunity({ id: 20, milestoneId: 7, lostReasonId: 42 });
-    const body = JSON.parse(
-      (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string,
-    );
+    const body = JSON.parse((vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string);
     expect(body.opportunity.milestone).toEqual({ id: 7 });
     expect(body.opportunity.lostReason).toEqual({ id: 42 });
     // user-facing field name doesn't leak into the API body
@@ -130,9 +135,7 @@ describe("updateOpportunity", () => {
 
 describe("OpportunityValueSchema custom error", () => {
   it("emits an operator-readable message when currency is missing (amount supplied)", async () => {
-    const { createOpportunitySchema } = await import(
-      "../src/tools/opportunities.js"
-    );
+    const { createOpportunitySchema } = await import("../src/tools/opportunities.js");
     const r = createOpportunitySchema.safeParse({
       name: "X",
       partyId: 1,
@@ -141,9 +144,7 @@ describe("OpportunityValueSchema custom error", () => {
     });
     expect(r.success).toBe(false);
     if (!r.success) {
-      const issue = r.error.issues.find(
-        (i) => i.path.join(".") === "value.currency",
-      );
+      const issue = r.error.issues.find((i) => i.path.join(".") === "value.currency");
       expect(issue?.message).toBe(
         "currency is required when amount is set (3-letter ISO 4217 code, e.g. 'USD', 'EUR', 'GBP')",
       );
@@ -151,9 +152,7 @@ describe("OpportunityValueSchema custom error", () => {
   });
 
   it("falls through to the default Zod message on length violation", async () => {
-    const { createOpportunitySchema } = await import(
-      "../src/tools/opportunities.js"
-    );
+    const { createOpportunitySchema } = await import("../src/tools/opportunities.js");
     const r = createOpportunitySchema.safeParse({
       name: "X",
       partyId: 1,
@@ -162,9 +161,7 @@ describe("OpportunityValueSchema custom error", () => {
     });
     expect(r.success).toBe(false);
     if (!r.success) {
-      const issue = r.error.issues.find(
-        (i) => i.path.join(".") === "value.currency",
-      );
+      const issue = r.error.issues.find((i) => i.path.join(".") === "value.currency");
       // The custom error is scoped to missing-field; length/type errors
       // still get Zod defaults so callers see exactly which constraint failed.
       expect(issue?.message).not.toMatch(/required when amount is set/);

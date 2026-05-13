@@ -9,10 +9,10 @@ const paginationFields = {
 export const listPipelinesSchema = z.object({ ...paginationFields });
 
 export async function listPipelines(input: z.infer<typeof listPipelinesSchema>) {
-  const { data, nextPage } = await capsuleGet<{ pipelines: unknown[] }>(
-    "/pipelines",
-    { page: input.page ?? 1, perPage: input.perPage ?? 100 },
-  );
+  const { data, nextPage } = await capsuleGet<{ pipelines: unknown[] }>("/pipelines", {
+    page: input.page ?? 1,
+    perPage: input.perPage ?? 100,
+  });
   return { ...data, nextPage };
 }
 

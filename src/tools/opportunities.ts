@@ -1,12 +1,7 @@
 import { z } from "zod";
 import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
 import { confirmFlag } from "./confirm-flag.js";
-import {
-  capsuleDelete,
-  capsuleGet,
-  capsulePost,
-  capsulePut,
-} from "../capsule/client.js";
+import { capsuleDelete, capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
 import { idempotent } from "../capsule/idempotent.js";
 import {
   CustomFieldWriteSchema,
@@ -46,15 +41,15 @@ export const searchOpportunitiesSchema = z.object({
   perPage: z.number().int().min(1).max(100).optional().default(25),
 });
 
-export async function searchOpportunities(
-  input: z.infer<typeof searchOpportunitiesSchema>,
-) {
+export async function searchOpportunities(input: z.infer<typeof searchOpportunitiesSchema>) {
   // GET /opportunities ignores `q`; the search sub-resource is required for filtering.
   const path = input.q ? "/opportunities/search" : "/opportunities";
-  const { data, nextPage } = await capsuleGet<{ opportunities: unknown[] }>(
-    path,
-    { q: input.q, embed: input.embed, page: input.page, perPage: input.perPage },
-  );
+  const { data, nextPage } = await capsuleGet<{ opportunities: unknown[] }>(path, {
+    q: input.q,
+    embed: input.embed,
+    page: input.page,
+    perPage: input.perPage,
+  });
   return { ...data, nextPage };
 }
 
@@ -66,10 +61,9 @@ export const getOpportunitySchema = z.object({
 });
 
 export async function getOpportunity(input: z.infer<typeof getOpportunitySchema>) {
-  const { data } = await capsuleGet<{ opportunity: unknown }>(
-    `/opportunities/${input.id}`,
-    { embed: input.embed },
-  );
+  const { data } = await capsuleGet<{ opportunity: unknown }>(`/opportunities/${input.id}`, {
+    embed: input.embed,
+  });
   return data;
 }
 
@@ -87,9 +81,7 @@ export const getOpportunitiesSchema = z.object({
   embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
 });
 
-export async function getOpportunities(
-  input: z.infer<typeof getOpportunitiesSchema>,
-) {
+export async function getOpportunities(input: z.infer<typeof getOpportunitiesSchema>) {
   const { data } = await capsuleGet<{ opportunities: unknown[] }>(
     `/opportunities/${input.ids.join(",")}`,
     { embed: input.embed },
@@ -111,7 +103,11 @@ export const createOpportunitySchema = z.object({
     ),
   description: z.string().optional(),
   value: OpportunityValueSchema.optional(),
-  expectedCloseOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("YYYY-MM-DD"),
+  expectedCloseOn: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional()
+    .describe("YYYY-MM-DD"),
   probability: z.number().int().min(0).max(100).optional(),
   ownerId: z
     .number()
@@ -123,9 +119,7 @@ export const createOpportunitySchema = z.object({
     ),
 });
 
-export async function createOpportunity(
-  input: z.infer<typeof createOpportunitySchema>,
-) {
+export async function createOpportunity(input: z.infer<typeof createOpportunitySchema>) {
   const { partyId, milestoneId, ownerId, ...rest } = input;
 
   const body: Record<string, unknown> = {
@@ -155,7 +149,10 @@ export const updateOpportunitySchema = z.object({
     ),
   description: z.string().optional(),
   value: OpportunityValueSchema.optional(),
-  expectedCloseOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  expectedCloseOn: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
   probability: z
     .number()
     .int()
@@ -187,9 +184,7 @@ export const updateOpportunitySchema = z.object({
     .describe(fieldsArrayDescriptor("get_opportunity")),
 });
 
-export async function updateOpportunity(
-  input: z.infer<typeof updateOpportunitySchema>,
-) {
+export async function updateOpportunity(input: z.infer<typeof updateOpportunitySchema>) {
   const { id, milestoneId, ownerId, lostReasonId, fields, ...rest } = input;
 
   const body: Record<string, unknown> = {};
@@ -213,8 +208,9 @@ export async function updateOpportunity(
 
 export const deleteOpportunitySchema = z.object({
   id: z.number().int().positive(),
-  confirm: confirmFlag()
-    .describe("Must be set to true. Permanently deletes the opportunity. Irreversible."),
+  confirm: confirmFlag().describe(
+    "Must be set to true. Permanently deletes the opportunity. Irreversible.",
+  ),
 });
 
 export async function deleteOpportunity(input: z.infer<typeof deleteOpportunitySchema>) {

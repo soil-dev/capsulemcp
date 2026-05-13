@@ -28,15 +28,11 @@ describe("selectMode", () => {
     const result = selectMode({
       MCP_OAUTH_CLIENT_ID: "abc",
       MCP_OAUTH_CLIENT_SECRET: "secret",
-      MCP_OAUTH_REDIRECT_URIS:
-        "https://one.example/cb,https://two.example/cb",
+      MCP_OAUTH_REDIRECT_URIS: "https://one.example/cb,https://two.example/cb",
     });
     expect("ok" in result).toBe(true);
     if ("ok" in result && result.ok.kind === "static-client") {
-      expect(result.ok.redirectUris).toEqual([
-        "https://one.example/cb",
-        "https://two.example/cb",
-      ]);
+      expect(result.ok.redirectUris).toEqual(["https://one.example/cb", "https://two.example/cb"]);
     }
   });
 
@@ -48,10 +44,7 @@ describe("selectMode", () => {
     });
     expect("ok" in result).toBe(true);
     if ("ok" in result && result.ok.kind === "static-client") {
-      expect(result.ok.redirectUris).toEqual([
-        "https://one.example/cb",
-        "https://two.example/cb",
-      ]);
+      expect(result.ok.redirectUris).toEqual(["https://one.example/cb", "https://two.example/cb"]);
     }
   });
 
@@ -98,33 +91,21 @@ describe("selectMode", () => {
   });
 
   it("returns insecure-auto-approve when MCP_OAUTH_INSECURE_AUTO_APPROVE=1 and PUBLIC_BASE_URL is localhost", () => {
-    const result = selectMode(
-      { MCP_OAUTH_INSECURE_AUTO_APPROVE: "1" },
-      "http://localhost:3000",
-    );
+    const result = selectMode({ MCP_OAUTH_INSECURE_AUTO_APPROVE: "1" }, "http://localhost:3000");
     expect(result).toEqual({ ok: { kind: "insecure-auto-approve" } });
   });
 
   it("accepts 'true' (any case) for MCP_OAUTH_INSECURE_AUTO_APPROVE on localhost", () => {
     expect(
-      selectMode(
-        { MCP_OAUTH_INSECURE_AUTO_APPROVE: "true" },
-        "http://localhost:3000",
-      ),
+      selectMode({ MCP_OAUTH_INSECURE_AUTO_APPROVE: "true" }, "http://localhost:3000"),
     ).toEqual({ ok: { kind: "insecure-auto-approve" } });
     expect(
-      selectMode(
-        { MCP_OAUTH_INSECURE_AUTO_APPROVE: "TRUE" },
-        "http://127.0.0.1:3000",
-      ),
+      selectMode({ MCP_OAUTH_INSECURE_AUTO_APPROVE: "TRUE" }, "http://127.0.0.1:3000"),
     ).toEqual({ ok: { kind: "insecure-auto-approve" } });
   });
 
   it("REFUSES insecure-auto-approve when PUBLIC_BASE_URL is not localhost", () => {
-    const result = selectMode(
-      { MCP_OAUTH_INSECURE_AUTO_APPROVE: "1" },
-      "https://example.run.app",
-    );
+    const result = selectMode({ MCP_OAUTH_INSECURE_AUTO_APPROVE: "1" }, "https://example.run.app");
     expect("error" in result).toBe(true);
     if ("error" in result) {
       expect(result.error).toContain("not a localhost address");
@@ -192,10 +173,7 @@ describe("resolveBaseConfig", () => {
         signingKey: VALID_KEY,
         port: 8080,
         jsonLimit: "35mb",
-        allowedOrigins: [
-          "https://example.run.app",
-          ...DEFAULT_MCP_CLIENT_ORIGINS,
-        ],
+        allowedOrigins: ["https://example.run.app", ...DEFAULT_MCP_CLIENT_ORIGINS],
       },
     });
   });

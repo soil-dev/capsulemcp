@@ -13,14 +13,27 @@ const EXPECTED =
 // Each gated schema gets a minimal base input that's valid except for
 // the `confirm` field. The shape varies (id vs trackId vs entity-tuple)
 // so each row supplies its own.
-const cases: { name: string; schema: { safeParse: (v: unknown) => { success: boolean; error?: { issues: { path: (string | number)[]; message: string }[] } } }; base: Record<string, unknown> }[] = [
-  { name: "delete_party",            schema: deletePartySchema,            base: { id: 1 } },
-  { name: "delete_opportunity",      schema: deleteOpportunitySchema,      base: { id: 1 } },
-  { name: "delete_project",          schema: deleteProjectSchema,          base: { id: 1 } },
-  { name: "delete_task",             schema: deleteTaskSchema,             base: { id: 1 } },
-  { name: "delete_entry",            schema: deleteEntrySchema,            base: { id: 1 } },
-  { name: "remove_track",            schema: removeTrackSchema,            base: { trackId: 1 } },
-  { name: "remove_additional_party", schema: removeAdditionalPartySchema,  base: { entity: "opportunities", entityId: 1, partyId: 2 } },
+const cases: {
+  name: string;
+  schema: {
+    safeParse: (v: unknown) => {
+      success: boolean;
+      error?: { issues: { path: (string | number)[]; message: string }[] };
+    };
+  };
+  base: Record<string, unknown>;
+}[] = [
+  { name: "delete_party", schema: deletePartySchema, base: { id: 1 } },
+  { name: "delete_opportunity", schema: deleteOpportunitySchema, base: { id: 1 } },
+  { name: "delete_project", schema: deleteProjectSchema, base: { id: 1 } },
+  { name: "delete_task", schema: deleteTaskSchema, base: { id: 1 } },
+  { name: "delete_entry", schema: deleteEntrySchema, base: { id: 1 } },
+  { name: "remove_track", schema: removeTrackSchema, base: { trackId: 1 } },
+  {
+    name: "remove_additional_party",
+    schema: removeAdditionalPartySchema,
+    base: { entity: "opportunities", entityId: 1, partyId: 2 },
+  },
 ];
 
 describe("confirm: true literal — friendly rejection message", () => {

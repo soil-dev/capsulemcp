@@ -4,14 +4,23 @@ import { fetch } from "undici";
 
 vi.mock("undici", () => ({ fetch: vi.fn() }));
 
-beforeEach(() => { process.env["CAPSULE_API_TOKEN"] = "test-token"; });
-afterEach(() => { vi.clearAllMocks(); delete process.env["CAPSULE_API_TOKEN"]; });
+beforeEach(() => {
+  process.env["CAPSULE_API_TOKEN"] = "test-token";
+});
+afterEach(() => {
+  vi.clearAllMocks();
+  delete process.env["CAPSULE_API_TOKEN"];
+});
 
 describe("listProjects", () => {
   it("returns kases and nextPage", async () => {
-    mockFetch(200, { kases: [{ id: 1, name: "Website Rebuild" }] }, {
-      Link: '<https://api.capsulecrm.com/api/v2/kases?page=2&perPage=25>; rel="next"',
-    });
+    mockFetch(
+      200,
+      { kases: [{ id: 1, name: "Website Rebuild" }] },
+      {
+        Link: '<https://api.capsulecrm.com/api/v2/kases?page=2&perPage=25>; rel="next"',
+      },
+    );
 
     const { listProjects } = await import("../src/tools/projects.js");
     const result = await listProjects({ page: 1, perPage: 25 });
@@ -230,9 +239,7 @@ describe("updateProject", () => {
         { definitionId: 3, value: 365 },
       ],
     });
-    const body = JSON.parse(
-      (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string,
-    );
+    const body = JSON.parse((vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string);
     expect(body.kase.fields).toEqual([
       { definition: { id: 2 }, value: "Premium" },
       { definition: { id: 3 }, value: 365 },

@@ -4,8 +4,13 @@ import { fetch } from "undici";
 
 vi.mock("undici", () => ({ fetch: vi.fn() }));
 
-beforeEach(() => { process.env["CAPSULE_API_TOKEN"] = "test-token"; });
-afterEach(() => { vi.clearAllMocks(); delete process.env["CAPSULE_API_TOKEN"]; });
+beforeEach(() => {
+  process.env["CAPSULE_API_TOKEN"] = "test-token";
+});
+afterEach(() => {
+  vi.clearAllMocks();
+  delete process.env["CAPSULE_API_TOKEN"];
+});
 
 describe("listTags", () => {
   it.each([
@@ -31,32 +36,28 @@ describe("addTag — atomic attach by name", () => {
     ["parties", "party", "/parties/284083000"],
     ["opportunities", "opportunity", "/opportunities/19897000"],
     ["kases", "kase", "/kases/5828000"],
-  ] as const)(
-    "PUTs to /%s/{id} with the correct wrapper key and {name}-only tag item",
-    async (entity, wrapper, expectedPath) => {
-      mockFetch(200, { [wrapper]: { id: 1 } });
-      const { addTag } = await import("../src/tools/tags.js");
+  ] as const)("PUTs to /%s/{id} with the correct wrapper key and {name}-only tag item", async (entity, wrapper, expectedPath) => {
+    mockFetch(200, { [wrapper]: { id: 1 } });
+    const { addTag } = await import("../src/tools/tags.js");
 
-      const entityId = Number(expectedPath.split("/").pop());
-      await addTag({ entity, entityId, tagName: "VIP" });
+    const entityId = Number(expectedPath.split("/").pop());
+    await addTag({ entity, entityId, tagName: "VIP" });
 
-      const [url, opts] = vi.mocked(fetch).mock.calls[0]!;
-      expect(url).toContain(expectedPath);
-      expect((opts as RequestInit).method).toBe("PUT");
-      const body = JSON.parse((opts as RequestInit).body as string);
-      expect(body[wrapper].tags).toEqual([{ name: "VIP" }]);
-      // No id, no _delete on an add
-      expect(body[wrapper].tags[0].id).toBeUndefined();
-      expect(body[wrapper].tags[0]._delete).toBeUndefined();
-    },
-  );
+    const [url, opts] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toContain(expectedPath);
+    expect((opts as RequestInit).method).toBe("PUT");
+    const body = JSON.parse((opts as RequestInit).body as string);
+    expect(body[wrapper].tags).toEqual([{ name: "VIP" }]);
+    // No id, no _delete on an add
+    expect(body[wrapper].tags[0].id).toBeUndefined();
+    expect(body[wrapper].tags[0]._delete).toBeUndefined();
+  });
 
   it("rejects empty tagName at the schema layer", async () => {
     const { addTagSchema } = await import("../src/tools/tags.js");
-    expect(
-      addTagSchema.safeParse({ entity: "parties", entityId: 1, tagName: "" })
-        .success,
-    ).toBe(false);
+    expect(addTagSchema.safeParse({ entity: "parties", entityId: 1, tagName: "" }).success).toBe(
+      false,
+    );
   });
 
   it("rejects unknown entity at the schema layer", async () => {
@@ -90,9 +91,9 @@ describe("removeTagById — idempotency on already-detached", () => {
   it("propagates other 422s (e.g. validation failure unrelated to existing links)", async () => {
     mockFetch(422, { message: "some other validation failed" });
     const { removeTagById } = await import("../src/tools/tags.js");
-    await expect(
-      removeTagById({ entity: "parties", entityId: 99, tagId: 42 }),
-    ).rejects.toThrow(/some other validation failed/);
+    await expect(removeTagById({ entity: "parties", entityId: 99, tagId: 42 })).rejects.toThrow(
+      /some other validation failed/,
+    );
   });
 });
 
@@ -101,22 +102,19 @@ describe("removeTagById — atomic detach by per-entity link id", () => {
     ["parties", "party", "/parties/284083000"],
     ["opportunities", "opportunity", "/opportunities/19897000"],
     ["kases", "kase", "/kases/5828000"],
-  ] as const)(
-    "PUTs {id, _delete:true} on /%s/{id}",
-    async (entity, wrapper, expectedPath) => {
-      mockFetch(200, { [wrapper]: { id: 1 } });
-      const { removeTagById } = await import("../src/tools/tags.js");
+  ] as const)("PUTs {id, _delete:true} on /%s/{id}", async (entity, wrapper, expectedPath) => {
+    mockFetch(200, { [wrapper]: { id: 1 } });
+    const { removeTagById } = await import("../src/tools/tags.js");
 
-      const entityId = Number(expectedPath.split("/").pop());
-      await removeTagById({ entity, entityId, tagId: 42 });
+    const entityId = Number(expectedPath.split("/").pop());
+    await removeTagById({ entity, entityId, tagId: 42 });
 
-      const [url, opts] = vi.mocked(fetch).mock.calls[0]!;
-      expect(url).toContain(expectedPath);
-      expect((opts as RequestInit).method).toBe("PUT");
-      const body = JSON.parse((opts as RequestInit).body as string);
-      // The id here is the PER-ENTITY link id, NOT a global tag id —
-      // documented on the schema.
-      expect(body[wrapper].tags).toEqual([{ id: 42, _delete: true }]);
-    },
-  );
+    const [url, opts] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toContain(expectedPath);
+    expect((opts as RequestInit).method).toBe("PUT");
+    const body = JSON.parse((opts as RequestInit).body as string);
+    // The id here is the PER-ENTITY link id, NOT a global tag id —
+    // documented on the schema.
+    expect(body[wrapper].tags).toEqual([{ id: 42, _delete: true }]);
+  });
 });

@@ -1,9 +1,5 @@
 import { z } from "zod";
-import {
-  capsuleGetBinary,
-  capsulePost,
-  capsulePostBinary,
-} from "../capsule/client.js";
+import { capsuleGetBinary, capsulePost, capsulePostBinary } from "../capsule/client.js";
 
 // Attachments — the only tool surface in capsulemcp that handles binary
 // content rather than JSON.
@@ -114,9 +110,7 @@ export const uploadAttachmentSchema = z.object({
     .int()
     .positive()
     .optional()
-    .describe(
-      "Link the new note to a party (mutually exclusive with opportunityId / projectId).",
-    ),
+    .describe("Link the new note to a party (mutually exclusive with opportunityId / projectId)."),
   opportunityId: z.number().int().positive().optional(),
   projectId: z.number().int().positive().optional(),
 });
@@ -140,12 +134,8 @@ function decodedBase64Size(s: string): number {
   return (s.length / 4) * 3 - padding;
 }
 
-export async function uploadAttachment(
-  input: z.infer<typeof uploadAttachmentSchema>,
-) {
-  const linked = [input.partyId, input.opportunityId, input.projectId].filter(
-    Boolean,
-  );
+export async function uploadAttachment(input: z.infer<typeof uploadAttachmentSchema>) {
+  const linked = [input.partyId, input.opportunityId, input.projectId].filter(Boolean);
   if (linked.length !== 1) {
     throw new Error(
       "upload_attachment: provide exactly one of partyId, opportunityId, or projectId",

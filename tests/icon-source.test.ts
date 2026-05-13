@@ -19,8 +19,7 @@ const ROOT = join(__dirname, "..");
 
 describe("icon source-of-truth", () => {
   it("src/icon.ts contains the SVG bytes from assets/icon.svg verbatim", () => {
-    const svg = readFileSync(join(ROOT, "assets", "icon.svg"), "utf8")
-      .replace(/\s+$/, "");
+    const svg = readFileSync(join(ROOT, "assets", "icon.svg"), "utf8").replace(/\s+$/, "");
     const ts = readFileSync(join(ROOT, "src", "icon.ts"), "utf8");
     expect(ts).toContain(svg);
   });

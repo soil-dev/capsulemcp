@@ -30,9 +30,7 @@ export async function listUsers(input: z.infer<typeof listUsersSchema>) {
 
 export const getCurrentUserSchema = z.object({});
 
-export async function getCurrentUser(
-  _input: z.infer<typeof getCurrentUserSchema>,
-) {
+export async function getCurrentUser(_input: z.infer<typeof getCurrentUserSchema>) {
   const { data } = await capsuleGet<{ user: unknown }>("/users/current");
   return data;
 }

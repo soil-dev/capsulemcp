@@ -1,12 +1,7 @@
 import { z } from "zod";
 import { confirmFlag } from "./confirm-flag.js";
 import { idempotent } from "../capsule/idempotent.js";
-import {
-  capsuleDelete,
-  capsuleGet,
-  capsulePost,
-  capsulePut,
-} from "../capsule/client.js";
+import { capsuleDelete, capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
 
 // Track INSTANCES — applications of a track definition to a specific
 // record. Distinct from list_track_definitions (in metadata.ts), which
@@ -44,9 +39,7 @@ export const listEntityTracksSchema = z.object({
   entityId: z.number().int().positive(),
 });
 
-export async function listEntityTracks(
-  input: z.infer<typeof listEntityTracksSchema>,
-) {
+export async function listEntityTracks(input: z.infer<typeof listEntityTracksSchema>) {
   const { data } = await capsuleGet<{ tracks: unknown[] }>(
     `/${input.entity}/${input.entityId}/tracks`,
   );
@@ -60,9 +53,7 @@ export const showTrackSchema = z.object({
 });
 
 export async function showTrack(input: z.infer<typeof showTrackSchema>) {
-  const { data } = await capsuleGet<{ track: unknown }>(
-    `/tracks/${input.trackId}`,
-  );
+  const { data } = await capsuleGet<{ track: unknown }>(`/tracks/${input.trackId}`);
   return data;
 }
 
@@ -71,9 +62,7 @@ export async function showTrack(input: z.infer<typeof showTrackSchema>) {
 export const applyTrackSchema = z.object({
   entity: z
     .enum(["opportunities", "kases"])
-    .describe(
-      "Which entity to apply the track to. Use 'kases' for projects.",
-    ),
+    .describe("Which entity to apply the track to. Use 'kases' for projects."),
   entityId: z.number().int().positive(),
   trackDefinitionId: z
     .number()
@@ -92,8 +81,7 @@ export const applyTrackSchema = z.object({
 });
 
 export async function applyTrack(input: z.infer<typeof applyTrackSchema>) {
-  const target =
-    input.entity === "opportunities" ? "opportunity" : "kase";
+  const target = input.entity === "opportunities" ? "opportunity" : "kase";
 
   // Capsule's POST /tracks body expects `definition`, not `trackDefinition`,
   // even though the docs (in some places) say otherwise and the GET
@@ -141,10 +129,9 @@ export async function updateTrack(input: z.infer<typeof updateTrackSchema>) {
 
 export const removeTrackSchema = z.object({
   trackId: z.number().int().positive(),
-  confirm: confirmFlag()
-    .describe(
-      "Must be set to true. Removes the track instance from its entity. **Capsule also deletes the auto-tasks the track created when it was applied** — they go with the track and become unreachable (404 on GET /tasks/{id}, gone from list_tasks on the parent entity). If you need any of those tasks to outlive the track, copy their content into fresh tasks (or use the web UI) before calling remove_track.",
-    ),
+  confirm: confirmFlag().describe(
+    "Must be set to true. Removes the track instance from its entity. **Capsule also deletes the auto-tasks the track created when it was applied** — they go with the track and become unreachable (404 on GET /tasks/{id}, gone from list_tasks on the parent entity). If you need any of those tasks to outlive the track, copy their content into fresh tasks (or use the web UI) before calling remove_track.",
+  ),
 });
 
 export async function removeTrack(input: z.infer<typeof removeTrackSchema>) {

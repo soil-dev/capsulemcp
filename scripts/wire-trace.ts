@@ -32,18 +32,15 @@ interface UndiciRequest {
 
 const calls: Array<{ method: string; path: string; body?: string }> = [];
 
-subscribe(
-  "undici:request:create",
-  (message: unknown) => {
-    const r = (message as { request?: UndiciRequest }).request;
-    if (!r) return;
-    let bodyPreview: string | undefined;
-    if (typeof r.body === "string") bodyPreview = r.body;
-    else if (Buffer.isBuffer(r.body)) bodyPreview = `<Buffer ${r.body.length} bytes>`;
-    else if (r.body) bodyPreview = "<non-string body>";
-    calls.push({ method: r.method, path: r.path, body: bodyPreview });
-  },
-);
+subscribe("undici:request:create", (message: unknown) => {
+  const r = (message as { request?: UndiciRequest }).request;
+  if (!r) return;
+  let bodyPreview: string | undefined;
+  if (typeof r.body === "string") bodyPreview = r.body;
+  else if (Buffer.isBuffer(r.body)) bodyPreview = `<Buffer ${r.body.length} bytes>`;
+  else if (r.body) bodyPreview = "<non-string body>";
+  calls.push({ method: r.method, path: r.path, body: bodyPreview });
+});
 
 function dumpLastCall(label: string) {
   const c = calls[calls.length - 1];
@@ -51,11 +48,7 @@ function dumpLastCall(label: string) {
     console.log(`  [${label}] NO CALL CAPTURED`);
     return;
   }
-  const body = c.body
-    ? c.body.length > 200
-      ? c.body.slice(0, 200) + "…"
-      : c.body
-    : "";
+  const body = c.body ? (c.body.length > 200 ? `${c.body.slice(0, 200)}…` : c.body) : "";
   console.log(`  [${label}] ${c.method} ${c.path}`);
   if (body) console.log(`           body: ${body}`);
 }
@@ -66,11 +59,7 @@ function dumpCall(offsetFromEnd: number, label: string) {
     console.log(`  [${label}] NO CALL CAPTURED`);
     return;
   }
-  const body = c.body
-    ? c.body.length > 200
-      ? c.body.slice(0, 200) + "…"
-      : c.body
-    : "";
+  const body = c.body ? (c.body.length > 200 ? `${c.body.slice(0, 200)}…` : c.body) : "";
   console.log(`  [${label}] ${c.method} ${c.path}`);
   if (body) console.log(`           body: ${body}`);
 }
@@ -83,28 +72,20 @@ async function main() {
     process.exit(1);
   }
 
-  const { createParty, updateParty, deleteParty } = await import(
-    "../src/tools/parties.js"
+  const { createParty, updateParty, deleteParty } = await import("../src/tools/parties.js");
+  const { createOpportunity, updateOpportunity, deleteOpportunity } = await import(
+    "../src/tools/opportunities.js"
   );
-  const { createOpportunity, updateOpportunity, deleteOpportunity } =
-    await import("../src/tools/opportunities.js");
-  const { createProject, updateProject, deleteProject } = await import(
-    "../src/tools/projects.js"
-  );
+  const { createProject, updateProject, deleteProject } = await import("../src/tools/projects.js");
   const { createTask, updateTask, completeTask, deleteTask } = await import(
     "../src/tools/tasks.js"
   );
-  const { addNote, updateEntry, deleteEntry } = await import(
-    "../src/tools/entries.js"
-  );
+  const { addNote, updateEntry, deleteEntry } = await import("../src/tools/entries.js");
   const { uploadAttachment } = await import("../src/tools/attachments.js");
-  const {
-    addAdditionalParty,
-    removeAdditionalParty,
-  } = await import("../src/tools/relationships.js");
-  const { applyTrack, updateTrack, removeTrack } = await import(
-    "../src/tools/tracks.js"
+  const { addAdditionalParty, removeAdditionalParty } = await import(
+    "../src/tools/relationships.js"
   );
+  const { applyTrack, updateTrack, removeTrack } = await import("../src/tools/tracks.js");
   const { capsuleGet } = await import("../src/capsule/client.js");
 
   console.log("========== WIRE TRACE — invoking real TS code ==========\n");
@@ -128,9 +109,9 @@ async function main() {
 
   // ── 2. OPPORTUNITY ───────────────────────────────────────────────────────
   console.log("\n== opportunities ==");
-  const pipelinesResp = (await capsuleGet<{ pipelines: { id: number }[] }>(
-    "/pipelines",
-  )) as { data: { pipelines: { id: number }[] } };
+  const pipelinesResp = (await capsuleGet<{ pipelines: { id: number }[] }>("/pipelines")) as {
+    data: { pipelines: { id: number }[] };
+  };
   const pipelineId = pipelinesResp.data.pipelines[0]!.id;
   const milestonesResp = (await capsuleGet<{ milestones: { id: number }[] }>(
     `/pipelines/${pipelineId}/milestones`,
@@ -200,7 +181,7 @@ async function main() {
     trackDefinitionId: tdefId,
   })) as { track: { id: number } | null };
   dumpLastCall("applyTrack");
-  if (!track.track || !track.track.id) {
+  if (!track.track?.id) {
     throw new Error(
       "applyTrack returned null id — the v1.0.0 fix didn't take. Inspect the body above.",
     );

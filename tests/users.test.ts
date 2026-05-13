@@ -4,12 +4,22 @@ import { fetch } from "undici";
 
 vi.mock("undici", () => ({ fetch: vi.fn() }));
 
-beforeEach(() => { process.env["CAPSULE_API_TOKEN"] = "test-token"; });
-afterEach(() => { vi.clearAllMocks(); delete process.env["CAPSULE_API_TOKEN"]; });
+beforeEach(() => {
+  process.env["CAPSULE_API_TOKEN"] = "test-token";
+});
+afterEach(() => {
+  vi.clearAllMocks();
+  delete process.env["CAPSULE_API_TOKEN"];
+});
 
 describe("listUsers", () => {
   it("returns users array", async () => {
-    mockFetch(200, { users: [{ id: 1, name: "Alice" }, { id: 2, name: "Bob" }] });
+    mockFetch(200, {
+      users: [
+        { id: 1, name: "Alice" },
+        { id: 2, name: "Bob" },
+      ],
+    });
 
     const { listUsers } = await import("../src/tools/users.js");
     const result = await listUsers({});
@@ -39,8 +49,6 @@ describe("getCurrentUser", () => {
     const [url] = vi.mocked(fetch).mock.calls[0]!;
     expect(url).toContain("/users/current");
     expect(url).not.toContain("/users/me");
-    expect((result as { user: { username: string } }).user.username).toBe(
-      "anton",
-    );
+    expect((result as { user: { username: string } }).user.username).toBe("anton");
   });
 });

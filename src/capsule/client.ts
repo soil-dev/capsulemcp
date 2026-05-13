@@ -202,9 +202,10 @@ async function parseErrorBody(res: Response): Promise<string> {
  */
 const REQUEST_TIMEOUT_MS = 60_000;
 
-function withTimeout(
-  options: Parameters<typeof fetch>[1],
-): { options: Parameters<typeof fetch>[1]; cleanup: () => void } {
+function withTimeout(options: Parameters<typeof fetch>[1]): {
+  options: Parameters<typeof fetch>[1];
+  cleanup: () => void;
+} {
   if (options && (options as { signal?: AbortSignal }).signal !== undefined) {
     // Caller-provided signal — respect it, don't double-bind.
     return { options, cleanup: () => {} };
@@ -229,10 +230,7 @@ async function fetchWithTimeout(
   } catch (err) {
     // Convert AbortError into a recognizable, actionable error rather
     // than a cryptic 'fetch failed' that the caller can't diagnose.
-    if (
-      err instanceof Error &&
-      (err.name === "AbortError" || /aborted/i.test(err.message))
-    ) {
+    if (err instanceof Error && (err.name === "AbortError" || /aborted/i.test(err.message))) {
       throw new CapsuleApiError(
         504,
         `Capsule API request timed out after ${REQUEST_TIMEOUT_MS / 1000}s. The Capsule API may be slow or hung; retry after a short wait. If the failed call was a write/delete, read the entity first to see whether the change actually applied before retrying.`,
@@ -244,10 +242,7 @@ async function fetchWithTimeout(
   }
 }
 
-async function doFetch(
-  url: string,
-  options: Parameters<typeof fetch>[1],
-): Promise<Response> {
+async function doFetch(url: string, options: Parameters<typeof fetch>[1]): Promise<Response> {
   const res = await fetchWithTimeout(url, options);
 
   if (res.status === 429) {
@@ -256,7 +251,10 @@ async function doFetch(
 
     const retried = await fetchWithTimeout(url, options);
     if (retried.status === 429) {
-      throw new CapsuleApiError(429, "Rate limit exceeded after one retry. Please slow down your requests.");
+      throw new CapsuleApiError(
+        429,
+        "Rate limit exceeded after one retry. Please slow down your requests.",
+      );
     }
     return retried;
   }
@@ -301,10 +299,7 @@ function buildUrl(path: string, params?: QueryParams): string {
   return url.toString();
 }
 
-export async function capsuleGet<T>(
-  path: string,
-  params?: QueryParams,
-): Promise<PagedResult<T>> {
+export async function capsuleGet<T>(path: string, params?: QueryParams): Promise<PagedResult<T>> {
   const token = getToken();
   const url = buildUrl(path, params);
   const res = await doFetch(url, { headers: baseHeaders(token) });
@@ -405,26 +400,18 @@ export interface BinaryResult {
   sizeBytes: number;
 }
 
-export async function capsuleGetBinary(
-  path: string,
-  maxBytes?: number,
-): Promise<BinaryResult> {
+export async function capsuleGetBinary(path: string, maxBytes?: number): Promise<BinaryResult> {
   const token = getToken();
   const url = buildUrl(path);
   const res = await doFetch(url, { headers: baseHeaders(token) });
   await throwForStatus(res);
-  const contentType =
-    res.headers.get("Content-Type") ?? "application/octet-stream";
+  const contentType = res.headers.get("Content-Type") ?? "application/octet-stream";
 
   // Pre-buffer cap check. If Content-Length is advertised and exceeds
   // the cap, refuse to read the body at all.
   const declared = res.headers.get("Content-Length");
   const declaredBytes = declared ? Number(declared) : NaN;
-  if (
-    maxBytes !== undefined &&
-    Number.isFinite(declaredBytes) &&
-    declaredBytes > maxBytes
-  ) {
+  if (maxBytes !== undefined && Number.isFinite(declaredBytes) && declaredBytes > maxBytes) {
     // Drain (cancel) the body so the connection can be released.
     if (res.body) await res.body.cancel().catch(() => {});
     return {

@@ -110,9 +110,7 @@ describe("updateTrack", () => {
 
   it("rejects empty field updates", async () => {
     const { updateTrack } = await import("../src/tools/tracks.js");
-    await expect(
-      updateTrack({ trackId: 1, fields: {} }),
-    ).rejects.toThrow(/at least one field/);
+    await expect(updateTrack({ trackId: 1, fields: {} })).rejects.toThrow(/at least one field/);
   });
 });
 

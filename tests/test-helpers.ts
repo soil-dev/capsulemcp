@@ -75,10 +75,7 @@ export function mockBinary(
       "Content-Length": String(buffer.byteLength),
     }),
     arrayBuffer: async () =>
-      buffer.buffer.slice(
-        buffer.byteOffset,
-        buffer.byteOffset + buffer.byteLength,
-      ),
+      buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength),
     text: async () => buffer.toString("utf8"),
     statusText: String(status),
   } as Awaited<ReturnType<typeof fetch>>);

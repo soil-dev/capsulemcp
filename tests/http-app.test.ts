@@ -16,11 +16,7 @@ import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { createHash } from "node:crypto";
 import { createApp } from "../src/http/app.js";
-import {
-  OAuthProvider,
-  FixedClientStore,
-  InMemoryClientsStore,
-} from "../src/auth/provider.js";
+import { OAuthProvider, FixedClientStore, InMemoryClientsStore } from "../src/auth/provider.js";
 
 vi.mock("undici", () => ({ fetch: vi.fn() }));
 
@@ -33,9 +29,7 @@ const REDIRECT_URI = "http://localhost:9999/cb";
 
 // PKCE pair — MCP SDK requires S256
 const CODE_VERIFIER = "test-verifier-padding-padding-padding-padding-pad";
-const CODE_CHALLENGE = createHash("sha256")
-  .update(CODE_VERIFIER)
-  .digest("base64url");
+const CODE_CHALLENGE = createHash("sha256").update(CODE_VERIFIER).digest("base64url");
 
 let server: Server;
 let baseUrl: string;
@@ -100,9 +94,7 @@ describe("OAuth metadata endpoints", () => {
     // suffix. Bare /.well-known/oauth-protected-resource is
     // intentionally NOT served (it would advertise the issuer root,
     // which isn't a resource).
-    const res = await fetch(
-      `${baseUrl}/.well-known/oauth-protected-resource/mcp`,
-    );
+    const res = await fetch(`${baseUrl}/.well-known/oauth-protected-resource/mcp`);
     expect(res.status).toBe(200);
     const body = (await res.json()) as Record<string, unknown>;
     // Resource URL is built from the configured issuerUrl (not the
@@ -358,9 +350,7 @@ describe("/authorize and /token", () => {
       expect(client.client_secret).toBeUndefined();
 
       const verifier = "public-client-verifier-padding-padding-padding";
-      const challenge = createHash("sha256")
-        .update(verifier)
-        .digest("base64url");
+      const challenge = createHash("sha256").update(verifier).digest("base64url");
       const authParams = new URLSearchParams({
         response_type: "code",
         client_id: client.client_id,
@@ -372,8 +362,9 @@ describe("/authorize and /token", () => {
         redirect: "manual",
       });
       expect(authRes.status).toBe(302);
-      const code = new URL(authRes.headers.get("location") ?? "", "http://x")
-        .searchParams.get("code");
+      const code = new URL(authRes.headers.get("location") ?? "", "http://x").searchParams.get(
+        "code",
+      );
 
       const tokenRes = await fetch(`${publicBaseUrl}/token`, {
         method: "POST",
@@ -409,15 +400,11 @@ describe("/mcp 500 response is sanitized (does not echo internal err.message)", 
     // "happy" path. Stubbing forces the failure mode and proves the
     // sanitization holds even when err.message contains internal text.
     const accessToken = await mintToken();
-    const transportModule = await import(
-      "@modelcontextprotocol/sdk/server/streamableHttp.js"
-    );
+    const transportModule = await import("@modelcontextprotocol/sdk/server/streamableHttp.js");
     const spy = vi
       .spyOn(transportModule.StreamableHTTPServerTransport.prototype, "handleRequest")
       .mockImplementation(async () => {
-        throw new Error(
-          "internal-detail-that-must-not-leak-to-client: party 12345, tenant abc",
-        );
+        throw new Error("internal-detail-that-must-not-leak-to-client: party 12345, tenant abc");
       });
     try {
       const res = await fetch(`${baseUrl}/mcp`, {
@@ -533,8 +520,9 @@ describe("/mcp per-client rate limit", () => {
     const authRes = await fetch(`${lowLimitBaseUrl}/authorize?${params}`, {
       redirect: "manual",
     });
-    const code = new URL(authRes.headers.get("location") ?? "", "http://x")
-      .searchParams.get("code");
+    const code = new URL(authRes.headers.get("location") ?? "", "http://x").searchParams.get(
+      "code",
+    );
     const tokRes = await fetch(`${lowLimitBaseUrl}/token`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -547,7 +535,7 @@ describe("/mcp per-client rate limit", () => {
         code_verifier: verifier,
       }),
     });
-    const token = (await tokRes.json() as { access_token: string }).access_token;
+    const token = ((await tokRes.json()) as { access_token: string }).access_token;
 
     const callMcp = (): Promise<Response> =>
       fetch(`${lowLimitBaseUrl}/mcp`, {

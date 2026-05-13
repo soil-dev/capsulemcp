@@ -17,8 +17,7 @@
  * dominated by `tags` and `fields`. Used on parties, opportunities,
  * projects, audit, filters, saved-filters, relationships.
  */
-export const EMBED_TAGS_FIELDS_DESCRIPTION =
-  "Comma-separated embeds, e.g. 'tags,fields'";
+export const EMBED_TAGS_FIELDS_DESCRIPTION = "Comma-separated embeds, e.g. 'tags,fields'";
 
 /**
  * `embed` parameter description for the entries surface, where the

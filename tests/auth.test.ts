@@ -5,11 +5,7 @@ import {
   TokenSignatureError,
   TokenExpiredError,
 } from "../src/auth/tokens.js";
-import {
-  FixedClientStore,
-  InMemoryClientsStore,
-  OAuthProvider,
-} from "../src/auth/provider.js";
+import { FixedClientStore, InMemoryClientsStore, OAuthProvider } from "../src/auth/provider.js";
 
 // Helper: matches the auto-approve mode (open DCR + InMemoryClientsStore).
 // Used by the tests below so each one isn't repeating the construction.
@@ -50,7 +46,7 @@ describe("issueToken / verifyToken", () => {
     );
     const [body, sig] = tok.split(".") as [string, string];
     // Flip a bit in the payload
-    const tampered = body.slice(0, -2) + "AB" + "." + sig;
+    const tampered = `${body.slice(0, -2)}AB.${sig}`;
     expect(() => verifyToken(tampered, KEY)).toThrow(TokenSignatureError);
   });
 
@@ -59,9 +55,7 @@ describe("issueToken / verifyToken", () => {
       { type: "access", clientId: "abc", scopes: [], expiresAt: Date.now() + 60_000, nonce: "n" },
       KEY,
     );
-    expect(() => verifyToken(tok, "ffffffffffffffffffffffffffffffff")).toThrow(
-      TokenSignatureError,
-    );
+    expect(() => verifyToken(tok, "ffffffffffffffffffffffffffffffff")).toThrow(TokenSignatureError);
   });
 
   it("rejects expired tokens", () => {
@@ -174,16 +168,14 @@ describe("OAuthProvider in auto-approve mode (open DCR)", () => {
     const p = autoApproveProvider(KEY);
     const client = await p.clientsStore.registerClient!({ redirect_uris: ["http://x/cb"] });
     let redirected: string | undefined;
-    await p.authorize(
-      client,
-      { codeChallenge: "c", redirectUri: "http://x/cb" },
-      { redirect: (u: string) => { redirected = u; } } as never,
-    );
+    await p.authorize(client, { codeChallenge: "c", redirectUri: "http://x/cb" }, {
+      redirect: (u: string) => {
+        redirected = u;
+      },
+    } as never);
     const code = new URL(redirected!).searchParams.get("code")!;
     await p.exchangeAuthorizationCode(client, code);
-    await expect(p.exchangeAuthorizationCode(client, code)).rejects.toThrow(
-      /invalid or expired/,
-    );
+    await expect(p.exchangeAuthorizationCode(client, code)).rejects.toThrow(/invalid or expired/);
   });
 
   it("rejects refresh tokens from a different client", async () => {
@@ -192,28 +184,28 @@ describe("OAuthProvider in auto-approve mode (open DCR)", () => {
     const b = await p.clientsStore.registerClient!({ redirect_uris: ["http://b/cb"] });
 
     let redirected: string | undefined;
-    await p.authorize(
-      a,
-      { codeChallenge: "c", redirectUri: "http://a/cb" },
-      { redirect: (u: string) => { redirected = u; } } as never,
-    );
+    await p.authorize(a, { codeChallenge: "c", redirectUri: "http://a/cb" }, {
+      redirect: (u: string) => {
+        redirected = u;
+      },
+    } as never);
     const code = new URL(redirected!).searchParams.get("code")!;
     const tokens = await p.exchangeAuthorizationCode(a, code);
 
-    await expect(
-      p.exchangeRefreshToken(b, tokens.refresh_token!),
-    ).rejects.toThrow(/different client/);
+    await expect(p.exchangeRefreshToken(b, tokens.refresh_token!)).rejects.toThrow(
+      /different client/,
+    );
   });
 
   it("verifyAccessToken rejects refresh tokens (wrong type)", async () => {
     const p = autoApproveProvider(KEY);
     const client = await p.clientsStore.registerClient!({ redirect_uris: ["http://x/cb"] });
     let redirected: string | undefined;
-    await p.authorize(
-      client,
-      { codeChallenge: "c", redirectUri: "http://x/cb" },
-      { redirect: (u: string) => { redirected = u; } } as never,
-    );
+    await p.authorize(client, { codeChallenge: "c", redirectUri: "http://x/cb" }, {
+      redirect: (u: string) => {
+        redirected = u;
+      },
+    } as never);
     const code = new URL(redirected!).searchParams.get("code")!;
     const tokens = await p.exchangeAuthorizationCode(client, code);
 
@@ -231,21 +223,17 @@ describe("FixedClientStore", () => {
   };
 
   it("rejects empty clientId", () => {
-    expect(() => new FixedClientStore({ ...baseArgs, clientId: "" })).toThrow(
-      /clientId/,
-    );
+    expect(() => new FixedClientStore({ ...baseArgs, clientId: "" })).toThrow(/clientId/);
   });
 
   it("rejects too-short clientSecret", () => {
-    expect(
-      () => new FixedClientStore({ ...baseArgs, clientSecret: "short" }),
-    ).toThrow(/at least 16/);
+    expect(() => new FixedClientStore({ ...baseArgs, clientSecret: "short" })).toThrow(
+      /at least 16/,
+    );
   });
 
   it("rejects empty redirectUris", () => {
-    expect(() => new FixedClientStore({ ...baseArgs, redirectUris: [] })).toThrow(
-      /redirectUri/,
-    );
+    expect(() => new FixedClientStore({ ...baseArgs, redirectUris: [] })).toThrow(/redirectUri/);
   });
 
   it("getClient returns the configured client only for the configured id", () => {
@@ -289,8 +277,7 @@ describe("OAuthProvider authCodes cap (DoS hardening)", () => {
         fakeRes as never,
       );
     }
-    const size = (p as unknown as { authCodes: Map<string, unknown> }).authCodes
-      .size;
+    const size = (p as unknown as { authCodes: Map<string, unknown> }).authCodes.size;
     expect(size).toBeLessThanOrEqual(10_000);
     p.shutdown();
   });
@@ -327,7 +314,11 @@ describe("OAuthProvider + FixedClientStore", () => {
         redirectUri: "http://x/cb",
         resource: RESOURCE_URL,
       },
-      { redirect: (u: string) => { redirected = u; } } as never,
+      {
+        redirect: (u: string) => {
+          redirected = u;
+        },
+      } as never,
     );
     const code = new URL(redirected!).searchParams.get("code")!;
     const tokens = await p.exchangeAuthorizationCode(client, code);
@@ -363,7 +354,11 @@ describe("OAuthProvider + FixedClientStore", () => {
         redirectUri: "http://x/cb",
         resource: RESOURCE_URL,
       },
-      { redirect: (u: string) => { redirected = u; } } as never,
+      {
+        redirect: (u: string) => {
+          redirected = u;
+        },
+      } as never,
     );
     const code = new URL(redirected!).searchParams.get("code")!;
 

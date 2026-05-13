@@ -32,10 +32,7 @@ const svg = readFileSync(SVG_PATH, "utf8").replace(/\s+$/, "");
 // Defensive: backticks and ${ would break the template literal embed.
 // Standard SVGs don't contain these, but escape just in case to keep
 // the script robust against future SVG edits.
-const escapedSvg = svg
-  .replace(/\\/g, "\\\\")
-  .replace(/`/g, "\\`")
-  .replace(/\$\{/g, "\\${");
+const escapedSvg = svg.replace(/\\/g, "\\\\").replace(/`/g, "\\`").replace(/\$\{/g, "\\${");
 
 const generated = `/**
  * The capsulemcp icon. Stylised diagonal capsule: two halves with a
@@ -73,5 +70,5 @@ export const ICONS = [
 
 writeFileSync(TS_PATH, generated, "utf8");
 console.log(
-  `Regenerated ${TS_PATH.replace(ROOT + "/", "")} from ${SVG_PATH.replace(ROOT + "/", "")}`,
+  `Regenerated ${TS_PATH.replace(`${ROOT}/`, "")} from ${SVG_PATH.replace(`${ROOT}/`, "")}`,
 );

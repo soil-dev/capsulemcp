@@ -17,9 +17,7 @@ afterEach(() => {
 describe("listAdditionalParties", () => {
   it("GETs /opportunities/{id}/parties", async () => {
     mockFetch(200, { parties: [{ id: 1 }] });
-    const { listAdditionalParties } = await import(
-      "../src/tools/relationships.js"
-    );
+    const { listAdditionalParties } = await import("../src/tools/relationships.js");
     await listAdditionalParties({
       entity: "opportunities",
       entityId: 99,
@@ -32,9 +30,7 @@ describe("listAdditionalParties", () => {
 
   it("uses /kases for projects", async () => {
     mockFetch(200, { parties: [] });
-    const { listAdditionalParties } = await import(
-      "../src/tools/relationships.js"
-    );
+    const { listAdditionalParties } = await import("../src/tools/relationships.js");
     await listAdditionalParties({
       entity: "kases",
       entityId: 7,
@@ -53,9 +49,7 @@ describe("addAdditionalParty", () => {
     // the v1.0.0 wire-trace. capsulePost would have crashed on JSON
     // parse of an empty body; capsulePostNoContent handles it.
     mockFetch(204, {});
-    const { addAdditionalParty } = await import(
-      "../src/tools/relationships.js"
-    );
+    const { addAdditionalParty } = await import("../src/tools/relationships.js");
     const result = await addAdditionalParty({
       entity: "opportunities",
       entityId: 99,
@@ -71,9 +65,7 @@ describe("addAdditionalParty", () => {
 
   it("does not send a Content-Type header (no body)", async () => {
     mockFetch(204, {});
-    const { addAdditionalParty } = await import(
-      "../src/tools/relationships.js"
-    );
+    const { addAdditionalParty } = await import("../src/tools/relationships.js");
     await addAdditionalParty({
       entity: "kases",
       entityId: 1,
@@ -94,9 +86,7 @@ describe("addAdditionalParty", () => {
     mockFetch(422, {
       message: "party is already a contact for this opportunity",
     });
-    const { addAdditionalParty } = await import(
-      "../src/tools/relationships.js"
-    );
+    const { addAdditionalParty } = await import("../src/tools/relationships.js");
     const result = await addAdditionalParty({
       entity: "opportunities",
       entityId: 99,
@@ -114,9 +104,7 @@ describe("addAdditionalParty", () => {
     mockFetch(422, {
       message: "party is already related to this opportunity",
     });
-    const { addAdditionalParty } = await import(
-      "../src/tools/relationships.js"
-    );
+    const { addAdditionalParty } = await import("../src/tools/relationships.js");
     const result = await addAdditionalParty({
       entity: "opportunities",
       entityId: 99,
@@ -131,9 +119,7 @@ describe("addAdditionalParty", () => {
     // ..." messages. A 422 for a different reason (bad partyId,
     // unrelated validation failure) must still surface.
     mockFetch(422, { message: "validation failed: party id is invalid" });
-    const { addAdditionalParty } = await import(
-      "../src/tools/relationships.js"
-    );
+    const { addAdditionalParty } = await import("../src/tools/relationships.js");
     await expect(
       addAdditionalParty({
         entity: "opportunities",
@@ -145,9 +131,7 @@ describe("addAdditionalParty", () => {
 
   it("propagates 404 as an error (party doesn't exist)", async () => {
     mockFetch(404, { message: "party not found" });
-    const { addAdditionalParty } = await import(
-      "../src/tools/relationships.js"
-    );
+    const { addAdditionalParty } = await import("../src/tools/relationships.js");
     await expect(
       addAdditionalParty({
         entity: "opportunities",
@@ -159,9 +143,7 @@ describe("addAdditionalParty", () => {
 
   it("alreadyLinked: false on a fresh successful add", async () => {
     mockFetch(204, {});
-    const { addAdditionalParty } = await import(
-      "../src/tools/relationships.js"
-    );
+    const { addAdditionalParty } = await import("../src/tools/relationships.js");
     const result = await addAdditionalParty({
       entity: "opportunities",
       entityId: 99,
@@ -175,9 +157,7 @@ describe("addAdditionalParty", () => {
 describe("removeAdditionalParty", () => {
   it("DELETEs to /<entity>/{id}/parties/{partyId} when confirm=true", async () => {
     mockFetch(204, {});
-    const { removeAdditionalParty } = await import(
-      "../src/tools/relationships.js"
-    );
+    const { removeAdditionalParty } = await import("../src/tools/relationships.js");
     const result = await removeAdditionalParty({
       entity: "kases",
       entityId: 7,
@@ -194,9 +174,7 @@ describe("removeAdditionalParty", () => {
 describe("listAssociatedProjects", () => {
   it("GETs /opportunities/{id}/kases (legacy projects path)", async () => {
     mockFetch(200, { kases: [{ id: 5 }] });
-    const { listAssociatedProjects } = await import(
-      "../src/tools/relationships.js"
-    );
+    const { listAssociatedProjects } = await import("../src/tools/relationships.js");
     await listAssociatedProjects({
       opportunityId: 99,
       page: 1,

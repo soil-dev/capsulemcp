@@ -38,9 +38,7 @@ export const isCapsule404 = (err: unknown): boolean =>
  * with different wording still surface.
  */
 export const isCapsuleTagNotFound = (err: unknown): boolean =>
-  err instanceof CapsuleApiError &&
-  err.status === 422 &&
-  /tag not found/i.test(err.message);
+  err instanceof CapsuleApiError && err.status === 422 && /tag not found/i.test(err.message);
 
 /**
  * Run a destructive operation idempotently: if `op` throws an error

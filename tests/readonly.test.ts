@@ -44,9 +44,7 @@ describe("read-only client guard", () => {
 
   it("blocks POST without making any HTTP call", async () => {
     const { createParty } = await import("../src/tools/parties.js");
-    await expect(createParty({ type: "person", firstName: "X" })).rejects.toThrow(
-      /read-only mode/,
-    );
+    await expect(createParty({ type: "person", firstName: "X" })).rejects.toThrow(/read-only mode/);
     expect(vi.mocked(fetch)).not.toHaveBeenCalled();
   });
 

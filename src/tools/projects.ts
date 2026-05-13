@@ -1,12 +1,7 @@
 import { z } from "zod";
 import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
 import { confirmFlag } from "./confirm-flag.js";
-import {
-  capsuleDelete,
-  capsuleGet,
-  capsulePost,
-  capsulePut,
-} from "../capsule/client.js";
+import { capsuleDelete, capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
 import { idempotent } from "../capsule/idempotent.js";
 import {
   CustomFieldWriteSchema,
@@ -63,10 +58,9 @@ export const getProjectsSchema = z.object({
 });
 
 export async function getProjects(input: z.infer<typeof getProjectsSchema>) {
-  const { data } = await capsuleGet<{ kases: unknown[] }>(
-    `/kases/${input.ids.join(",")}`,
-    { embed: input.embed },
-  );
+  const { data } = await capsuleGet<{ kases: unknown[] }>(`/kases/${input.ids.join(",")}`, {
+    embed: input.embed,
+  });
   return data;
 }
 
@@ -76,10 +70,7 @@ export const createProjectSchema = z.object({
   name: z.string().min(1),
   partyId: z.number().int().positive().describe("ID of the party linked to this project"),
   description: z.string().optional(),
-  status: z
-    .enum(["OPEN", "CLOSED"])
-    .optional()
-    .describe("Defaults to OPEN when omitted."),
+  status: z.enum(["OPEN", "CLOSED"]).optional().describe("Defaults to OPEN when omitted."),
   ownerId: z
     .number()
     .int()
@@ -175,7 +166,11 @@ export const updateProjectSchema = z.object({
       "Move the project to this stage (board column). Discover IDs via list_stages. Owner and team are preserved across stage-only updates (Capsule's PUT semantic). " +
         "WARNING (cross-board): Capsule does NOT validate that the new stage belongs to the project's current board — passing a stageId from a different board silently relocates the project across boards. Team and other board-derived defaults are NOT updated to match the new board. Verify against the project's current board (read the project first, list its board's stages) before passing a cross-board id.",
     ),
-  expectedCloseOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("YYYY-MM-DD"),
+  expectedCloseOn: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional()
+    .describe("YYYY-MM-DD"),
   fields: z
     .array(CustomFieldWriteSchema)
     .optional()
@@ -242,8 +237,9 @@ export async function updateProject(input: z.infer<typeof updateProjectSchema>) 
 
 export const deleteProjectSchema = z.object({
   id: z.number().int().positive(),
-  confirm: confirmFlag()
-    .describe("Must be set to true. Permanently deletes the project (case). Consider update_project status='CLOSED' instead. Irreversible."),
+  confirm: confirmFlag().describe(
+    "Must be set to true. Permanently deletes the project (case). Consider update_project status='CLOSED' instead. Irreversible.",
+  ),
 });
 
 export async function deleteProject(input: z.infer<typeof deleteProjectSchema>) {

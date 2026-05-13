@@ -157,7 +157,6 @@ export class FixedClientStore implements OAuthRegisteredClientsStore {
     if (clientId !== this.client.client_id) return undefined;
     return this.client;
   }
-
 }
 
 // ── Provider ────────────────────────────────────────────────────────────────
@@ -190,9 +189,7 @@ export class OAuthProvider implements OAuthServerProvider {
     }
     this.clientsStore = args.clientsStore;
     this.signingKey = args.signingKey;
-    this.resourceUrl = args.resourceUrl
-      ? resourceUrlFromServerUrl(args.resourceUrl)
-      : undefined;
+    this.resourceUrl = args.resourceUrl ? resourceUrlFromServerUrl(args.resourceUrl) : undefined;
     if (args.enableAuthCodeGc ?? true) {
       this.gcTimer = setInterval(() => this.gcAuthCodes(), AUTH_CODE_GC_INTERVAL_MS);
       // Don't keep the process alive on the GC alone.
@@ -301,11 +298,7 @@ export class OAuthProvider implements OAuthServerProvider {
     }
     this.assertClaimsResource(claims, InvalidGrantError);
     const requestedResource = this.resolveResource(resource);
-    if (
-      requestedResource &&
-      claims.resource &&
-      requestedResource !== claims.resource
-    ) {
+    if (requestedResource && claims.resource && requestedResource !== claims.resource) {
       throw new InvalidGrantError("refresh token resource mismatch");
     }
     return this.issueTokenPair(client.client_id, requestedResource ?? claims.resource);
@@ -372,9 +365,7 @@ export class OAuthProvider implements OAuthServerProvider {
 
   private resolveResource(requestedResource?: URL): string | undefined {
     if (!this.resourceUrl) {
-      return requestedResource
-        ? resourceUrlFromServerUrl(requestedResource).href
-        : undefined;
+      return requestedResource ? resourceUrlFromServerUrl(requestedResource).href : undefined;
     }
     if (!requestedResource) return this.resourceUrl.href;
     if (

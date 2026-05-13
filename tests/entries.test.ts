@@ -4,12 +4,22 @@ import { fetch } from "undici";
 
 vi.mock("undici", () => ({ fetch: vi.fn() }));
 
-beforeEach(() => { process.env["CAPSULE_API_TOKEN"] = "test-token"; });
-afterEach(() => { vi.clearAllMocks(); delete process.env["CAPSULE_API_TOKEN"]; });
+beforeEach(() => {
+  process.env["CAPSULE_API_TOKEN"] = "test-token";
+});
+afterEach(() => {
+  vi.clearAllMocks();
+  delete process.env["CAPSULE_API_TOKEN"];
+});
 
 describe("listPartyEntries", () => {
   it("hits /parties/:id/entries with pagination params", async () => {
-    mockFetch(200, { entries: [{ id: 1, type: "note" }, { id: 2, type: "email" }] });
+    mockFetch(200, {
+      entries: [
+        { id: 1, type: "note" },
+        { id: 2, type: "email" },
+      ],
+    });
 
     const { listPartyEntries } = await import("../src/tools/entries.js");
     const result = await listPartyEntries({ partyId: 7, page: 1, perPage: 25 });
@@ -83,9 +93,7 @@ describe("updateEntry", () => {
 
   it("rejects calls with no fields to update", async () => {
     const { updateEntry } = await import("../src/tools/entries.js");
-    await expect(updateEntry({ id: 1 })).rejects.toThrow(
-      /provide at least one field/,
-    );
+    await expect(updateEntry({ id: 1 })).rejects.toThrow(/provide at least one field/);
   });
 });
 
@@ -179,12 +187,10 @@ describe("addNote", () => {
   it("rejects malformed entryAt at the schema layer", async () => {
     const { addNoteSchema } = await import("../src/tools/entries.js");
     expect(
-      addNoteSchema.safeParse({ content: "x", partyId: 1, entryAt: "not-a-date" })
-        .success,
+      addNoteSchema.safeParse({ content: "x", partyId: 1, entryAt: "not-a-date" }).success,
     ).toBe(false);
     expect(
-      addNoteSchema.safeParse({ content: "x", partyId: 1, entryAt: "2024-03-15" })
-        .success,
+      addNoteSchema.safeParse({ content: "x", partyId: 1, entryAt: "2024-03-15" }).success,
     ).toBe(false); // needs full ISO 8601, not just date
     expect(
       addNoteSchema.safeParse({
@@ -202,9 +208,9 @@ describe("addNote", () => {
 
   it("throws if multiple link targets are provided", async () => {
     const { addNote } = await import("../src/tools/entries.js");
-    await expect(
-      addNote({ content: "Bad", partyId: 1, opportunityId: 2 }),
-    ).rejects.toThrow("exactly one");
+    await expect(addNote({ content: "Bad", partyId: 1, opportunityId: 2 })).rejects.toThrow(
+      "exactly one",
+    );
   });
 });
 

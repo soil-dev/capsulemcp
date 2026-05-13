@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { mockBinary,mockJson } from "./test-helpers.js";
+import { mockBinary, mockJson } from "./test-helpers.js";
 import { fetch } from "undici";
 
 vi.mock("undici", () => ({ fetch: vi.fn() }));
@@ -59,8 +59,7 @@ describe("uploadAttachment", () => {
     // First call: upload — returns token.
     mockJson(200, {
       upload: {
-        token:
-          "u1/e0/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/abc123/xyz789",
+        token: "u1/e0/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/abc123/xyz789",
       },
     });
     // Second call: entry creation — returns the new entry with attachment metadata.
@@ -68,9 +67,7 @@ describe("uploadAttachment", () => {
       entry: {
         id: 999,
         type: "note",
-        attachments: [
-          { id: 42, filename: "report.pdf", contentType: "application/pdf", size: 16 },
-        ],
+        attachments: [{ id: 42, filename: "report.pdf", contentType: "application/pdf", size: 16 }],
       },
     });
 
@@ -92,9 +89,7 @@ describe("uploadAttachment", () => {
     const uInit = uploadInit as { method: string; headers: Record<string, string>; body: Buffer };
     expect(uInit.method).toBe("POST");
     expect(uInit.headers["Content-Type"]).toBe("application/pdf");
-    expect(uInit.headers["X-Attachment-Filename"]).toBe(
-      encodeURIComponent("report.pdf"),
-    );
+    expect(uInit.headers["X-Attachment-Filename"]).toBe(encodeURIComponent("report.pdf"));
     expect(uInit.headers["Content-Length"]).toBe("16"); // "hello-pdf-bytes!" = 16 bytes
     expect(Buffer.isBuffer(uInit.body)).toBe(true);
     expect(uInit.body.toString("utf8")).toBe("hello-pdf-bytes!");
@@ -108,14 +103,11 @@ describe("uploadAttachment", () => {
     expect(sent.entry.party).toEqual({ id: 254022688 });
     expect(sent.entry.attachments).toEqual([
       {
-        token:
-          "u1/e0/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/abc123/xyz789",
+        token: "u1/e0/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/abc123/xyz789",
       },
     ]);
 
-    expect(
-      (result as { entry: { attachments: unknown[] } }).entry.attachments,
-    ).toHaveLength(1);
+    expect((result as { entry: { attachments: unknown[] } }).entry.attachments).toHaveLength(1);
   });
 
   it("rejects calls with multiple anchor IDs", async () => {

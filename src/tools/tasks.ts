@@ -1,11 +1,6 @@
 import { z } from "zod";
 import { confirmFlag } from "./confirm-flag.js";
-import {
-  capsuleDelete,
-  capsuleGet,
-  capsulePost,
-  capsulePut,
-} from "../capsule/client.js";
+import { capsuleDelete, capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
 import { idempotent } from "../capsule/idempotent.js";
 
 // ── Read ────────────────────────────────────────────────────────────────────
@@ -66,9 +61,7 @@ export const getTasksSchema = z.object({
 });
 
 export async function getTasks(input: z.infer<typeof getTasksSchema>) {
-  const { data } = await capsuleGet<{ tasks: unknown[] }>(
-    `/tasks/${input.ids.join(",")}`,
-  );
+  const { data } = await capsuleGet<{ tasks: unknown[] }>(`/tasks/${input.ids.join(",")}`);
   return data;
 }
 
@@ -77,8 +70,15 @@ export async function getTasks(input: z.infer<typeof getTasksSchema>) {
 // MCP SDK needs a plain ZodObject shape; keep refine in the handler.
 export const createTaskSchema = z.object({
   description: z.string().min(1),
-  dueOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe("YYYY-MM-DD"),
-  dueTime: z.string().regex(/^\d{2}:\d{2}$/).optional().describe("HH:MM in user's timezone"),
+  dueOn: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .describe("YYYY-MM-DD"),
+  dueTime: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/)
+    .optional()
+    .describe("HH:MM in user's timezone"),
   detail: z.string().optional(),
   ownerId: z
     .number()
@@ -88,9 +88,24 @@ export const createTaskSchema = z.object({
     .describe(
       "Assign to user ID. Defaults to the API-token owner when omitted. Once set, this connector cannot clear the owner back to null — use Capsule's web UI for that.",
     ),
-  partyId: z.number().int().positive().optional().describe("Link task to a party (mutually exclusive with opportunityId/projectId)"),
-  opportunityId: z.number().int().positive().optional().describe("Link task to an opportunity (mutually exclusive with partyId/projectId)"),
-  projectId: z.number().int().positive().optional().describe("Link task to a project (mutually exclusive with partyId/opportunityId)"),
+  partyId: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe("Link task to a party (mutually exclusive with opportunityId/projectId)"),
+  opportunityId: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe("Link task to an opportunity (mutually exclusive with partyId/projectId)"),
+  projectId: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe("Link task to a project (mutually exclusive with partyId/opportunityId)"),
 });
 
 export async function createTask(input: z.infer<typeof createTaskSchema>) {
@@ -114,8 +129,16 @@ export async function createTask(input: z.infer<typeof createTaskSchema>) {
 export const updateTaskSchema = z.object({
   id: z.number().int().positive(),
   description: z.string().min(1).optional(),
-  dueOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("YYYY-MM-DD"),
-  dueTime: z.string().regex(/^\d{2}:\d{2}$/).optional().describe("HH:MM in user's timezone"),
+  dueOn: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional()
+    .describe("YYYY-MM-DD"),
+  dueTime: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/)
+    .optional()
+    .describe("HH:MM in user's timezone"),
   detail: z.string().optional(),
   // Capsule rejects direct sets of `PENDING` (which is a track-machinery
   // internal state) with 422 "cannot set task status to PENDING".
@@ -165,8 +188,9 @@ export async function completeTask(input: z.infer<typeof completeTaskSchema>) {
 
 export const deleteTaskSchema = z.object({
   id: z.number().int().positive(),
-  confirm: confirmFlag()
-    .describe("Must be set to true. Permanently deletes the task. To mark done without losing history use complete_task. Irreversible."),
+  confirm: confirmFlag().describe(
+    "Must be set to true. Permanently deletes the task. To mark done without losing history use complete_task. Irreversible.",
+  ),
 });
 
 export async function deleteTask(input: z.infer<typeof deleteTaskSchema>) {

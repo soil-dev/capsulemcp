@@ -4,8 +4,13 @@ import { fetch } from "undici";
 
 vi.mock("undici", () => ({ fetch: vi.fn() }));
 
-beforeEach(() => { process.env["CAPSULE_API_TOKEN"] = "test-token"; });
-afterEach(() => { vi.clearAllMocks(); delete process.env["CAPSULE_API_TOKEN"]; });
+beforeEach(() => {
+  process.env["CAPSULE_API_TOKEN"] = "test-token";
+});
+afterEach(() => {
+  vi.clearAllMocks();
+  delete process.env["CAPSULE_API_TOKEN"];
+});
 
 describe("listTasks", () => {
   it("returns tasks", async () => {
@@ -92,18 +97,10 @@ describe("updateTask", () => {
     // Capsule responds 422 'cannot set task status to PENDING' — that
     // status is reachable only via track machinery. Schema now
     // restricts to the two values that are actually settable.
-    const { updateTaskSchema, listTasksSchema } = await import(
-      "../src/tools/tasks.js"
-    );
-    expect(updateTaskSchema.safeParse({ id: 1, status: "PENDING" }).success).toBe(
-      false,
-    );
-    expect(updateTaskSchema.safeParse({ id: 1, status: "OPEN" }).success).toBe(
-      true,
-    );
-    expect(updateTaskSchema.safeParse({ id: 1, status: "COMPLETED" }).success).toBe(
-      true,
-    );
+    const { updateTaskSchema, listTasksSchema } = await import("../src/tools/tasks.js");
+    expect(updateTaskSchema.safeParse({ id: 1, status: "PENDING" }).success).toBe(false);
+    expect(updateTaskSchema.safeParse({ id: 1, status: "OPEN" }).success).toBe(true);
+    expect(updateTaskSchema.safeParse({ id: 1, status: "COMPLETED" }).success).toBe(true);
     // listTasks shares the same enum gap.
     expect(listTasksSchema.safeParse({ status: "PENDING" }).success).toBe(false);
   });

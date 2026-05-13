@@ -54,7 +54,7 @@ function rpc(
     };
 
     proc.stdout.on("data", onData);
-    proc.stdin.write(JSON.stringify(request) + "\n");
+    proc.stdin.write(`${JSON.stringify(request)}\n`);
   });
 }
 
@@ -98,10 +98,10 @@ beforeAll(async () => {
 
   // Send the post-init notification per the MCP spec.
   child.stdin.write(
-    JSON.stringify({
+    `${JSON.stringify({
       jsonrpc: "2.0",
       method: "notifications/initialized",
-    }) + "\n",
+    })}\n`,
   );
 });
 

@@ -1,16 +1,8 @@
 import { z } from "zod";
 import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
 import { confirmFlag } from "./confirm-flag.js";
-import {
-  capsuleDelete,
-  capsuleGet,
-  capsulePost,
-  capsulePut,
-} from "../capsule/client.js";
-import {
-  idempotent,
-  idempotentWithResult,
-} from "../capsule/idempotent.js";
+import { capsuleDelete, capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
+import { idempotent, idempotentWithResult } from "../capsule/idempotent.js";
 import {
   CustomFieldWriteSchema,
   fieldsArrayDescriptor,
@@ -142,10 +134,9 @@ export const getPartiesSchema = z.object({
 });
 
 export async function getParties(input: z.infer<typeof getPartiesSchema>) {
-  const { data } = await capsuleGet<{ parties: unknown[] }>(
-    `/parties/${input.ids.join(",")}`,
-    { embed: input.embed },
-  );
+  const { data } = await capsuleGet<{ parties: unknown[] }>(`/parties/${input.ids.join(",")}`, {
+    embed: input.embed,
+  });
   return data;
 }
 
@@ -157,9 +148,7 @@ export const listPartyOpportunitiesSchema = z.object({
   perPage: z.number().int().min(1).max(100).optional().default(25),
 });
 
-export async function listPartyOpportunities(
-  input: z.infer<typeof listPartyOpportunitiesSchema>,
-) {
+export async function listPartyOpportunities(input: z.infer<typeof listPartyOpportunitiesSchema>) {
   const { data, nextPage } = await capsuleGet<{ opportunities: unknown[] }>(
     `/parties/${input.partyId}/opportunities`,
     { page: input.page, perPage: input.perPage },
@@ -175,9 +164,7 @@ export const listPartyProjectsSchema = z.object({
   perPage: z.number().int().min(1).max(100).optional().default(25),
 });
 
-export async function listPartyProjects(
-  input: z.infer<typeof listPartyProjectsSchema>,
-) {
+export async function listPartyProjects(input: z.infer<typeof listPartyProjectsSchema>) {
   const { data, nextPage } = await capsuleGet<{ kases: unknown[] }>(
     `/parties/${input.partyId}/kases`,
     { page: input.page, perPage: input.perPage },
@@ -239,7 +226,12 @@ export const createPartySchema = z.object({
   lastName: z.string().optional(),
   title: z.string().optional(),
   jobTitle: z.string().optional(),
-  organisationId: z.number().int().positive().optional().describe("Link person to an existing organisation ID"),
+  organisationId: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe("Link person to an existing organisation ID"),
   // organisation
   name: z.string().optional(),
   ...PartyWriteBaseSchema,
@@ -268,10 +260,7 @@ export const updatePartySchema = z.object({
   title: z.string().optional(),
   jobTitle: z.string().optional(),
   name: z.string().optional(),
-  fields: z
-    .array(CustomFieldWriteSchema)
-    .optional()
-    .describe(fieldsArrayDescriptor("get_party")),
+  fields: z.array(CustomFieldWriteSchema).optional().describe(fieldsArrayDescriptor("get_party")),
   ...PartyWriteBaseSchema,
 });
 
@@ -293,12 +282,11 @@ export async function updateParty(input: z.infer<typeof updatePartySchema>) {
 
 export const deletePartySchema = z.object({
   id: z.number().int().positive(),
-  confirm: confirmFlag()
-    .describe(
-      "Must be set to true. Deletes the party AND all linked notes, tasks, opportunities, and projects (kases). " +
-        "Deleting an ORGANISATION does NOT delete people linked to it via organisationId — their `organisation` field is silently cleared to null and they survive as standalone records. " +
-        "Irreversible.",
-    ),
+  confirm: confirmFlag().describe(
+    "Must be set to true. Deletes the party AND all linked notes, tasks, opportunities, and projects (kases). " +
+      "Deleting an ORGANISATION does NOT delete people linked to it via organisationId — their `organisation` field is silently cleared to null and they survive as standalone records. " +
+      "Irreversible.",
+  ),
 });
 
 export async function deleteParty(input: z.infer<typeof deletePartySchema>) {
@@ -342,9 +330,7 @@ export const addPartyEmailAddressSchema = z.object({
   type: z.string().optional().describe("Free-form label, e.g. 'Work', 'Home'."),
 });
 
-export async function addPartyEmailAddress(
-  input: z.infer<typeof addPartyEmailAddressSchema>,
-) {
+export async function addPartyEmailAddress(input: z.infer<typeof addPartyEmailAddressSchema>) {
   const { partyId, address, type } = input;
   const item: Record<string, unknown> = { address };
   if (type !== undefined) item["type"] = type;
@@ -392,9 +378,7 @@ export const addPartyPhoneNumberSchema = z.object({
   type: z.string().optional().describe("Free-form label, e.g. 'Work', 'Mobile'."),
 });
 
-export async function addPartyPhoneNumber(
-  input: z.infer<typeof addPartyPhoneNumberSchema>,
-) {
+export async function addPartyPhoneNumber(input: z.infer<typeof addPartyPhoneNumberSchema>) {
   const { partyId, number, type } = input;
   const item: Record<string, unknown> = { number };
   if (type !== undefined) item["type"] = type;
@@ -441,17 +425,12 @@ export const addPartyAddressSchema = z.object({
   street: z.string().optional(),
   city: z.string().optional(),
   state: z.string().optional(),
-  country: z
-    .string()
-    .optional()
-    .describe(CountryDescription),
+  country: z.string().optional().describe(CountryDescription),
   zip: z.string().optional(),
   type: z.string().optional().describe("Free-form label, e.g. 'Office', 'Home'."),
 });
 
-export async function addPartyAddress(
-  input: z.infer<typeof addPartyAddressSchema>,
-) {
+export async function addPartyAddress(input: z.infer<typeof addPartyAddressSchema>) {
   const { partyId, ...rest } = input;
   const item: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(rest)) {
@@ -473,9 +452,7 @@ export const removePartyAddressByIdSchema = z.object({
     ),
 });
 
-export async function removePartyAddressById(
-  input: z.infer<typeof removePartyAddressByIdSchema>,
-) {
+export async function removePartyAddressById(input: z.infer<typeof removePartyAddressByIdSchema>) {
   const { partyId, addressId } = input;
   return idempotentWithResult(
     () =>
@@ -527,9 +504,7 @@ export const addPartyWebsiteSchema = z.object({
     .describe("Defaults to 'URL' if omitted."),
 });
 
-export async function addPartyWebsite(
-  input: z.infer<typeof addPartyWebsiteSchema>,
-) {
+export async function addPartyWebsite(input: z.infer<typeof addPartyWebsiteSchema>) {
   const { partyId, address, service } = input;
   const item: Record<string, unknown> = { address };
   if (service !== undefined) item["service"] = service;
@@ -549,9 +524,7 @@ export const removePartyWebsiteByIdSchema = z.object({
     ),
 });
 
-export async function removePartyWebsiteById(
-  input: z.infer<typeof removePartyWebsiteByIdSchema>,
-) {
+export async function removePartyWebsiteById(input: z.infer<typeof removePartyWebsiteByIdSchema>) {
   const { partyId, websiteId } = input;
   return idempotentWithResult(
     () =>

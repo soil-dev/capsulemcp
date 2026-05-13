@@ -31,10 +31,7 @@
 
 import { z } from "zod";
 import { capsuleGet, capsulePut } from "../capsule/client.js";
-import {
-  idempotentWithResult,
-  isCapsuleTagNotFound,
-} from "../capsule/idempotent.js";
+import { idempotentWithResult, isCapsuleTagNotFound } from "../capsule/idempotent.js";
 
 const TAG_LIST_PATH = {
   parties: "/parties/tags",
@@ -52,16 +49,14 @@ const ENTITY_TO_WRAPPER = {
 
 const TagEntity = z
   .enum(["parties", "opportunities", "kases"])
-  .describe(
-    "Which entity type. Use 'kases' for projects (Capsule's legacy path name).",
-  );
+  .describe("Which entity type. Use 'kases' for projects (Capsule's legacy path name).");
 
 // ── list_tags (read) ──────────────────────────────────────────────────────
 
 export const listTagsSchema = z.object({
-  entity: z.enum(["parties", "opportunities", "kases"]).describe(
-    "The resource type to list tags for",
-  ),
+  entity: z
+    .enum(["parties", "opportunities", "kases"])
+    .describe("The resource type to list tags for"),
   page: z.number().int().positive().optional(),
   perPage: z.number().int().min(1).max(100).optional(),
 });
@@ -110,9 +105,7 @@ export const removeTagByIdSchema = z.object({
     ),
 });
 
-export async function removeTagById(
-  input: z.infer<typeof removeTagByIdSchema>,
-) {
+export async function removeTagById(input: z.infer<typeof removeTagByIdSchema>) {
   const { entity, entityId, tagId } = input;
   const wrapper = ENTITY_TO_WRAPPER[entity];
   return idempotentWithResult(

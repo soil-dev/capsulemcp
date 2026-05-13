@@ -37,11 +37,7 @@
  */
 
 import { isReadOnly } from "./capsule/client.js";
-import {
-  OAuthProvider,
-  InMemoryClientsStore,
-  FixedClientStore,
-} from "./auth/provider.js";
+import { OAuthProvider, InMemoryClientsStore, FixedClientStore } from "./auth/provider.js";
 import { resolveBaseConfig, selectMode } from "./http/config.js";
 import { createApp } from "./http/app.js";
 
@@ -97,8 +93,7 @@ const app = createApp({
 
 app.listen(port, () => {
   const readMode = isReadOnly() ? "read-only" : "read-write";
-  const authLabel =
-    mode.kind === "static-client" ? "static-client" : "INSECURE_AUTO_APPROVE";
+  const authLabel = mode.kind === "static-client" ? "static-client" : "INSECURE_AUTO_APPROVE";
   console.log(
     `[capsulemcp] HTTP server listening on :${port} | mode=${readMode} | auth=${authLabel} | issuer=${issuerUrl}`,
   );

@@ -18,9 +18,11 @@ import { capsuleGet } from "../capsule/client.js";
 // Entity is one of: parties, opportunities, kases (Capsule's name for
 // projects).
 
-const EntitySchema = z.enum(["parties", "opportunities", "kases"]).describe(
-  "Which entity type the filter operates over. Use 'kases' for projects (Capsule's legacy name).",
-);
+const EntitySchema = z
+  .enum(["parties", "opportunities", "kases"])
+  .describe(
+    "Which entity type the filter operates over. Use 'kases' for projects (Capsule's legacy name).",
+  );
 
 // ── List saved filters ──────────────────────────────────────────────────────
 
@@ -28,12 +30,8 @@ export const listSavedFiltersSchema = z.object({
   entity: EntitySchema,
 });
 
-export async function listSavedFilters(
-  input: z.infer<typeof listSavedFiltersSchema>,
-) {
-  const { data } = await capsuleGet<{ filters: unknown[] }>(
-    `/${input.entity}/filters`,
-  );
+export async function listSavedFilters(input: z.infer<typeof listSavedFiltersSchema>) {
+  const { data } = await capsuleGet<{ filters: unknown[] }>(`/${input.entity}/filters`);
   return data;
 }
 
@@ -41,22 +39,13 @@ export async function listSavedFilters(
 
 export const runSavedFilterSchema = z.object({
   entity: EntitySchema,
-  id: z
-    .number()
-    .int()
-    .positive()
-    .describe("The saved filter id (from list_saved_filters)."),
-  embed: z
-    .string()
-    .optional()
-    .describe(EMBED_TAGS_FIELDS_DESCRIPTION),
+  id: z.number().int().positive().describe("The saved filter id (from list_saved_filters)."),
+  embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
   page: z.number().int().positive().optional().default(1),
   perPage: z.number().int().min(1).max(100).optional().default(25),
 });
 
-export async function runSavedFilter(
-  input: z.infer<typeof runSavedFilterSchema>,
-) {
+export async function runSavedFilter(input: z.infer<typeof runSavedFilterSchema>) {
   const { data, nextPage } = await capsuleGet<Record<string, unknown>>(
     `/${input.entity}/filters/${input.id}/results`,
     { page: input.page, perPage: input.perPage, embed: input.embed },

@@ -19,9 +19,13 @@ afterEach(() => {
 
 describe("searchParties", () => {
   it("routes to /parties/search when q is provided", async () => {
-    mockFetch(200, { parties: [{ id: 1, type: "person" }] }, {
-      Link: '<https://api.capsulecrm.com/api/v2/parties/search?page=2&perPage=25>; rel="next"',
-    });
+    mockFetch(
+      200,
+      { parties: [{ id: 1, type: "person" }] },
+      {
+        Link: '<https://api.capsulecrm.com/api/v2/parties/search?page=2&perPage=25>; rel="next"',
+      },
+    );
 
     const { searchParties } = await import("../src/tools/parties.js");
     const result = await searchParties({ q: "alice", page: 1, perPage: 25 });
@@ -82,18 +86,14 @@ describe("atomic child-array operations", () => {
     expect(url).toContain("/parties/99");
     expect((opts as RequestInit).method).toBe("PUT");
     const body = JSON.parse((opts as RequestInit).body as string);
-    expect(body.party.emailAddresses).toEqual([
-      { address: "a@x.test", type: "Work" },
-    ]);
+    expect(body.party.emailAddresses).toEqual([{ address: "a@x.test", type: "Work" }]);
     expect(body.party.emailAddresses[0].id).toBeUndefined();
     expect(body.party.emailAddresses[0]._delete).toBeUndefined();
   });
 
   it("remove_party_email_address_by_id PUTs {id, _delete:true} only", async () => {
     mockFetch(200, { party: { id: 99 } });
-    const { removePartyEmailAddressById } = await import(
-      "../src/tools/parties.js"
-    );
+    const { removePartyEmailAddressById } = await import("../src/tools/parties.js");
     await removePartyEmailAddressById({ partyId: 99, emailAddressId: 555 });
     const [url, opts] = vi.mocked(fetch).mock.calls[0]!;
     expect(url).toContain("/parties/99");
@@ -106,32 +106,20 @@ describe("atomic child-array operations", () => {
     mockFetch(200, { party: { id: 99 } });
     const { addPartyPhoneNumber } = await import("../src/tools/parties.js");
     await addPartyPhoneNumber({ partyId: 99, number: "+1-555", type: "Mobile" });
-    const body = JSON.parse(
-      (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string,
-    );
-    expect(body.party.phoneNumbers).toEqual([
-      { number: "+1-555", type: "Mobile" },
-    ]);
+    const body = JSON.parse((vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string);
+    expect(body.party.phoneNumbers).toEqual([{ number: "+1-555", type: "Mobile" }]);
   });
 
   it("add_party_phone_number rejects empty number at schema layer", async () => {
-    const { addPartyPhoneNumberSchema } = await import(
-      "../src/tools/parties.js"
-    );
-    expect(
-      addPartyPhoneNumberSchema.safeParse({ partyId: 1, number: "" }).success,
-    ).toBe(false);
+    const { addPartyPhoneNumberSchema } = await import("../src/tools/parties.js");
+    expect(addPartyPhoneNumberSchema.safeParse({ partyId: 1, number: "" }).success).toBe(false);
   });
 
   it("remove_party_phone_number_by_id PUTs the destroy entry", async () => {
     mockFetch(200, { party: { id: 99 } });
-    const { removePartyPhoneNumberById } = await import(
-      "../src/tools/parties.js"
-    );
+    const { removePartyPhoneNumberById } = await import("../src/tools/parties.js");
     await removePartyPhoneNumberById({ partyId: 99, phoneNumberId: 12 });
-    const body = JSON.parse(
-      (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string,
-    );
+    const body = JSON.parse((vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string);
     expect(body.party.phoneNumbers).toEqual([{ id: 12, _delete: true }]);
   });
 
@@ -139,9 +127,7 @@ describe("atomic child-array operations", () => {
     mockFetch(200, { party: { id: 99 } });
     const { addPartyAddress } = await import("../src/tools/parties.js");
     await addPartyAddress({ partyId: 99, city: "Brno", country: "USA" });
-    const body = JSON.parse(
-      (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string,
-    );
+    const body = JSON.parse((vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string);
     // Capsule will normalise 'USA' → 'United States' on its own.
     expect(body.party.addresses).toEqual([{ city: "Brno", country: "USA" }]);
   });
@@ -150,9 +136,7 @@ describe("atomic child-array operations", () => {
     mockFetch(200, { party: { id: 99 } });
     const { removePartyAddressById } = await import("../src/tools/parties.js");
     await removePartyAddressById({ partyId: 99, addressId: 7 });
-    const body = JSON.parse(
-      (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string,
-    );
+    const body = JSON.parse((vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string);
     expect(body.party.addresses).toEqual([{ id: 7, _delete: true }]);
   });
 
@@ -182,21 +166,15 @@ describe("atomic child-array operations", () => {
       address: "@anton",
       service: "TWITTER",
     });
-    const body = JSON.parse(
-      (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string,
-    );
-    expect(body.party.websites).toEqual([
-      { address: "@anton", service: "TWITTER" },
-    ]);
+    const body = JSON.parse((vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string);
+    expect(body.party.websites).toEqual([{ address: "@anton", service: "TWITTER" }]);
   });
 
   it("remove_party_website_by_id PUTs the destroy entry", async () => {
     mockFetch(200, { party: { id: 99 } });
     const { removePartyWebsiteById } = await import("../src/tools/parties.js");
     await removePartyWebsiteById({ partyId: 99, websiteId: 4 });
-    const body = JSON.parse(
-      (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string,
-    );
+    const body = JSON.parse((vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string);
     expect(body.party.websites).toEqual([{ id: 4, _delete: true }]);
   });
 });
@@ -399,9 +377,9 @@ describe("error body parsing", () => {
     });
 
     const { createParty } = await import("../src/tools/parties.js");
-    await expect(
-      createParty({ type: "person" }),
-    ).rejects.toThrow(/Party\.name: can't be blank.*Party\.type: must be person/);
+    await expect(createParty({ type: "person" })).rejects.toThrow(
+      /Party\.name: can't be blank.*Party\.type: must be person/,
+    );
   });
 
   it("falls back to flat { message } shape", async () => {
@@ -510,8 +488,6 @@ describe("getParties (batch)", () => {
   it("rejects empty or oversize id arrays at the schema layer", async () => {
     const { getPartiesSchema } = await import("../src/tools/parties.js");
     expect(() => getPartiesSchema.parse({ ids: [] })).toThrow();
-    expect(() =>
-      getPartiesSchema.parse({ ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] }),
-    ).toThrow();
+    expect(() => getPartiesSchema.parse({ ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] })).toThrow();
   });
 });

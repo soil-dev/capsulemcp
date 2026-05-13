@@ -24,9 +24,7 @@ describe("filterParties", () => {
 
     const { filterParties } = await import("../src/tools/filters.js");
     await filterParties({
-      conditions: [
-        { field: "addedOn", operator: "is within last", value: 7 },
-      ],
+      conditions: [{ field: "addedOn", operator: "is within last", value: 7 }],
       page: 1,
       perPage: 25,
     });
@@ -37,9 +35,7 @@ describe("filterParties", () => {
     const body = JSON.parse((init as { body: string }).body);
     expect(body).toEqual({
       filter: {
-        conditions: [
-          { field: "addedOn", operator: "is within last", value: 7 },
-        ],
+        conditions: [{ field: "addedOn", operator: "is within last", value: 7 }],
       },
     });
   });

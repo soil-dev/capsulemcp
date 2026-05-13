@@ -67,7 +67,9 @@ export function selectMode(
 
   if (CLIENT_ID && CLIENT_SECRET) {
     const redirectUris = REDIRECT_URIS_ENV
-      ? REDIRECT_URIS_ENV.split(",").map((s) => s.trim()).filter(Boolean)
+      ? REDIRECT_URIS_ENV.split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
       : DEFAULT_ANTHROPIC_REDIRECT_URIS;
     if (!redirectUris.length) {
       return {
@@ -105,8 +107,7 @@ export function selectMode(
     // points at loopback OR the operator explicitly confirms via
     // MCP_OAUTH_I_KNOW_WHAT_IM_DOING=yes.
     const isLocal = publicBaseUrl !== undefined && isLocalhostUrl(publicBaseUrl);
-    const acknowledged =
-      env["MCP_OAUTH_I_KNOW_WHAT_IM_DOING"]?.toLowerCase() === "yes";
+    const acknowledged = env["MCP_OAUTH_I_KNOW_WHAT_IM_DOING"]?.toLowerCase() === "yes";
     if (!isLocal && !acknowledged) {
       return {
         error:
@@ -204,7 +205,10 @@ export function resolveBaseConfig(env: NodeJS.ProcessEnv = process.env): BaseCon
   const jsonLimit = env["MCP_HTTP_JSON_LIMIT"] ?? "35mb";
   const allowedOriginsRaw = env["MCP_ALLOWED_ORIGINS"];
   const extraOrigins = allowedOriginsRaw
-    ? allowedOriginsRaw.split(",").map((s) => s.trim()).filter(Boolean)
+    ? allowedOriginsRaw
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
     : [];
   const parsedExtraOrigins: URL[] = [];
   for (const origin of extraOrigins) {

@@ -58,9 +58,7 @@ describe("doFetch retry-on-429", () => {
     // First call: 429 with Retry-After: 0 (no real wait)
     // Second call: 200 with payload
     vi.mocked(fetch)
-      .mockResolvedValueOnce(
-        makeResponse(429, { message: "rate limited" }, { "Retry-After": "0" }),
-      )
+      .mockResolvedValueOnce(makeResponse(429, { message: "rate limited" }, { "Retry-After": "0" }))
       .mockResolvedValueOnce(makeResponse(200, { parties: [{ id: 1 }] }));
 
     const { capsuleGet } = await import("../src/capsule/client.js");
@@ -107,17 +105,13 @@ describe("doFetch retry-on-429", () => {
 
   it("throws when both attempts return 429 (no infinite loop)", async () => {
     vi.mocked(fetch)
-      .mockResolvedValueOnce(
-        makeResponse(429, { message: "rate limited" }, { "Retry-After": "0" }),
-      )
+      .mockResolvedValueOnce(makeResponse(429, { message: "rate limited" }, { "Retry-After": "0" }))
       .mockResolvedValueOnce(
         makeResponse(429, { message: "still rate limited" }, { "Retry-After": "0" }),
       );
 
     const { capsuleGet } = await import("../src/capsule/client.js");
-    await expect(capsuleGet("/parties")).rejects.toThrow(
-      /Rate limit exceeded after one retry/,
-    );
+    await expect(capsuleGet("/parties")).rejects.toThrow(/Rate limit exceeded after one retry/);
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
   });
 
@@ -151,9 +145,7 @@ describe("doFetch retry-on-429", () => {
     vi.useFakeTimers();
     try {
       vi.mocked(fetch)
-        .mockResolvedValueOnce(
-          makeResponse(429, {}, { "Retry-After": "9999" }),
-        )
+        .mockResolvedValueOnce(makeResponse(429, {}, { "Retry-After": "9999" }))
         .mockResolvedValueOnce(makeResponse(200, { ok: true }));
 
       const { capsuleGet } = await import("../src/capsule/client.js");
@@ -170,9 +162,7 @@ describe("doFetch retry-on-429", () => {
   });
 
   it("passes through non-429 errors without retry", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(
-      makeResponse(500, { message: "server error" }),
-    );
+    vi.mocked(fetch).mockResolvedValueOnce(makeResponse(500, { message: "server error" }));
 
     const { capsuleGet } = await import("../src/capsule/client.js");
     await expect(capsuleGet("/parties")).rejects.toThrow(/Capsule API error 500/);
@@ -190,11 +180,15 @@ describe("doFetch retry-on-429", () => {
 
       vi.mocked(fetch)
         .mockResolvedValueOnce(
-          makeResponse(429, { error: "rate limit reached" }, {
-            "X-RateLimit-Limit": "4000",
-            "X-RateLimit-Remaining": "0",
-            "X-RateLimit-Reset": String(twoSecondsFromNow),
-          }),
+          makeResponse(
+            429,
+            { error: "rate limit reached" },
+            {
+              "X-RateLimit-Limit": "4000",
+              "X-RateLimit-Remaining": "0",
+              "X-RateLimit-Reset": String(twoSecondsFromNow),
+            },
+          ),
         )
         .mockResolvedValueOnce(makeResponse(200, { ok: true }));
 
@@ -222,10 +216,14 @@ describe("doFetch retry-on-429", () => {
       const oneSecondFromNow = Math.floor((Date.now() + 1000) / 1000);
       vi.mocked(fetch)
         .mockResolvedValueOnce(
-          makeResponse(429, { error: "rate limit reached" }, {
-            "X-RateLimit-Reset": String(oneSecondFromNow),
-            "Retry-After": "30",
-          }),
+          makeResponse(
+            429,
+            { error: "rate limit reached" },
+            {
+              "X-RateLimit-Reset": String(oneSecondFromNow),
+              "Retry-After": "30",
+            },
+          ),
         )
         .mockResolvedValueOnce(makeResponse(200, { ok: true }));
 
@@ -275,9 +273,7 @@ describe("doFetch retry-on-429", () => {
     vi.useFakeTimers();
     try {
       vi.mocked(fetch)
-        .mockResolvedValueOnce(
-          makeResponse(429, {}, { "X-RateLimit-Reset": String(pastEpochSec) }),
-        )
+        .mockResolvedValueOnce(makeResponse(429, {}, { "X-RateLimit-Reset": String(pastEpochSec) }))
         .mockResolvedValueOnce(makeResponse(200, { ok: true }));
 
       const { capsuleGet } = await import("../src/capsule/client.js");
@@ -305,20 +301,14 @@ describe("doFetch retry-on-429", () => {
       return Promise.reject(err);
     });
     const { capsuleGet } = await import("../src/capsule/client.js");
-    await expect(capsuleGet("/test")).rejects.toThrow(
-      /Capsule API request timed out after 60s/,
-    );
+    await expect(capsuleGet("/test")).rejects.toThrow(/Capsule API request timed out after 60s/);
   });
 
   it("does NOT retry on 401 (auth error surfaces immediately)", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(
-      makeResponse(401, { message: "Bad credentials" }),
-    );
+    vi.mocked(fetch).mockResolvedValueOnce(makeResponse(401, { message: "Bad credentials" }));
 
     const { capsuleGet } = await import("../src/capsule/client.js");
-    await expect(capsuleGet("/parties")).rejects.toThrow(
-      /Capsule API returned 401/,
-    );
+    await expect(capsuleGet("/parties")).rejects.toThrow(/Capsule API returned 401/);
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
   });
 });

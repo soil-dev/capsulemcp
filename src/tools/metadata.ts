@@ -41,14 +41,12 @@ export async function listTeams(input: z.infer<typeof listTeamsSchema>) {
 
 export const listLostReasonsSchema = z.object({ ...paginationFields });
 
-export async function listLostReasons(
-  input: z.infer<typeof listLostReasonsSchema>,
-) {
+export async function listLostReasons(input: z.infer<typeof listLostReasonsSchema>) {
   // Note response key: `lostReasons` (camelCase plural).
-  const { data, nextPage } = await capsuleGet<{ lostReasons: unknown[] }>(
-    "/lostreasons",
-    { page: input.page ?? 1, perPage: input.perPage ?? 100 },
-  );
+  const { data, nextPage } = await capsuleGet<{ lostReasons: unknown[] }>("/lostreasons", {
+    page: input.page ?? 1,
+    perPage: input.perPage ?? 100,
+  });
   return { ...data, nextPage };
 }
 
@@ -56,14 +54,12 @@ export async function listLostReasons(
 
 export const listActivityTypesSchema = z.object({ ...paginationFields });
 
-export async function listActivityTypes(
-  input: z.infer<typeof listActivityTypesSchema>,
-) {
+export async function listActivityTypes(input: z.infer<typeof listActivityTypesSchema>) {
   // Note response key: `activityTypes` (camelCase plural).
-  const { data, nextPage } = await capsuleGet<{ activityTypes: unknown[] }>(
-    "/activitytypes",
-    { page: input.page ?? 1, perPage: input.perPage ?? 100 },
-  );
+  const { data, nextPage } = await capsuleGet<{ activityTypes: unknown[] }>("/activitytypes", {
+    page: input.page ?? 1,
+    perPage: input.perPage ?? 100,
+  });
   return { ...data, nextPage };
 }
 
@@ -91,9 +87,7 @@ export async function getSite(_input: z.infer<typeof getSiteSchema>) {
 
 export const listTrackDefinitionsSchema = z.object({ ...paginationFields });
 
-export async function listTrackDefinitions(
-  input: z.infer<typeof listTrackDefinitionsSchema>,
-) {
+export async function listTrackDefinitions(input: z.infer<typeof listTrackDefinitionsSchema>) {
   // Note response key: `trackDefinitions` (camelCase plural). Each entry
   // includes nested taskDefinitions describing the auto-tasks the track
   // creates when applied.
@@ -112,13 +106,11 @@ export async function listTrackDefinitions(
 
 export const listCategoriesSchema = z.object({ ...paginationFields });
 
-export async function listCategories(
-  input: z.infer<typeof listCategoriesSchema>,
-) {
-  const { data, nextPage } = await capsuleGet<{ categories: unknown[] }>(
-    "/categories",
-    { page: input.page ?? 1, perPage: input.perPage ?? 100 },
-  );
+export async function listCategories(input: z.infer<typeof listCategoriesSchema>) {
+  const { data, nextPage } = await capsuleGet<{ categories: unknown[] }>("/categories", {
+    page: input.page ?? 1,
+    perPage: input.perPage ?? 100,
+  });
   return { ...data, nextPage };
 }
 

@@ -17,9 +17,7 @@ import { capsuleGet } from "../capsule/client.js";
 
 const CustomFieldEntity = z
   .enum(["parties", "opportunities", "kases"])
-  .describe(
-    "Which entity type's custom field schema to inspect. Use 'kases' for projects.",
-  );
+  .describe("Which entity type's custom field schema to inspect. Use 'kases' for projects.");
 
 // ── List custom field definitions ───────────────────────────────────────────
 
@@ -27,9 +25,7 @@ export const listCustomFieldsSchema = z.object({
   entity: CustomFieldEntity,
 });
 
-export async function listCustomFields(
-  input: z.infer<typeof listCustomFieldsSchema>,
-) {
+export async function listCustomFields(input: z.infer<typeof listCustomFieldsSchema>) {
   const { data } = await capsuleGet<{ definitions: unknown[] }>(
     `/${input.entity}/fields/definitions`,
   );
@@ -43,9 +39,7 @@ export const getCustomFieldSchema = z.object({
   fieldId: z.number().int().positive().describe("Custom field definition id."),
 });
 
-export async function getCustomField(
-  input: z.infer<typeof getCustomFieldSchema>,
-) {
+export async function getCustomField(input: z.infer<typeof getCustomFieldSchema>) {
   const { data } = await capsuleGet<{ definition: unknown }>(
     `/${input.entity}/fields/definitions/${input.fieldId}`,
   );
