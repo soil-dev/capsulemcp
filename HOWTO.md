@@ -245,11 +245,16 @@ git push
 git tag -a vX.Y.Z -m "vX.Y.Z — short summary"
 git push origin vX.Y.Z
 
-# 5. GitHub Release with notes
-gh release create vX.Y.Z --title "vX.Y.Z — title" --notes "<release notes>"
+# 5. GitHub Release with notes — pass --latest for stable releases, omit it for pre-releases
+gh release create vX.Y.Z --latest --title "vX.Y.Z — title" --notes "<release notes>"
+
+# 6. npm publish — paste-the-tag-first, npm-second so the GitHub tag is canonical
+npm publish --tag latest        # for stable releases (X.Y.Z)
+# or
+npm publish --tag beta          # for pre-releases (X.Y.Z-beta.N)
 ```
 
-The `npx -y github:soil-dev/capsulemcp#vX.Y.Z` install path picks up the new tag immediately. Users on `#vX.Y.(Z-1)` keep using the old tag until they bump.
+After step 6 lands, `npx capsulemcp` (or `npx capsulemcp@X.Y.Z` to pin) picks up the new version from the npm registry immediately. The GitHub-ref install (`npx -y github:soil-dev/capsulemcp#vX.Y.Z`) also works and is documented as the fallback / development path for users tracking a fork or unreleased branch.
 
 If you also publish a container image and deploy from it, do the image-build + IaC-apply *after* the tag is on GitHub — the tag is the authoritative ref the image build clones from. See [DEPLOY.md](DEPLOY.md) for one worked example (Cloud Run from source) and adapt to your platform.
 
@@ -262,6 +267,7 @@ re-confirm locally because a release commit shouldn't be the one that
 discovers a regression.
 
 - [ ] **(CI)** `npm run typecheck && npm run lint && npm run format:check && npm test && npm run build` all pass on the commit you're about to tag.
+- [ ] `npm publish --dry-run --tag latest` (for stable) or `--tag beta` (for pre-release) runs clean — verifies the tarball contents, package.json shape, and that `bin` / `files` resolve. Catches publish-time regressions before they hit npm.
 - [ ] **`package-lock.json` root version matches `package.json`.** Bumping the two source-of-truth files (package.json + server.ts) doesn't touch the lockfile root — it drifts silently. `npm install --package-lock-only --ignore-scripts` after the bump keeps it honest.
 - [ ] **Three places all match**: `package.json`, `src/server.ts`, `package-lock.json` (root + `packages[""]`).
 - [ ] **`#vX.Y.Z` pins in `README.md` and `INSTALL.md`** point to the new tag. Three locations in each file (the JSON snippet, the `claude mcp add` line, the export-then-add line in INSTALL).

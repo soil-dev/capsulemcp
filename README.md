@@ -31,7 +31,7 @@ For most individual users the install is a single JSON snippet pasted into Claud
      "mcpServers": {
        "capsule": {
          "command": "npx",
-         "args": ["-y", "github:soil-dev/capsulemcp#v1.0.0"],
+         "args": ["-y", "capsulemcp"],
          "env": {
            "CAPSULE_API_TOKEN": "<paste token here>",
            "CAPSULE_MCP_READONLY": "1"
@@ -43,7 +43,7 @@ For most individual users the install is a single JSON snippet pasted into Claud
 
 3. Restart Claude Desktop. The Capsule tools appear in the tool picker.
 
-That's it. The first launch takes ~30 seconds while npx clones and builds; subsequent launches are fast. See [INSTALL.md](INSTALL.md) for the Claude Code path, manual install, and troubleshooting.
+That's it. The first launch fetches the package from npm (a few seconds); subsequent launches are instant from the npx cache. To pin a specific version, use `"capsulemcp@1.0.0"` in `args`. If you're tracking a fork or an unreleased branch, use the GitHub-ref form instead: `"github:soil-dev/capsulemcp#v1.0.0"` — same arguments, just installs from a git clone rather than the npm registry. See [INSTALL.md](INSTALL.md) for the Claude Code path, manual install, and troubleshooting.
 
 ## Tools
 
