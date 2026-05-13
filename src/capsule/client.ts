@@ -220,14 +220,53 @@ function withTimeout(options: Parameters<typeof fetch>[1]): {
   };
 }
 
+/**
+ * Result of an outbound Capsule fetch. The `cleanup` callback MUST be
+ * invoked once the response body has been fully consumed (or the call
+ * is abandoned) — it clears the timeout timer that's keeping the
+ * AbortController alive. Releasing it earlier would let a mid-stream
+ * stall on `res.body.getReader().read()`, `res.arrayBuffer()`, or
+ * `res.json()` hang indefinitely, since undici's body-read primitives
+ * are only abortable while the controller's signal is unfired. Pre-v1
+ * this was a real DoS vector caught in the pre-GA security review.
+ */
+interface FetchResult {
+  res: Response;
+  cleanup: () => void;
+}
+
+/**
+ * Map an AbortError thrown during body consumption into the same clean
+ * 504 the fetch-stage abort produces. Without this, a timer-driven
+ * abort firing during `res.json()` / `res.arrayBuffer()` /
+ * `reader.read()` surfaces as a cryptic Node-internal AbortError.
+ */
+async function mapAbort<T>(p: Promise<T>): Promise<T> {
+  try {
+    return await p;
+  } catch (err) {
+    if (err instanceof Error && (err.name === "AbortError" || /aborted/i.test(err.message))) {
+      throw new CapsuleApiError(
+        504,
+        `Capsule API request timed out after ${REQUEST_TIMEOUT_MS / 1000}s. The Capsule API may be slow or hung; retry after a short wait. If the failed call was a write/delete, read the entity first to see whether the change actually applied before retrying.`,
+      );
+    }
+    throw err;
+  }
+}
+
 async function fetchWithTimeout(
   url: string,
   options: Parameters<typeof fetch>[1],
-): Promise<Response> {
+): Promise<FetchResult> {
   const { options: opts, cleanup } = withTimeout(options);
   try {
-    return await fetch(url, opts);
+    const res = await fetch(url, opts);
+    return { res, cleanup };
   } catch (err) {
+    // On the error path we own the timer — clear it now, since no
+    // body-consumption phase follows.
+    cleanup();
     // Convert AbortError into a recognizable, actionable error rather
     // than a cryptic 'fetch failed' that the caller can't diagnose.
     if (err instanceof Error && (err.name === "AbortError" || /aborted/i.test(err.message))) {
@@ -237,20 +276,23 @@ async function fetchWithTimeout(
       );
     }
     throw err;
-  } finally {
-    cleanup();
   }
 }
 
-async function doFetch(url: string, options: Parameters<typeof fetch>[1]): Promise<Response> {
-  const res = await fetchWithTimeout(url, options);
+async function doFetch(url: string, options: Parameters<typeof fetch>[1]): Promise<FetchResult> {
+  const first = await fetchWithTimeout(url, options);
 
-  if (res.status === 429) {
-    const delay = parseRateLimitDelay(res);
+  if (first.res.status === 429) {
+    const delay = parseRateLimitDelay(first.res);
+    // Release the first fetch's timer before sleeping — the body of
+    // the 429 response is not consumed, and we don't want a phantom
+    // timer firing during the back-off window.
+    first.cleanup();
     await new Promise((resolve) => setTimeout(resolve, delay));
 
     const retried = await fetchWithTimeout(url, options);
-    if (retried.status === 429) {
+    if (retried.res.status === 429) {
+      retried.cleanup();
       throw new CapsuleApiError(
         429,
         "Rate limit exceeded after one retry. Please slow down your requests.",
@@ -259,7 +301,7 @@ async function doFetch(url: string, options: Parameters<typeof fetch>[1]): Promi
     return retried;
   }
 
-  return res;
+  return first;
 }
 
 /**
@@ -282,7 +324,7 @@ async function throwForStatus(res: Response): Promise<void> {
 
 async function handleResponse<T>(res: Response): Promise<T> {
   await throwForStatus(res);
-  return res.json() as Promise<T>;
+  return mapAbort(res.json() as Promise<T>);
 }
 
 export type QueryParams = Record<string, string | number | boolean | undefined>;
@@ -302,22 +344,30 @@ function buildUrl(path: string, params?: QueryParams): string {
 export async function capsuleGet<T>(path: string, params?: QueryParams): Promise<PagedResult<T>> {
   const token = getToken();
   const url = buildUrl(path, params);
-  const res = await doFetch(url, { headers: baseHeaders(token) });
-  const data = await handleResponse<T>(res);
-  const nextPage = parseNextPage(res.headers.get("Link"));
-  return { data, nextPage };
+  const { res, cleanup } = await doFetch(url, { headers: baseHeaders(token) });
+  try {
+    const data = await handleResponse<T>(res);
+    const nextPage = parseNextPage(res.headers.get("Link"));
+    return { data, nextPage };
+  } finally {
+    cleanup();
+  }
 }
 
 export async function capsulePost<T>(path: string, body: unknown): Promise<T> {
   if (isReadOnly()) throw new CapsuleReadOnlyError("POST");
   const token = getToken();
   const url = buildUrl(path);
-  const res = await doFetch(url, {
+  const { res, cleanup } = await doFetch(url, {
     method: "POST",
     headers: { ...baseHeaders(token), "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  return handleResponse<T>(res);
+  try {
+    return await handleResponse<T>(res);
+  } finally {
+    cleanup();
+  }
 }
 
 /**
@@ -331,14 +381,18 @@ export async function capsulePostNoContent(path: string): Promise<void> {
   if (isReadOnly()) throw new CapsuleReadOnlyError("POST");
   const token = getToken();
   const url = buildUrl(path);
-  const res = await doFetch(url, {
+  const { res, cleanup } = await doFetch(url, {
     method: "POST",
     headers: baseHeaders(token),
   });
-  if (res.status === 204) return;
-  await throwForStatus(res);
-  // 2xx-but-not-204: drain the body so the connection can be reused.
-  await res.text();
+  try {
+    if (res.status === 204) return;
+    await throwForStatus(res);
+    // 2xx-but-not-204: drain the body so the connection can be reused.
+    await mapAbort(res.text());
+  } finally {
+    cleanup();
+  }
 }
 
 /**
@@ -356,26 +410,34 @@ export async function capsuleSearch<T>(
 ): Promise<PagedResult<T>> {
   const token = getToken();
   const url = buildUrl(path, params);
-  const res = await doFetch(url, {
+  const { res, cleanup } = await doFetch(url, {
     method: "POST",
     headers: { ...baseHeaders(token), "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  const data = await handleResponse<T>(res);
-  const nextPage = parseNextPage(res.headers.get("Link"));
-  return { data, nextPage };
+  try {
+    const data = await handleResponse<T>(res);
+    const nextPage = parseNextPage(res.headers.get("Link"));
+    return { data, nextPage };
+  } finally {
+    cleanup();
+  }
 }
 
 export async function capsulePut<T>(path: string, body: unknown): Promise<T> {
   if (isReadOnly()) throw new CapsuleReadOnlyError("PUT");
   const token = getToken();
   const url = buildUrl(path);
-  const res = await doFetch(url, {
+  const { res, cleanup } = await doFetch(url, {
     method: "PUT",
     headers: { ...baseHeaders(token), "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  return handleResponse<T>(res);
+  try {
+    return await handleResponse<T>(res);
+  } finally {
+    cleanup();
+  }
 }
 
 /**
@@ -403,58 +465,64 @@ export interface BinaryResult {
 export async function capsuleGetBinary(path: string, maxBytes?: number): Promise<BinaryResult> {
   const token = getToken();
   const url = buildUrl(path);
-  const res = await doFetch(url, { headers: baseHeaders(token) });
-  await throwForStatus(res);
-  const contentType = res.headers.get("Content-Type") ?? "application/octet-stream";
+  const { res, cleanup } = await doFetch(url, { headers: baseHeaders(token) });
+  try {
+    await throwForStatus(res);
+    const contentType = res.headers.get("Content-Type") ?? "application/octet-stream";
 
-  // Pre-buffer cap check. If Content-Length is advertised and exceeds
-  // the cap, refuse to read the body at all.
-  const declared = res.headers.get("Content-Length");
-  const declaredBytes = declared ? Number(declared) : NaN;
-  if (maxBytes !== undefined && Number.isFinite(declaredBytes) && declaredBytes > maxBytes) {
-    // Drain (cancel) the body so the connection can be released.
-    if (res.body) await res.body.cancel().catch(() => {});
-    return {
-      contentType,
-      buffer: Buffer.alloc(0),
-      truncated: true,
-      sizeBytes: declaredBytes,
-    };
-  }
-
-  // Streaming cap check. Even when Content-Length is absent or honest,
-  // abort the read once we've accumulated more than the cap.
-  if (maxBytes !== undefined && res.body) {
-    const reader = res.body.getReader();
-    const chunks: Uint8Array[] = [];
-    let total = 0;
-    let truncated = false;
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > maxBytes) {
-        truncated = true;
-        await reader.cancel().catch(() => {});
-        break;
-      }
-      chunks.push(value);
-    }
-    if (truncated) {
+    // Pre-buffer cap check. If Content-Length is advertised and exceeds
+    // the cap, refuse to read the body at all.
+    const declared = res.headers.get("Content-Length");
+    const declaredBytes = declared ? Number(declared) : NaN;
+    if (maxBytes !== undefined && Number.isFinite(declaredBytes) && declaredBytes > maxBytes) {
+      // Drain (cancel) the body so the connection can be released.
+      if (res.body) await res.body.cancel().catch(() => {});
       return {
         contentType,
         buffer: Buffer.alloc(0),
         truncated: true,
-        sizeBytes: total,
+        sizeBytes: declaredBytes,
       };
     }
-    const buffer = Buffer.concat(chunks.map((c) => Buffer.from(c)));
-    return { contentType, buffer, sizeBytes: buffer.length };
-  }
 
-  const arrayBuffer = await res.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-  return { contentType, buffer, sizeBytes: buffer.length };
+    // Streaming cap check. Even when Content-Length is absent or honest,
+    // abort the read once we've accumulated more than the cap. The
+    // per-chunk read is wrapped in mapAbort so a mid-stream timeout
+    // surfaces as the same clean 504 a fetch-stage timeout does.
+    if (maxBytes !== undefined && res.body) {
+      const reader = res.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let total = 0;
+      let truncated = false;
+      while (true) {
+        const { done, value } = await mapAbort(reader.read());
+        if (done) break;
+        total += value.byteLength;
+        if (total > maxBytes) {
+          truncated = true;
+          await reader.cancel().catch(() => {});
+          break;
+        }
+        chunks.push(value);
+      }
+      if (truncated) {
+        return {
+          contentType,
+          buffer: Buffer.alloc(0),
+          truncated: true,
+          sizeBytes: total,
+        };
+      }
+      const buffer = Buffer.concat(chunks.map((c) => Buffer.from(c)));
+      return { contentType, buffer, sizeBytes: buffer.length };
+    }
+
+    const arrayBuffer = await mapAbort(res.arrayBuffer());
+    const buffer = Buffer.from(arrayBuffer);
+    return { contentType, buffer, sizeBytes: buffer.length };
+  } finally {
+    cleanup();
+  }
 }
 
 /**
@@ -474,7 +542,7 @@ export async function capsulePostBinary<T>(
   if (isReadOnly()) throw new CapsuleReadOnlyError("POST");
   const token = getToken();
   const url = buildUrl(path);
-  const res = await doFetch(url, {
+  const { res, cleanup } = await doFetch(url, {
     method: "POST",
     headers: {
       ...baseHeaders(token),
@@ -484,7 +552,11 @@ export async function capsulePostBinary<T>(
     },
     body,
   });
-  return handleResponse<T>(res);
+  try {
+    return await handleResponse<T>(res);
+  } finally {
+    cleanup();
+  }
 }
 
 /**
@@ -496,14 +568,17 @@ export async function capsuleDelete(path: string): Promise<void> {
   if (isReadOnly()) throw new CapsuleReadOnlyError("DELETE");
   const token = getToken();
   const url = buildUrl(path);
-  const res = await doFetch(url, {
+  const { res, cleanup } = await doFetch(url, {
     method: "DELETE",
     headers: baseHeaders(token),
   });
+  try {
+    if (res.status === 204) return;
+    await throwForStatus(res);
 
-  if (res.status === 204) return;
-  await throwForStatus(res);
-
-  // 2xx-but-not-204: drain the body so the connection can be reused.
-  await res.text();
+    // 2xx-but-not-204: drain the body so the connection can be reused.
+    await mapAbort(res.text());
+  } finally {
+    cleanup();
+  }
 }

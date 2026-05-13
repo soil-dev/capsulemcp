@@ -304,6 +304,34 @@ describe("doFetch retry-on-429", () => {
     await expect(capsuleGet("/test")).rejects.toThrow(/Capsule API request timed out after 60s/);
   });
 
+  it("converts mid-body-stream AbortError into a clean CapsuleApiError 504", async () => {
+    // Regression: pre-1.0 the timeout AbortController was cleared in
+    // a `finally` block of the fetch() call itself, so a Capsule
+    // response that returned headers promptly but then stalled
+    // mid-body (`res.json()` / `res.arrayBuffer()` / streaming read)
+    // ran un-timed, pinning the request indefinitely. The fix keeps
+    // the timer alive through body consumption and routes every
+    // body-read site through mapAbort() so a streaming abort surfaces
+    // as the same 504 a fetch-stage abort does.
+    //
+    // The mock here simulates exactly that: fetch() resolves with a
+    // Response whose `json()` rejects with AbortError, mimicking the
+    // controller firing after the headers arrived.
+    vi.mocked(fetch).mockResolvedValueOnce({
+      status: 200,
+      ok: true,
+      headers: new Headers(),
+      json: async () => {
+        const err = new Error("The operation was aborted");
+        err.name = "AbortError";
+        throw err;
+      },
+      statusText: "200",
+    } as Awaited<ReturnType<typeof fetch>>);
+    const { capsuleGet } = await import("../src/capsule/client.js");
+    await expect(capsuleGet("/test")).rejects.toThrow(/Capsule API request timed out after 60s/);
+  });
+
   it("does NOT retry on 401 (auth error surfaces immediately)", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(makeResponse(401, { message: "Bad credentials" }));
 
