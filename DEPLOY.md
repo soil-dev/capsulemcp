@@ -261,6 +261,32 @@ The `client_secret`. Without it, `/token` returns `invalid_client` no matter wha
 | Cloud Run logs → alerting on anomalous patterns | low | Visibility into misuse |
 | Per-user OAuth via Capsule's own OAuth | high | Real per-user identity in Capsule's audit log |
 
+### Rate limiting and the `MCP_HTTP_TRUST_PROXY` setting
+
+The server runs two distinct rate limiters:
+
+- **Authenticated `/mcp`** — keyed by the OAuth `client_id`. Independent of network topology; one runaway caller can't burn the shared Capsule quota for others.
+- **Unauthenticated `/authorize`, `/token`, `/register`** — keyed by client IP. This is where `MCP_HTTP_TRUST_PROXY` matters.
+
+**What it controls.** `MCP_HTTP_TRUST_PROXY` is passed to express's `app.set("trust proxy", N)`. `N` is the number of reverse-proxy hops the server should trust to have set `X-Forwarded-For` honestly. Express walks the header right-to-left, skipping `N` entries, and treats the next IP as the client. Get this wrong and rate-limit bucketing breaks in one of two ways:
+
+- **Too low** (e.g. `0` with a proxy in front): every request looks like it came from the proxy. All clients share one bucket → legitimate users get 429'd by each other.
+- **Too high** (e.g. `1` with no proxy in front): the server blindly trusts whatever the *client* sets in `X-Forwarded-For`. An attacker can send `X-Forwarded-For: 1.2.3.4` to attribute their request to any IP they like, sidestepping their per-IP bucket entirely.
+
+**Picking the right value.** Count the reverse-proxy hops between the public client and your container.
+
+| Deployment topology | `MCP_HTTP_TRUST_PROXY` |
+|---|---|
+| Cloud Run, no fronting CDN (the default and the worked example here) | `1` |
+| Cloud Run + Cloudflare in front | `2` |
+| Cloud Run + Cloudflare + an internal nginx for redaction | `3` |
+| Direct container exposed on a public IP, no proxy at all | `0` |
+| Behind a load balancer that itself sits behind a CDN | sum the hops |
+
+If you're not sure, hit your `/authorize` endpoint with a deliberately-bogus `X-Forwarded-For` and inspect Cloud Run's request logs (`httpRequest.remoteIp`) — that's the IP express derived. If it's the bogus value you sent, the setting is too high; if it's a proxy's IP rather than a real client's, it's too low.
+
+The default `1` is correct for the Cloud Run worked example in this doc. The variable exists so that operators with a different topology don't have to fork the connector to fix their rate limiter.
+
 ## Operations
 
 ### Rotation cadences
