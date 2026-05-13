@@ -44,7 +44,7 @@ Out of scope:
   the MCP working group as appropriate.
 - Vulnerabilities in transitive dependencies that don't have a
   reachable code path here. `npm audit --audit-level=high` runs on
-  every PR; advisories that path is already handles itself.
+  every PR; advisories on that path are already handled there.
 
 ## Versioning of fixes
 

@@ -32,9 +32,9 @@ versions adhere to [Semantic Versioning](https://semver.org).
   where to look for deeper docs.
 - **Example-value scrub.** A handful of tool descriptions and test
   fixtures used the operator's real social handle and a real
-  production-tenant user id/username as illustrative values; replaced
-  with synthetic `@acmeco`, `123456`, `"alice"` so every install ships
-  with neutral examples.
+  production-tenant user id/username plus production-looking party ids
+  as illustrative values; replaced with synthetic `@acmeco`, `123456`,
+  `"alice"` so every install ships with neutral examples.
 
 ### Fixed
 
