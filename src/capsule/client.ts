@@ -198,21 +198,21 @@ async function parseErrorBody(res: Response): Promise<string> {
  * (e.g. fake-timer tests that drive the 429-retry delay) can pass
  * their own signal.
  *
- * Backstory: early alpha verification surfaced two transient hangs
- * (on `remove_tag_by_id` and `list_entity_tracks`) shaped like "tool
- * call hung for ~4 minutes". At the time we attributed them to
- * Capsule slowness and added this timeout to cap the wait at 60s.
- * Subsequent verification rounds couldn't reproduce either hang —
- * the beta.1 stress loop ran 24 back-to-back `remove_tag_by_id`
- * calls on the same party with zero anomalies. The original
- * observations were almost certainly higher up the stack — the
+ * Backstory: early alpha verification surfaced three "tool call
+ * hung for ~4 minutes" reports (on `add_additional_party`,
+ * `remove_tag_by_id`, and `list_entity_tracks`). The operator
+ * later confirmed all three were the same artifact: the
  * Claude.ai tool-approval prompt's own timeout firing while the
- * user was elsewhere, before the connector was ever invoked. Our
- * endpoint had no call to time out. So this timeout doesn't
- * address those specific reports (they weren't real connector
- * hangs), but it is still the right thing to have: real Capsule
- * slowness, DNS hiccups, TCP keepalive holes, and Capsule outages
- * that return slowly all benefit from a bounded outbound budget.
+ * operator was AFK and never clicked "approve" — the tool call
+ * never reached the connector at all. So those reports weren't
+ * connector hangs; they're an interaction-design quirk between
+ * Claude.ai's tool-approval UX and an absent operator.
+ *
+ * This timeout doesn't address those reports (it can't — the
+ * connector isn't involved in that failure mode), but it is
+ * still the right thing to have: real Capsule slowness, DNS
+ * hiccups, TCP keepalive holes, and Capsule outages that return
+ * slowly all benefit from a bounded outbound budget.
  */
 const REQUEST_TIMEOUT_MS = 60_000;
 
