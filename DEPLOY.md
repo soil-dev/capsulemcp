@@ -56,6 +56,7 @@ If neither mode is configured, the server **refuses to start**. There's no path 
 | `MCP_HTTP_RATE_LIMIT_WINDOW_MS` | optional | Window in ms for the above (default `60000`) |
 | `MCP_HTTP_RATE_LIMIT_DISABLED` | optional | Set to `1` to disable the `/mcp` rate limiter entirely. Test-only |
 | `MCP_HTTP_DEBUG` | optional | Set to `1` to include full `err.message` in `/mcp` error logs (default: low-cardinality summary only, to avoid Capsule response bodies smearing across log aggregators) |
+| `MCP_HTTP_TRUST_PROXY` | optional | Integer 0..10 (default `1`). Number of proxy hops to trust when deriving the client IP for the unauthenticated-path rate limiter. `1` is correct for single-frontend deployments like Cloud Run. Set `2+` for multi-hop ingress (Cloudflare → Cloud Run). Set `0` for bare-IP deployments with no proxy in front, otherwise a client can spoof `X-Forwarded-For` to dodge their per-IP bucket. Authenticated `/mcp` is unaffected — it keys by `client_id` |
 | `PORT` | optional | Listen port (Cloud Run injects automatically; default 8080) |
 
 Generate strong values:
