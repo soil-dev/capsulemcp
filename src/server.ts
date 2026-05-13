@@ -333,7 +333,7 @@ export function createCapsuleMcpServer(): McpServer {
       updateTrackSchema, updateTrack);
 
     registerTool(server, "remove_track",
-      "Remove a track instance from its entity. Tasks already created by the track stay on the entity and must be deleted separately if desired. Requires confirm=true. Idempotent on retry: response is `{removed: true, alreadyRemoved: false, trackId}` on a fresh remove or `{removed: true, alreadyRemoved: true, trackId}` if the track was already gone.",
+      "Remove a track instance from its entity. Capsule also deletes the auto-tasks the track created when it was applied; copy any task details you need before removing the track. Requires confirm=true. Idempotent on retry: response is `{removed: true, alreadyRemoved: false, trackId}` on a fresh remove or `{removed: true, alreadyRemoved: true, trackId}` if the track was already gone.",
       removeTrackSchema, removeTrack);
   }
 

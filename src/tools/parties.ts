@@ -31,11 +31,16 @@ const PhoneNumberSchema = z.object({
   type: z.string().optional(),
 });
 
+const CountryDescription =
+  "Country name. Capsule validates this against a small canonical-English-name dictionary; inputs not in the dictionary are REJECTED with 422 'address.country: unknown country' (NOT silently passed through or normalised). " +
+  "Probed examples — accepted: `United States`, `United Kingdom`, `Czechia`, `Germany`. Aliased: `USA → United States`. Rejected: `United States of America`, `Czech Republic` (use `Czechia`), `UK`/`Britain` (use `United Kingdom`), `Deutschland` (use `Germany`). " +
+  "Empty string is accepted and stored as `null` — a de-facto 'clear' shape. To discover an accepted name, read an existing party that already has the country set.";
+
 const AddressSchema = z.object({
   street: z.string().optional(),
   city: z.string().optional(),
   state: z.string().optional(),
-  country: z.string().optional(),
+  country: z.string().optional().describe(CountryDescription),
   zip: z.string().optional(),
 });
 
@@ -438,11 +443,7 @@ export const addPartyAddressSchema = z.object({
   country: z
     .string()
     .optional()
-    .describe(
-      "Country name. Capsule validates this against a small canonical-English-name dictionary; inputs not in the dictionary are REJECTED with 422 'address.country: unknown country' (NOT silently passed through or normalised). " +
-        "Probed examples — accepted: `United States`, `United Kingdom`, `Czechia`, `Germany`. Aliased: `USA → United States`. Rejected: `United States of America`, `Czech Republic` (use `Czechia`), `UK`/`Britain` (use `United Kingdom`), `Deutschland` (use `Germany`). " +
-        "Empty string is accepted and stored as `null` — a de-facto 'clear' shape. To discover an accepted name, read an existing party that already has the country set.",
-    ),
+    .describe(CountryDescription),
   zip: z.string().optional(),
   type: z.string().optional().describe("Free-form label, e.g. 'Office', 'Home'."),
 });

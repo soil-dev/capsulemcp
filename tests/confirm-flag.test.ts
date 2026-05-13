@@ -8,7 +8,7 @@ import { removeTrackSchema } from "../src/tools/tracks.js";
 import { removeAdditionalPartySchema } from "../src/tools/relationships.js";
 
 const EXPECTED =
-  "confirm: true is required to perform this irreversible operation (set the parameter explicitly to acknowledge the destructive intent)";
+  "confirm: true is required to perform this destructive operation (set the parameter explicitly to acknowledge the destructive intent)";
 
 // Each gated schema gets a minimal base input that's valid except for
 // the `confirm` field. The shape varies (id vs trackId vs entity-tuple)

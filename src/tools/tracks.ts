@@ -23,8 +23,8 @@ import {
 //   update_track(trackId, body)
 //     PUT /tracks/{id} — passthrough; usable to e.g. mark complete
 //   remove_track(trackId, confirm)
-//     DELETE /tracks/{id} — remove the instance; tasks already
-//     created by the track stay (Capsule's behaviour)
+//     DELETE /tracks/{id} — remove the instance; Capsule also deletes
+//     the auto-tasks the track created when it was applied
 //
 // Entity for list_entity_tracks is "parties", "opportunities", or
 // "kases". apply_track intentionally exposes only "kases" and
