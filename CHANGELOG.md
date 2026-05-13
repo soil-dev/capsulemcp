@@ -11,8 +11,28 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`create_opportunity.value.currency` missing-field error is now
+  operator-readable.** Previously the schema emitted Zod's default
+  `"Invalid input: expected string, received undefined"` when
+  `value: { amount: N }` was supplied without `currency` — technically
+  correct but unhelpful at a callsite. Custom `error` on the currency
+  field now produces `"currency is required when amount is set
+  (3-letter ISO 4217 code, e.g. 'USD', 'EUR', 'GBP')"` for the
+  missing-field case specifically. Length and type errors still fall
+  through to Zod's defaults so callers see exactly which constraint
+  failed. Test coverage in `tests/opportunities.test.ts`.
+
 ### Documented
 
+- **`create_task` description now covers the no-target case.** §4
+  production verification confirmed Capsule accepts a task with no
+  `partyId` / `opportunityId` / `projectId` (standalone task — useful
+  for personal reminders or workflow tasks not tied to a CRM record).
+  The previous description only spelled out the mutex; the no-target
+  outcome was undocumented. Description now says "omitting all three
+  is also valid" with the intended use case.
 - **Address `country` field is dictionary-validated, not
   free-text.** §1 production verification showed that Capsule
   rejects inputs not in its canonical-English-name dictionary

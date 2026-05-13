@@ -15,10 +15,20 @@ import {
 // Capsule rejects {amount} without a currency on opportunity create/update
 // (422 Validation Failed). Make currency required at the schema layer so
 // the error surfaces before the HTTP call.
+//
+// The custom `error` on `currency` intercepts ONLY the
+// missing-field (invalid_type / undefined) case to produce an
+// operator-readable message; length/type errors still flow through the
+// default Zod messages so callers see exactly which constraint failed.
 const OpportunityValueSchema = z.object({
   amount: z.number().nonnegative(),
   currency: z
-    .string()
+    .string({
+      error: (iss) =>
+        iss.code === "invalid_type" && iss.input === undefined
+          ? "currency is required when amount is set (3-letter ISO 4217 code, e.g. 'USD', 'EUR', 'GBP')"
+          : undefined,
+    })
     .length(3)
     .describe(
       "ISO 4217 currency code (3 letters), e.g. 'GBP', 'USD', 'EUR'. Required when amount is set.",

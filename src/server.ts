@@ -353,7 +353,9 @@ export function createCapsuleMcpServer(): McpServer {
 
   if (!readOnly) {
     registerTool(server, "create_task",
-      "Create a new task, optionally linked to a party, opportunity, or project.",
+      "Create a new task, optionally linked to a party, opportunity, or project. " +
+        "Pass at most ONE of partyId / opportunityId / projectId — the connector rejects multi-target inputs before the HTTP call. " +
+        "Omitting all three is also valid: Capsule creates the task as a STANDALONE task (no parent link), useful for personal reminders or workflow tasks that aren't tied to a specific CRM record.",
       createTaskSchema, createTask);
 
     registerTool(server, "update_task",

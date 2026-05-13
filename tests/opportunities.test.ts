@@ -137,6 +137,51 @@ describe("updateOpportunity", () => {
   });
 });
 
+describe("OpportunityValueSchema custom error", () => {
+  it("emits an operator-readable message when currency is missing (amount supplied)", async () => {
+    const { createOpportunitySchema } = await import(
+      "../src/tools/opportunities.js"
+    );
+    const r = createOpportunitySchema.safeParse({
+      name: "X",
+      partyId: 1,
+      milestoneId: 1,
+      value: { amount: 100 },
+    });
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      const issue = r.error.issues.find(
+        (i) => i.path.join(".") === "value.currency",
+      );
+      expect(issue?.message).toBe(
+        "currency is required when amount is set (3-letter ISO 4217 code, e.g. 'USD', 'EUR', 'GBP')",
+      );
+    }
+  });
+
+  it("falls through to the default Zod message on length violation", async () => {
+    const { createOpportunitySchema } = await import(
+      "../src/tools/opportunities.js"
+    );
+    const r = createOpportunitySchema.safeParse({
+      name: "X",
+      partyId: 1,
+      milestoneId: 1,
+      value: { amount: 100, currency: "GB" },
+    });
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      const issue = r.error.issues.find(
+        (i) => i.path.join(".") === "value.currency",
+      );
+      // The custom error is scoped to missing-field; length/type errors
+      // still get Zod defaults so callers see exactly which constraint failed.
+      expect(issue?.message).not.toMatch(/required when amount is set/);
+      expect(issue?.message).toMatch(/Too small/);
+    }
+  });
+});
+
 describe("getOpportunities (batch)", () => {
   it("GETs /opportunities/{ids}", async () => {
     mockFetch(200, { opportunities: [{ id: 1 }] });
