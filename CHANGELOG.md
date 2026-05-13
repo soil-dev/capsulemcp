@@ -34,14 +34,15 @@ versions adhere to [Semantic Versioning](https://semver.org).
 - **`CONTRIBUTING.md`** added — short pointer doc covering the
   pre-PR gate, coding-style rules (mostly: "let Biome handle it"), and
   where to look for deeper docs.
-- **Operator-handle scrub.** `@anton` (operator's social handle) was
-  used as the example in `add_party_website` / `update_party.websites`
-  tool descriptions and as a fixture in `tests/parties.test.ts`;
-  replaced with a synthetic `@acmeco`. The production-tenant user id
-  `643698` and username `"anton"` in `tests/tasks.test.ts` and
-  `tests/users.test.ts` were swapped for synthetic `123456` /
-  `"alice"`. `scripts/check-leaks.sh` extended with patterns for all
-  three so a future regression fails CI.
+- **Operator-handle scrub.** The operator's actual social handle had
+  been used as the example value for `address` in `add_party_website`
+  and `update_party.websites` tool descriptions (visible to every
+  installer) and as a fixture in `tests/parties.test.ts`; replaced
+  with a synthetic `@acmeco`. The production-tenant user id and
+  username in `tests/tasks.test.ts` and `tests/users.test.ts` were
+  similarly swapped for synthetic `123456` / `"alice"`.
+  `scripts/check-leaks.sh` extended with patterns for the prior
+  values so a future regression fails CI.
 
 ### Fixed
 
