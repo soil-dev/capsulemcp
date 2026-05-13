@@ -11,6 +11,12 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.0.0-beta.4] — 2026-05-13
+
+Pre-1.0 security review pass. Three Sev-3 findings fixed in code,
+two captured as documented limitations, plus the tooling/hygiene
+work that accumulated since beta.3.
+
 ### Security
 
 - **Per-request timeout now covers body consumption, not just

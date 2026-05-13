@@ -22,7 +22,7 @@ Paste this into the file (merge with existing `mcpServers` if you have other con
   "mcpServers": {
     "capsule": {
       "command": "npx",
-      "args": ["-y", "github:soil-dev/capsulemcp#v1.0.0-beta.3"],
+      "args": ["-y", "github:soil-dev/capsulemcp#v1.0.0-beta.4"],
       "env": {
         "CAPSULE_API_TOKEN": "<your read-scoped capsule token>",
         "CAPSULE_MCP_READONLY": "1"
@@ -39,7 +39,7 @@ Restart Claude Desktop. The Capsule tools appear in the tool picker.
 ## Path 2 — Claude Code
 
 ```sh
-claude mcp add capsule --env CAPSULE_API_TOKEN=<your token> -- npx -y github:soil-dev/capsulemcp#v1.0.0-beta.3
+claude mcp add capsule --env CAPSULE_API_TOKEN=<your token> -- npx -y github:soil-dev/capsulemcp#v1.0.0-beta.4
 ```
 
 This writes the entry to Claude Code's MCP config (`~/.claude.json`). Same `env` model as Claude Desktop's JSON — no shell-export needed.
@@ -48,7 +48,7 @@ If you'd rather not have the token in `~/.claude.json`, omit the `--env` flag an
 
 ```sh
 export CAPSULE_API_TOKEN=<your token>
-claude mcp add capsule -- npx -y github:soil-dev/capsulemcp#v1.0.0-beta.3
+claude mcp add capsule -- npx -y github:soil-dev/capsulemcp#v1.0.0-beta.4
 ```
 
 ## Path 3 — Manual install (for development)
