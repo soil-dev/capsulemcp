@@ -39,7 +39,7 @@ const AddressSchema = z.object({
 
 // Capsule's API names this field `address`, not `url`. The name is
 // generic because the value depends on `service`: a URL when
-// `service: "URL"`, but a handle (e.g. "@anton") for social
+// `service: "URL"`, but a handle (e.g. "@acmeco") for social
 // services like "TWITTER", "INSTAGRAM" — so URL-validation here
 // would reject valid Capsule data. The 422 message Capsule returns
 // when the wrong key is sent is "website.address: address is required".
@@ -48,7 +48,7 @@ const WebsiteSchema = z.object({
     .string()
     .min(1)
     .describe(
-      "The website address. A URL when service='URL', or a handle (e.g. '@anton') for social services like 'TWITTER', 'INSTAGRAM'. Capsule names this field `address` regardless of service type.",
+      "The website address. A URL when service='URL', or a handle (e.g. '@acmeco') for social services like 'TWITTER', 'INSTAGRAM'. Capsule names this field `address` regardless of service type.",
     ),
   // Capsule's complete service list, copied verbatim from a 422
   // response body for a `PIGEON_POST` test:
@@ -478,7 +478,7 @@ export const addPartyWebsiteSchema = z.object({
     .string()
     .min(1)
     .describe(
-      "The website address. A URL when service='URL', or a handle (e.g. '@anton') for social services.",
+      "The website address. A URL when service='URL', or a handle (e.g. '@acmeco') for social services.",
     ),
   service: z
     .enum([

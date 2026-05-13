@@ -152,7 +152,7 @@ describe("atomic child-array operations", () => {
     expect(
       addPartyWebsiteSchema.safeParse({
         partyId: 1,
-        address: "@anton",
+        address: "@acmeco",
         service: "BLUESKY",
       }).success,
     ).toBe(true);
@@ -163,11 +163,11 @@ describe("atomic child-array operations", () => {
     const { addPartyWebsite } = await import("../src/tools/parties.js");
     await addPartyWebsite({
       partyId: 99,
-      address: "@anton",
+      address: "@acmeco",
       service: "TWITTER",
     });
     const body = JSON.parse((vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string);
-    expect(body.party.websites).toEqual([{ address: "@anton", service: "TWITTER" }]);
+    expect(body.party.websites).toEqual([{ address: "@acmeco", service: "TWITTER" }]);
   });
 
   it("remove_party_website_by_id PUTs the destroy entry", async () => {
@@ -233,7 +233,7 @@ describe("createParty", () => {
     const ok = createPartySchema.safeParse({
       type: "person",
       firstName: "X",
-      websites: [{ address: "@anton", service: "BLUESKY" }],
+      websites: [{ address: "@acmeco", service: "BLUESKY" }],
     });
     expect(ok.success).toBe(true);
   });
@@ -256,11 +256,11 @@ describe("createParty", () => {
     await createParty({
       type: "person",
       firstName: "X",
-      websites: [{ address: "@anton", service: "TWITTER" }],
+      websites: [{ address: "@acmeco", service: "TWITTER" }],
     });
     const [, options] = vi.mocked(fetch).mock.calls[0]!;
     const body = JSON.parse(String((options as RequestInit).body));
-    expect(body.party.websites).toEqual([{ address: "@anton", service: "TWITTER" }]);
+    expect(body.party.websites).toEqual([{ address: "@acmeco", service: "TWITTER" }]);
   });
 });
 

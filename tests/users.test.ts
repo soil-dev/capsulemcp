@@ -41,7 +41,7 @@ describe("listUsers", () => {
 
 describe("getCurrentUser", () => {
   it("hits /users/current (NOT /users/me — see NOTES-ON-CAPSULE-API.md §5)", async () => {
-    mockFetch(200, { user: { id: 643698, username: "anton" } });
+    mockFetch(200, { user: { id: 123456, username: "alice" } });
 
     const { getCurrentUser } = await import("../src/tools/users.js");
     const result = await getCurrentUser({});
@@ -49,6 +49,6 @@ describe("getCurrentUser", () => {
     const [url] = vi.mocked(fetch).mock.calls[0]!;
     expect(url).toContain("/users/current");
     expect(url).not.toContain("/users/me");
-    expect((result as { user: { username: string } }).user.username).toBe("anton");
+    expect((result as { user: { username: string } }).user.username).toBe("alice");
   });
 });

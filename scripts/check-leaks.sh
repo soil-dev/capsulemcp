@@ -29,10 +29,20 @@ EXCLUDES=(
 
 # Operator/tenant terms that should not appear in the public repo.
 # Each pattern is anchored loosely; case-insensitive.
+#
+# The `anton` / `643698` patterns guard the operator's personal handle
+# and the production tenant's user id — both slipped into example
+# strings and test fixtures during the alpha/beta cycle and were
+# scrubbed at the end of beta. The LICENSE / README copyright line
+# uses "Anton Arapov" intentionally and is excluded below.
 PATTERNS=(
   'openssl[-_ ]?(corp|corporation|foundation|internal)'
   'soil[-_ ]?dev[-/]internal'
   '\bkajal\b'
+  '@anton\b'
+  '"anton"'
+  "'anton'"
+  '\b643698\b'
 )
 
 fail=0

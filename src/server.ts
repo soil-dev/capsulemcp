@@ -383,7 +383,7 @@ export function createCapsuleMcpServer(): McpServer {
     registerTool(
       server,
       "add_party_website",
-      "Append a single website / social handle to a party. Atomic — one PUT to Capsule. Use this instead of update_party.websites for single-entry adds. The 'address' field is a URL when service='URL' or a handle (e.g. '@anton') for social services.",
+      "Append a single website / social handle to a party. Atomic — one PUT to Capsule. Use this instead of update_party.websites for single-entry adds. The 'address' field is a URL when service='URL' or a handle (e.g. '@acmeco') for social services.",
       addPartyWebsiteSchema,
       addPartyWebsite,
     );

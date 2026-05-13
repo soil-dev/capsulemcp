@@ -26,10 +26,10 @@ describe("listTasks", () => {
     mockFetch(200, { tasks: [] });
 
     const { listTasks } = await import("../src/tools/tasks.js");
-    await listTasks({ ownerId: 643698, page: 1, perPage: 25 });
+    await listTasks({ ownerId: 123456, page: 1, perPage: 25 });
 
     const [url] = vi.mocked(fetch).mock.calls[0]!;
-    expect(url).toContain("owner=643698");
+    expect(url).toContain("owner=123456");
     expect(url).not.toContain("ownerId=");
     expect(url).not.toContain("assignedToUserId=");
   });

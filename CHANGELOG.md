@@ -34,6 +34,14 @@ versions adhere to [Semantic Versioning](https://semver.org).
 - **`CONTRIBUTING.md`** added — short pointer doc covering the
   pre-PR gate, coding-style rules (mostly: "let Biome handle it"), and
   where to look for deeper docs.
+- **Operator-handle scrub.** `@anton` (operator's social handle) was
+  used as the example in `add_party_website` / `update_party.websites`
+  tool descriptions and as a fixture in `tests/parties.test.ts`;
+  replaced with a synthetic `@acmeco`. The production-tenant user id
+  `643698` and username `"anton"` in `tests/tasks.test.ts` and
+  `tests/users.test.ts` were swapped for synthetic `123456` /
+  `"alice"`. `scripts/check-leaks.sh` extended with patterns for all
+  three so a future regression fails CI.
 
 ### Fixed
 
@@ -1192,7 +1200,7 @@ tests.
   rejects that with `422 website.address: address is required` — the
   v2 API names it `address` regardless of service type, because the
   value can be a URL (`service: "URL"`), a Twitter handle
-  (`service: "TWITTER"`, e.g. `@anton`), an Instagram handle, etc.
+  (`service: "TWITTER"`, e.g. `@acmeco`), an Instagram handle, etc.
   URL-validation here would also reject those non-URL values. Renamed
   the schema field `url` → `address`, dropped the `.url()` validator
   (a string is correct), and added regression tests that lock both
