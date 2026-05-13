@@ -77,7 +77,7 @@ describe("uploadAttachment", () => {
       filename: "report.pdf",
       contentType: "application/pdf",
       dataBase64: data,
-      partyId: 254022688,
+      partyId: 123456,
     });
 
     // Two calls: POST /attachments/upload, POST /entries.
@@ -100,7 +100,7 @@ describe("uploadAttachment", () => {
     expect(eInit.method).toBe("POST");
     const sent = JSON.parse(eInit.body);
     expect(sent.entry.type).toBe("note");
-    expect(sent.entry.party).toEqual({ id: 254022688 });
+    expect(sent.entry.party).toEqual({ id: 123456 });
     expect(sent.entry.attachments).toEqual([
       {
         token: "u1/e0/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/abc123/xyz789",

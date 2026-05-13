@@ -17,9 +17,9 @@ describe("listEmployees", () => {
   it("GETs /parties/{id}/people and returns parties array", async () => {
     mockFetch(200, { parties: [{ id: 1, type: "person", firstName: "A" }] });
     const { listEmployees } = await import("../src/tools/audit.js");
-    const result = await listEmployees({ partyId: 254022688, page: 1, perPage: 25 });
+    const result = await listEmployees({ partyId: 123456, page: 1, perPage: 25 });
     const [url] = vi.mocked(fetch).mock.calls[0]!;
-    expect(url).toContain("/parties/254022688/people");
+    expect(url).toContain("/parties/123456/people");
     expect(result.parties).toHaveLength(1);
   });
 
