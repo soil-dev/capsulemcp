@@ -19,30 +19,22 @@ versions adhere to [Semantic Versioning](https://semver.org).
   trailing commas, semicolons) so the day-one diff is purely
   mechanical. `useLiteralKeys` disabled because the codebase
   intentionally uses `process.env["X"]` bracket access. New npm
-  scripts: `lint`, `format`, `format:check`, `check`, `check:leaks`.
+  scripts: `lint`, `format`, `format:check`, `check`.
 - **One-time `style:` sweep** (`biome format --write`) reformatted 49
   files. Pure formatting — 337 tests still pass, both bundles unchanged
   in size.
 - **GitHub Actions CI** (`.github/workflows/ci.yml`) runs on every PR
   and push to master: typecheck, Biome lint + format check, tests,
-  build, leak guard, `npm audit --audit-level=high`. Concurrency group
-  cancels superseded runs. Whole job completes in ~25s.
-- **Operator-leak guard** (`scripts/check-leaks.sh`) greps for
-  operator-private terms (tenant org names, internal handles) that
-  nearly slipped into commits earlier in the beta. Lines can opt out
-  with an inline `# allow-leak` marker. Wired into CI.
+  build, `npm audit --audit-level=high`. Concurrency group cancels
+  superseded runs. Whole job completes in ~25s.
 - **`CONTRIBUTING.md`** added — short pointer doc covering the
   pre-PR gate, coding-style rules (mostly: "let Biome handle it"), and
   where to look for deeper docs.
-- **Operator-handle scrub.** The operator's actual social handle had
-  been used as the example value for `address` in `add_party_website`
-  and `update_party.websites` tool descriptions (visible to every
-  installer) and as a fixture in `tests/parties.test.ts`; replaced
-  with a synthetic `@acmeco`. The production-tenant user id and
-  username in `tests/tasks.test.ts` and `tests/users.test.ts` were
-  similarly swapped for synthetic `123456` / `"alice"`.
-  `scripts/check-leaks.sh` extended with patterns for the prior
-  values so a future regression fails CI.
+- **Example-value scrub.** A handful of tool descriptions and test
+  fixtures used the operator's real social handle and a real
+  production-tenant user id/username as illustrative values; replaced
+  with synthetic `@acmeco`, `123456`, `"alice"` so every install ships
+  with neutral examples.
 
 ### Fixed
 

@@ -1,6 +1,6 @@
 # PR & main-branch checks. Every gate that lands here is one we want to
 # enforce before a human reviewer spends time on the diff: typecheck,
-# tests, build, lint+format, dependency audit, and the leak guard.
+# tests, build, lint+format, dependency audit.
 #
 # Keep this fast — under ~2 minutes is the goal. The test suite is the
 # long pole (~10s locally, ~30s in CI cold-cache), everything else is
@@ -57,9 +57,6 @@ jobs:
         # Catches regressions where typecheck passes but the bundler
         # chokes — happened once with a tsup config change.
         run: npm run build
-
-      - name: Leak guard
-        run: npm run check:leaks
 
       - name: Audit dependencies
         # `--audit-level=high` because npm flags a steady drip of

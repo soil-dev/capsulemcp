@@ -15,7 +15,6 @@ npm run lint           # Biome lint
 npm run format:check   # Biome format check (run `npm run format` to fix)
 npm test               # vitest (337 tests, all mocked, no token needed)
 npm run build          # tsup — catches bundler-time regressions
-npm run check:leaks    # grep guard for operator-private terms
 ```
 
 `npm run check` runs Biome's combined lint+format check. `npm run format`

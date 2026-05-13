@@ -33,7 +33,6 @@ npm run lint           # Biome lint
 npm run format:check   # Biome format check (run `npm run format` to fix)
 npm test
 npm run build
-npm run check:leaks    # grep for operator-private terms
 ```
 
 All together they take well under a minute on a warm cache.
@@ -262,7 +261,7 @@ push, so they should be passing before you even start a release — but
 re-confirm locally because a release commit shouldn't be the one that
 discovers a regression.
 
-- [ ] **(CI)** `npm run typecheck && npm run lint && npm run format:check && npm test && npm run build && npm run check:leaks` all pass on the commit you're about to tag.
+- [ ] **(CI)** `npm run typecheck && npm run lint && npm run format:check && npm test && npm run build` all pass on the commit you're about to tag.
 - [ ] **`package-lock.json` root version matches `package.json`.** Bumping the two source-of-truth files (package.json + server.ts) doesn't touch the lockfile root — it drifts silently. `npm install --package-lock-only --ignore-scripts` after the bump keeps it honest.
 - [ ] **Three places all match**: `package.json`, `src/server.ts`, `package-lock.json` (root + `packages[""]`).
 - [ ] **`#vX.Y.Z` pins in `README.md` and `INSTALL.md`** point to the new tag. Three locations in each file (the JSON snippet, the `claude mcp add` line, the export-then-add line in INSTALL).

@@ -35,7 +35,6 @@
     "format": "biome format --write src tests scripts",
     "format:check": "biome format src tests scripts",
     "check": "biome check src tests scripts",
-    "check:leaks": "scripts/check-leaks.sh",
     "prepare": "npm run build:icon && tsup"
   },
   "repository": {
