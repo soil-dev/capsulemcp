@@ -789,15 +789,28 @@ from a different pipeline on `update_opportunity` silently
 relocates the opportunity to that pipeline. Same shape for
 `update_project` and stageId.
 
-Worse: `lastOpenMilestone` (which Capsule maintains for "what
-stage did this die at" auditing) can end up referencing a
-milestone in the previous pipeline — broken cross-pipeline
-provenance.
+Second-order quirk: `lastOpenMilestone` (which Capsule maintains
+for "what stage did this die at" auditing) can end up
+referencing a milestone in the previous pipeline — broken
+cross-pipeline provenance.
 
-**Practical impact:** real risk for any workflow that constructs
-milestoneId values from caller input without first checking the
-opportunity's current pipeline. A typo or stale id can move a
-deal across the org's pipeline boundary without warning.
+**Is this a Capsule bug?** Defensible as a deliberate design
+choice: in Capsule's data model the opportunity has one canonical
+relationship (to a milestone), and the pipeline is derived
+(`milestone.pipeline`). The API trades validation for surface
+minimalism. The dangling `lastOpenMilestone` is the only piece
+that's hard to defend as intentional. The behaviour has been
+stable across the API-v2 lifetime, and Capsule's web UI requires
+an explicit pipeline-selector step for the same mutation —
+suggesting the API team has consciously chosen the lower-friction
+surface. We treat this as **documented Capsule behaviour with
+footgun potential**, not a bug to be fixed.
+
+**Practical impact for callers:** real risk for any workflow
+that constructs milestoneId values from caller input without
+first checking the opportunity's current pipeline. A typo or
+stale id can move a deal across the org's pipeline boundary
+without warning.
 
 **Workaround:** read the entity first; cross-check the new
 milestone's `pipeline` (or stage's `board`) before issuing the
@@ -807,13 +820,13 @@ update.
 `update_opportunity.milestoneId` and
 [`src/tools/projects.ts`](src/tools/projects.ts)
 `update_project.stageId` both carry a verbose WARNING in their
-descriptions. Captured as Bugs 6 and 7 in the §5-10
-production write-mode bug-report; closed by documentation
-(a connector-side pre-fetch validation was considered and rejected
-as overkill until someone gets bitten).
+descriptions. A connector-side pre-fetch validation was
+considered and rejected as overkill — the description warning
+is sufficient given the design-choice framing.
 
 **No Capsule docs page mentions this.** The relocation is
-accepted as if it were a normal update.
+accepted as if it were a normal update. Re-verified live on
+2026-05-13 against the production tenant.
 
 ---
 
