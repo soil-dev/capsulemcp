@@ -25,6 +25,22 @@ Watch mode while editing:
 npm run test:watch
 ```
 
+The full pre-PR gate (everything CI will check) is:
+
+```sh
+npm run typecheck      # tsc --noEmit
+npm run lint           # Biome lint
+npm run format:check   # Biome format check (run `npm run format` to fix)
+npm test
+npm run build
+npm run check:leaks    # grep for operator-private terms
+```
+
+All together they take well under a minute on a warm cache.
+`.github/workflows/ci.yml` runs the same set plus
+`npm audit --audit-level=high` on every PR. See [CONTRIBUTING.md](CONTRIBUTING.md)
+for the contributor-facing summary.
+
 ## Build
 
 ```sh
@@ -240,8 +256,13 @@ If you also publish a container image and deploy from it, do the image-build + I
 
 ### Pre-release sanity checklist
 
-Easy things to forget that have bitten us before:
+Easy things to forget that have bitten us before. The items prefixed
+**(CI)** are already enforced by `.github/workflows/ci.yml` on every
+push, so they should be passing before you even start a release — but
+re-confirm locally because a release commit shouldn't be the one that
+discovers a regression.
 
+- [ ] **(CI)** `npm run typecheck && npm run lint && npm run format:check && npm test && npm run build && npm run check:leaks` all pass on the commit you're about to tag.
 - [ ] **`package-lock.json` root version matches `package.json`.** Bumping the two source-of-truth files (package.json + server.ts) doesn't touch the lockfile root — it drifts silently. `npm install --package-lock-only --ignore-scripts` after the bump keeps it honest.
 - [ ] **Three places all match**: `package.json`, `src/server.ts`, `package-lock.json` (root + `packages[""]`).
 - [ ] **`#vX.Y.Z` pins in `README.md` and `INSTALL.md`** point to the new tag. Three locations in each file (the JSON snippet, the `claude mcp add` line, the export-then-add line in INSTALL).

@@ -11,6 +11,30 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Tooling
+
+- **Biome added as the project linter + formatter** (`biome.json`).
+  Single binary replaces a notional ESLint+Prettier pair; config tuned
+  to match the existing tree (spaces, 2-width, 100 cols, double quotes,
+  trailing commas, semicolons) so the day-one diff is purely
+  mechanical. `useLiteralKeys` disabled because the codebase
+  intentionally uses `process.env["X"]` bracket access. New npm
+  scripts: `lint`, `format`, `format:check`, `check`, `check:leaks`.
+- **One-time `style:` sweep** (`biome format --write`) reformatted 49
+  files. Pure formatting — 337 tests still pass, both bundles unchanged
+  in size.
+- **GitHub Actions CI** (`.github/workflows/ci.yml`) runs on every PR
+  and push to master: typecheck, Biome lint + format check, tests,
+  build, leak guard, `npm audit --audit-level=high`. Concurrency group
+  cancels superseded runs. Whole job completes in ~25s.
+- **Operator-leak guard** (`scripts/check-leaks.sh`) greps for
+  operator-private terms (tenant org names, internal handles) that
+  nearly slipped into commits earlier in the beta. Lines can opt out
+  with an inline `# allow-leak` marker. Wired into CI.
+- **`CONTRIBUTING.md`** added — short pointer doc covering the
+  pre-PR gate, coding-style rules (mostly: "let Biome handle it"), and
+  where to look for deeper docs.
+
 ### Fixed
 
 - **Friendlier `confirm: true` rejection message on all 7 gated tools.**
