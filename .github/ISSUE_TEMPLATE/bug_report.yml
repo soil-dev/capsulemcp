@@ -1,0 +1,80 @@
+name: Bug report
+description: A connector tool returns the wrong result, errors unexpectedly, or behaves differently than the description says it should.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a report. A focused repro
+        gets a much faster fix — see HOWTO.md "Debug a tool that's
+        misbehaving" if you want to gather extra evidence.
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Tag or commit SHA you're running (e.g. `v1.0.0-beta.3`).
+      placeholder: v1.0.0-beta.3
+    validations:
+      required: true
+
+  - type: dropdown
+    id: transport
+    attributes:
+      label: Transport
+      options:
+        - stdio (Claude Desktop / Claude Code via npx)
+        - HTTP+OAuth (Custom Connector)
+        - Both / not sure
+    validations:
+      required: true
+
+  - type: input
+    id: tool
+    attributes:
+      label: Tool name
+      description: Which MCP tool produced the wrong behaviour (e.g. `filter_parties`, `create_opportunity`).
+      placeholder: filter_parties
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What the tool returned or what error you saw. Include the request arguments if you can.
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-expected
+    attributes:
+      label: What you expected
+      description: What you thought should happen, ideally with a reference to the tool description or Capsule's API docs.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      description: |
+        Minimal steps. If you can paste the exact Claude prompt that
+        triggered it, that helps a lot.
+      render: shell
+
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: Node version, OS, which Claude client. `node --version` + a one-line OS description is plenty.
+      render: shell
+
+  - type: checkboxes
+    id: scrubbed
+    attributes:
+      label: Confirmation
+      options:
+        - label: I've scrubbed any Capsule API tokens or personal data from the report above.
+          required: true

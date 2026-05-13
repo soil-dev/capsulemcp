@@ -1,0 +1,50 @@
+name: Feature request
+description: Suggest a new tool, a new option on an existing tool, or a behaviour change.
+title: "[feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing: please skim [IDEAS.md](../IDEAS.md) — it lists
+        features that are already considered but not yet built. If
+        yours is on that list, a +1 comment there is more useful than
+        a duplicate issue. [DESIGN.md](../DESIGN.md) covers what's
+        intentionally out of scope and why.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: |
+        Describe the use case in plain language. "I want to ask Claude
+        to do X, but the current connector can't because Y." Concrete
+        scenarios beat abstract requirements.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed shape
+      description: |
+        If you have a sketch of how it would look — a tool name,
+        arguments, expected output — drop it here. Rough is fine.
+        If the underlying Capsule endpoint is known, link to its
+        section in <https://developer.capsulecrm.com/v2/operations>.
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Workarounds you've tried, related tools that almost work, etc.
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Confirmation
+      options:
+        - label: I've checked [IDEAS.md](../IDEAS.md) and [DESIGN.md](../DESIGN.md) and this isn't already there.
+          required: true

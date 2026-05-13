@@ -1,0 +1,16 @@
+# Steer the obvious miscategorisations off the issue tracker so the
+# tracker stays focused on connector bugs and feature requests.
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/soil-dev/capsulemcp/security/advisories/new
+    about: Please report privately — see SECURITY.md for the policy.
+  - name: Capsule CRM API question
+    url: https://developer.capsulecrm.com/v2/operations
+    about: Questions about Capsule's own API behaviour belong with Capsule, not this connector.
+  - name: Claude / MCP protocol question
+    url: https://modelcontextprotocol.io
+    about: Questions about Claude or the MCP protocol itself.
+  - name: Install / setup help
+    url: https://github.com/soil-dev/capsulemcp/blob/master/INSTALL.md
+    about: Walk through INSTALL.md first — most setup problems have a recipe there.

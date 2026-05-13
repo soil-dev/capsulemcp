@@ -1,0 +1,45 @@
+# Scheduled version-update PRs. Security-update PRs come automatically
+# from GitHub's auto-managed Dependabot Updates workflow (independent
+# of this file) — see the "Dependabot security updates" toggle in
+# repo Settings → Code security.
+#
+# We batch into two PRs per week (one ecosystem each) instead of one
+# PR per package: tidier, easier to review CI failures attributable
+# to a single batch.
+
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 5
+    groups:
+      # Bundle minor + patch updates into a single PR; majors get
+      # their own PR each so they can be evaluated independently
+      # (semver-major in our dep tree is rare but rarely trivial).
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+    commit-message:
+      prefix: "chore(deps)"
+      include: scope
+    labels:
+      - dependencies
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Etc/UTC
+    commit-message:
+      prefix: "chore(ci)"
+    labels:
+      - dependencies
+      - ci
