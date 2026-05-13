@@ -22,6 +22,85 @@ npx) and HTTP (for hosted clients including Anthropic Custom Connectors)
 — share the same tool surface and Capsule client. The transport is just
 where the bytes flow; the semantics are identical.
 
+## At a glance
+
+```
+                  ┌────────────────────────────────────────────┐
+                  │              Claude (the LLM)              │
+                  └────────────────────────────────────────────┘
+                          │                       │
+            MCP / stdio   │                       │   MCP / HTTP + OAuth
+            (local pipe)  │                       │   (over TLS)
+                          ▼                       ▼
+       ┌───────────────────────────┐    ┌───────────────────────────┐
+       │ Claude Desktop / Code     │    │ Claude.ai (Custom         │
+       │ — runs `npx capsulemcp`   │    │   Connector)              │
+       │   as a child process      │    │ — calls a hosted instance │
+       └───────────────────────────┘    └───────────────────────────┘
+                          │                       │
+                          ▼                       ▼
+                ┌────────────────┐      ┌────────────────────────────┐
+                │ dist/index.js  │      │ dist/http.js               │
+                │ (stdio entry)  │      │ (HTTP entry)               │
+                │                │      │                            │
+                │ no auth layer  │      │ ┌─OAuth / Bearer──────┐    │
+                │ — env-var      │      │ │ stateless HMAC-     │    │
+                │   token only   │      │ │ signed access +     │    │
+                │                │      │ │ refresh tokens      │    │
+                │                │      │ │ (1d / 30d TTL)      │    │
+                │                │      │ └─────────────────────┘    │
+                │                │      │ ┌─express-rate-limit──┐    │
+                │                │      │ │ per-client throttle │    │
+                │                │      │ └─────────────────────┘    │
+                └────────────────┘      └────────────────────────────┘
+                          │                       │
+                          └───────────┬───────────┘
+                                      ▼
+                          ┌────────────────────────┐
+                          │ src/server.ts          │
+                          │   • tool registration  │
+                          │   • read-only gate     │
+                          │     (CAPSULE_MCP_      │
+                          │       READONLY=1)      │
+                          │   • confirm-flag gate  │
+                          │     on destructive     │
+                          │     tools              │
+                          └────────────────────────┘
+                                      │
+                                      ▼
+                          ┌────────────────────────┐
+                          │ src/tools/*.ts         │
+                          │ (81 tools across the   │
+                          │  Capsule resource      │
+                          │  graph — see README)   │
+                          └────────────────────────┘
+                                      │
+                                      ▼
+                          ┌────────────────────────┐
+                          │ src/capsule/client.ts  │
+                          │   • undici fetch       │
+                          │   • Bearer token from  │
+                          │     CAPSULE_API_TOKEN  │
+                          │   • request-timeout    │
+                          │   • Link-header        │
+                          │     pagination parse   │
+                          └────────────────────────┘
+                                      │
+                                      ▼ HTTPS
+                          ┌────────────────────────┐
+                          │ api.capsulecrm.com/    │
+                          │   api/v2/*             │
+                          └────────────────────────┘
+```
+
+Single tenant, single Capsule account. Both transports converge on the
+same tool surface and the same Capsule client; everything above that
+line is transport-specific. Read-only mode gates registration in
+`server.ts` so write tools simply don't exist in the catalog when
+`CAPSULE_MCP_READONLY=1`. The `confirm: true` gate on destructive
+tools is schema-level (Zod `.literal(true)`), enforced before any HTTP
+call.
+
 ## Architecture assumptions
 
 ### A1. Capsule API stability
