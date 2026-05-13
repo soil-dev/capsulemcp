@@ -1,18 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { mockFetch } from "./test-helpers.js";
 import { fetch } from "undici";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-function mockFetch(status: number, body: unknown, headers: Record<string, string> = {}) {
-  const responseHeaders = new Headers(headers);
-  vi.mocked(fetch).mockResolvedValueOnce({
-    status,
-    ok: status >= 200 && status < 300,
-    headers: responseHeaders,
-    json: async () => body,
-    statusText: String(status),
-  } as Awaited<ReturnType<typeof fetch>>);
-}
 
 vi.mock("undici", () => ({ fetch: vi.fn() }));
 

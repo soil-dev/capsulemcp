@@ -1,16 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { mockFetch } from "./test-helpers.js";
 import { fetch } from "undici";
-
-function mockFetch(status: number, body: unknown) {
-  vi.mocked(fetch).mockResolvedValueOnce({
-    status,
-    ok: status >= 200 && status < 300,
-    headers: new Headers(),
-    json: async () => body,
-    text: async () => "",
-    statusText: String(status),
-  } as Awaited<ReturnType<typeof fetch>>);
-}
 
 vi.mock("undici", () => ({ fetch: vi.fn() }));
 

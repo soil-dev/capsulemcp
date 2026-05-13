@@ -1,39 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { mockBinary,mockJson } from "./test-helpers.js";
 import { fetch } from "undici";
-
-function mockBinary(
-  status: number,
-  buffer: Buffer,
-  contentType = "application/octet-stream",
-) {
-  vi.mocked(fetch).mockResolvedValueOnce({
-    status,
-    ok: status >= 200 && status < 300,
-    // Real Capsule responses carry Content-Length; the client uses it
-    // for its pre-buffer size cap. The mock matches that shape.
-    headers: new Headers({
-      "Content-Type": contentType,
-      "Content-Length": String(buffer.byteLength),
-    }),
-    arrayBuffer: async () =>
-      buffer.buffer.slice(
-        buffer.byteOffset,
-        buffer.byteOffset + buffer.byteLength,
-      ),
-    text: async () => buffer.toString("utf8"),
-    statusText: String(status),
-  } as Awaited<ReturnType<typeof fetch>>);
-}
-
-function mockJson(status: number, body: unknown) {
-  vi.mocked(fetch).mockResolvedValueOnce({
-    status,
-    ok: status >= 200 && status < 300,
-    headers: new Headers(),
-    json: async () => body,
-    statusText: String(status),
-  } as Awaited<ReturnType<typeof fetch>>);
-}
 
 vi.mock("undici", () => ({ fetch: vi.fn() }));
 

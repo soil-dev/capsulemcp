@@ -14,6 +14,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { mockBinary,mockFetch } from "./test-helpers.js";
 import { fetch } from "undici";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -21,50 +22,6 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 vi.mock("undici", () => ({ fetch: vi.fn() }));
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
-
-function mockFetch(
-  status: number,
-  body: unknown,
-  headers: Record<string, string> = {},
-) {
-  vi.mocked(fetch).mockResolvedValueOnce({
-    status,
-    ok: status >= 200 && status < 300,
-    headers: new Headers(headers),
-    json: async () => body,
-    text: async () => "",
-    arrayBuffer: async () => new ArrayBuffer(0),
-    statusText: String(status),
-  } as Awaited<ReturnType<typeof fetch>>);
-}
-
-function mockBinary(
-  status: number,
-  buffer: Buffer,
-  contentType = "application/octet-stream",
-) {
-  vi.mocked(fetch).mockResolvedValueOnce({
-    status,
-    ok: status >= 200 && status < 300,
-    // Real Capsule responses carry Content-Length; the client uses it
-    // for its pre-buffer size cap (defence-in-depth against an
-    // upstream sending 5 GB into a 5 MB cap).
-    headers: new Headers({
-      "Content-Type": contentType,
-      "Content-Length": String(buffer.byteLength),
-    }),
-    arrayBuffer: async () =>
-      buffer.buffer.slice(
-        buffer.byteOffset,
-        buffer.byteOffset + buffer.byteLength,
-      ),
-    text: async () => buffer.toString("utf8"),
-    json: async () => {
-      throw new Error("not JSON");
-    },
-    statusText: String(status),
-  } as Awaited<ReturnType<typeof fetch>>);
-}
 
 async function spawn(opts: { readOnly?: boolean } = {}) {
   if (opts.readOnly) process.env["CAPSULE_MCP_READONLY"] = "1";

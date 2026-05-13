@@ -1,17 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { mockFetch } from "./test-helpers.js";
 import { fetch } from "undici";
 
 vi.mock("undici", () => ({ fetch: vi.fn() }));
-
-function mockFetch(status: number, body: unknown, headers: Record<string, string> = {}) {
-  vi.mocked(fetch).mockResolvedValueOnce({
-    status,
-    ok: status >= 200 && status < 300,
-    headers: new Headers(headers),
-    json: async () => body,
-    statusText: String(status),
-  } as Awaited<ReturnType<typeof fetch>>);
-}
 
 beforeEach(() => { process.env["CAPSULE_API_TOKEN"] = "test-token"; });
 afterEach(() => { vi.clearAllMocks(); delete process.env["CAPSULE_API_TOKEN"]; });
