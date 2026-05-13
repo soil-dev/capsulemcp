@@ -15,7 +15,7 @@ If a quote here ever stops matching Capsule's docs or behaviour, treat
 the *behaviour* as authoritative — these notes are a snapshot and
 their truth comes from runs against the live API, not from the docs.
 
-Last sync: 2026-05-11. capsulemcp commit: see `git log NOTES-ON-CAPSULE-API.md`.
+Last sync: 2026-05-13. capsulemcp commit: see `git log NOTES-ON-CAPSULE-API.md`.
 
 ---
 

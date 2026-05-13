@@ -11,6 +11,42 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Security
+
+- **Per-request timeout now covers body consumption, not just
+  headers.** `fetchWithTimeout` cleared its AbortController in the
+  `finally` of the initial `fetch()` call, so the 60s budget only
+  guarded headers + initial response. Subsequent `res.json()` /
+  `res.arrayBuffer()` / streaming `body.getReader().read()` /
+  `res.text()` calls ran un-timed — a Capsule response that returned
+  headers promptly then stalled mid-body pinned the request
+  indefinitely (realistic DoS vector: one such hang costs a Cloud
+  Run instance). Fix: `fetchWithTimeout`/`doFetch` now return
+  `{ res, cleanup }`; every top-level capsule client function calls
+  `cleanup` in a try/finally wrapping body consumption, and a new
+  `mapAbort()` helper converts mid-stream AbortError into the same
+  clean `CapsuleApiError 504` a fetch-stage abort produces.
+  Regression test in `tests/rate-limit.test.ts`.
+- **`MCP_HTTP_TRUST_PROXY` env override added** (default `1`,
+  validated as integer 0..10). Previously hardcoded — fine for
+  single-frontend deployments (Cloud Run), wrong for multi-hop
+  ingress (Cloudflare → Cloud Run needs `2`) and for bare-IP
+  deployments without any proxy in front (where any
+  `X-Forwarded-For` trust lets a client spoof their per-IP rate
+  limit bucket). Authenticated `/mcp` is unaffected — the bearer
+  auth runs first and the limiter keys by client_id, not IP.
+- **URL validation on website `address` when `service` is `URL`.**
+  Was `z.string().min(1)` with no further check; the connector
+  would happily write `javascript:alert(1)` or `not a url` into
+  Capsule's website field, and Capsule stores user-supplied strings
+  verbatim. Two new gates via Zod `superRefine` on both
+  `WebsiteSchema` (create/update party nested) and
+  `addPartyWebsiteSchema`: (1) syntactic — must parse via WHATWG
+  URL parser when service resolves to URL; (2) scheme —
+  `javascript:` / `data:` / `vbscript:` rejected even when
+  syntactically parseable. Non-URL services (TWITTER, BLUESKY,
+  GITHUB, …) are untouched.
+
 ### Tooling
 
 - **Biome added as the project linter + formatter** (`biome.json`).
@@ -30,6 +66,27 @@ versions adhere to [Semantic Versioning](https://semver.org).
 - **`CONTRIBUTING.md`** added — short pointer doc covering the
   pre-PR gate, coding-style rules (mostly: "let Biome handle it"), and
   where to look for deeper docs.
+- **Repository hygiene additions**: `SECURITY.md` (private reporting
+  channels, scope, 3-day-ack / 14-day-triage commitment),
+  `.github/ISSUE_TEMPLATE/{bug_report,feature_request,config}.yml`
+  (structured bug + feature forms; redirects security/install/API
+  questions before they reach the tracker),
+  `.github/PULL_REQUEST_TEMPLATE.md` (summary + what-changed +
+  test-plan checklist), `.github/dependabot.yml` (weekly npm +
+  github-actions version updates, minor/patch batched).
+- **DESIGN.md gets an "At a glance" architecture diagram** showing
+  both transports (stdio → `dist/index.js`, HTTP+OAuth →
+  `dist/http.js`) converging on the shared tool surface and Capsule
+  client; read-only gate and confirm-flag gate annotated.
+- **`package.json` `bin` path normalised** (`./dist/index.js` →
+  `dist/index.js`) per `npm pkg fix` to silence the publish-time
+  warning.
+- **Action versions bumped**: `actions/checkout` v4 → v6,
+  `actions/setup-node` v4 → v6. CI now runs on Node 24 runtime
+  instead of the deprecated Node 20.
+- **Refactor scrub** (PR #24): consolidated repeated tool-description
+  constants, shared `mockFetch` / `mockJson` / `mockBinary` test
+  helpers in `tests/test-helpers.ts`.
 - **Example-value scrub.** A handful of tool descriptions and test
   fixtures used the operator's real social handle and a real
   production-tenant user id/username plus production-looking party ids
