@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
 import { confirmFlag } from "./confirm-flag.js";
 import {
   capsuleDelete,
@@ -17,7 +18,7 @@ import {
 
 export const listProjectsSchema = z.object({
   status: z.enum(["OPEN", "CLOSED"]).optional(),
-  embed: z.string().optional().describe("Comma-separated embeds, e.g. 'tags,fields'"),
+  embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
   page: z.number().int().positive().optional().default(1),
   perPage: z.number().int().min(1).max(100).optional().default(25),
 });
@@ -36,7 +37,7 @@ export async function listProjects(input: z.infer<typeof listProjectsSchema>) {
 
 export const getProjectSchema = z.object({
   id: z.number().int().positive(),
-  embed: z.string().optional().describe("Comma-separated embeds, e.g. 'tags,fields'"),
+  embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
 });
 
 export async function getProject(input: z.infer<typeof getProjectSchema>) {
@@ -58,7 +59,7 @@ export const getProjectsSchema = z.object({
     .min(1)
     .max(10)
     .describe("Array of project IDs (1–10). Capsule caps batch fetches at 10."),
-  embed: z.string().optional().describe("Comma-separated embeds, e.g. 'tags,fields'"),
+  embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
 });
 
 export async function getProjects(input: z.infer<typeof getProjectsSchema>) {

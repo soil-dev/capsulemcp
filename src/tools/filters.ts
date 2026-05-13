@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
 import { capsuleSearch } from "../capsule/client.js";
 
 // ── Shared schema ───────────────────────────────────────────────────────────
@@ -64,7 +65,7 @@ const FilterInputSchema = z.object({
   embed: z
     .string()
     .optional()
-    .describe("Comma-separated embeds, e.g. 'tags,fields'."),
+    .describe(EMBED_TAGS_FIELDS_DESCRIPTION),
   page: z.number().int().positive().optional().default(1),
   perPage: z.number().int().min(1).max(100).optional().default(25),
 });

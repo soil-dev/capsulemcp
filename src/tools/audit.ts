@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
 import { capsuleGet } from "../capsule/client.js";
 
 // Audit & navigation tools that don't fit cleanly under a single entity.
@@ -26,7 +27,7 @@ export const listEmployeesSchema = z.object({
     ),
   page: z.number().int().positive().optional().default(1),
   perPage: z.number().int().min(1).max(100).optional().default(25),
-  embed: z.string().optional().describe("Comma-separated embeds, e.g. 'tags,fields'."),
+  embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
 });
 
 export async function listEmployees(input: z.infer<typeof listEmployeesSchema>) {

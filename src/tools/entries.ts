@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { EMBED_ATTACHMENTS_PARTICIPANTS_DESCRIPTION } from "./descriptions.js";
 import { confirmFlag } from "./confirm-flag.js";
 import { idempotent } from "../capsule/idempotent.js";
 import {
@@ -16,7 +17,7 @@ const listEntriesPagination = {
   embed: z
     .string()
     .optional()
-    .describe("Comma-separated embeds, e.g. 'attachments,participants'"),
+    .describe(EMBED_ATTACHMENTS_PARTICIPANTS_DESCRIPTION),
 };
 
 export const listPartyEntriesSchema = z.object({
@@ -64,7 +65,7 @@ export async function listProjectEntries(
 
 export const getEntrySchema = z.object({
   id: z.number().int().positive(),
-  embed: z.string().optional().describe("Comma-separated embeds, e.g. 'attachments,participants'"),
+  embed: z.string().optional().describe(EMBED_ATTACHMENTS_PARTICIPANTS_DESCRIPTION),
 });
 
 export async function getEntry(input: z.infer<typeof getEntrySchema>) {

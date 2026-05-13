@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
 import { confirmFlag } from "./confirm-flag.js";
 import {
   capsuleDelete,
@@ -94,7 +95,7 @@ const WebsiteSchema = z.object({
 
 export const searchPartiesSchema = z.object({
   q: z.string().optional().describe("Free-text search query"),
-  embed: z.string().optional().describe("Comma-separated embeds, e.g. 'tags,fields'"),
+  embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
   page: z.number().int().positive().optional().default(1),
   perPage: z.number().int().min(1).max(100).optional().default(25),
 });
@@ -116,7 +117,7 @@ export async function searchParties(input: z.infer<typeof searchPartiesSchema>) 
 
 export const getPartySchema = z.object({
   id: z.number().int().positive().describe("Party ID"),
-  embed: z.string().optional().describe("Comma-separated embeds, e.g. 'tags,fields'"),
+  embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
 });
 
 export async function getParty(input: z.infer<typeof getPartySchema>) {
@@ -137,7 +138,7 @@ export const getPartiesSchema = z.object({
     .min(1)
     .max(10)
     .describe("Array of party IDs (1–10). Capsule caps batch fetches at 10."),
-  embed: z.string().optional().describe("Comma-separated embeds, e.g. 'tags,fields'"),
+  embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
 });
 
 export async function getParties(input: z.infer<typeof getPartiesSchema>) {

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
 import { confirmFlag } from "./confirm-flag.js";
 import {
   capsuleDelete,
@@ -40,7 +41,7 @@ const OpportunityValueSchema = z.object({
 
 export const searchOpportunitiesSchema = z.object({
   q: z.string().optional().describe("Free-text search query"),
-  embed: z.string().optional().describe("Comma-separated embeds, e.g. 'tags,fields'"),
+  embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
   page: z.number().int().positive().optional().default(1),
   perPage: z.number().int().min(1).max(100).optional().default(25),
 });
@@ -61,7 +62,7 @@ export async function searchOpportunities(
 
 export const getOpportunitySchema = z.object({
   id: z.number().int().positive(),
-  embed: z.string().optional().describe("Comma-separated embeds, e.g. 'tags,fields'"),
+  embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
 });
 
 export async function getOpportunity(input: z.infer<typeof getOpportunitySchema>) {
@@ -83,7 +84,7 @@ export const getOpportunitiesSchema = z.object({
     .min(1)
     .max(10)
     .describe("Array of opportunity IDs (1–10). Capsule caps batch fetches at 10."),
-  embed: z.string().optional().describe("Comma-separated embeds, e.g. 'tags,fields'"),
+  embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
 });
 
 export async function getOpportunities(
