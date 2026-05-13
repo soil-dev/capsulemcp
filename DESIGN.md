@@ -326,6 +326,55 @@ We register tools and serve `serverInfo.icons`. We don't expose:
 If MCP clients standardise on prompts/resources for richer Claude UX,
 adding them would be a future change.
 
+### L11. Capsule error bodies pass through verbatim
+
+When Capsule returns 4xx / 5xx, the connector parses the response
+body and includes the message in the `CapsuleApiError` thrown to the
+tool layer. Validation errors carry `resource` / `field` / `message`
+fields; auth and server errors carry a `message`. We don't sanitise
+the content before surfacing it — partly because validation messages
+need to be operator-readable (the whole point is to give the caller
+something they can act on), partly because Capsule's error format
+isn't structured enough to safely strip "data" from "schema".
+
+Where this matters: error messages can echo user-supplied content
+back to the caller. A Capsule tenant who can write `<script>` into a
+custom-field label, or set up a party name that the connector then
+fails to update with a 422, will see that label in the error message
+the MCP client receives. The stdio transport surfaces the message
+directly in the tool response; the HTTP transport logs to stderr and
+returns a low-cardinality summary (the `MCP_HTTP_DEBUG=1` env opts
+into the verbose form), so the exposure surface differs.
+
+The trust boundary here is the same as L1: data inside a single
+Capsule account is treated as coming from one party. Operators with
+adversarial-tenant scenarios — multi-tenant Capsule accounts where
+one user's input shouldn't be seen by another — should know that
+error paths are part of the data passthrough, not just the success
+path. Sanitisation is a candidate for a future minor.
+
+### L12. Authorization-code state is in-process
+
+The OAuth provider keeps issued-but-not-yet-redeemed authorization
+codes in a `Map` on the provider instance. The code's PKCE
+verifier, requested scopes, redirect URI, and resource URL all live
+there until `/token` consumes them. Access and refresh tokens are
+stateless (HMAC-signed) and replicate freely; authorization codes
+do not.
+
+This matters when the same HTTP deployment runs more than one
+instance and inbound requests aren't sticky to one of them. The
+realistic failure mode is short-lived: `/authorize` on instance A,
+then `/token` on instance B within the seconds-long window between
+the redirect and the exchange — instance B has never seen the code
+and returns `invalid_grant`. Cloud Run gives single-instance
+session affinity within that window by default, which is why the
+worked example in DEPLOY.md doesn't hit this. Multi-region or
+load-balanced deployments that round-robin across pods need to
+either enable sticky sessions or scale the connector vertically
+(`min_instance_count=max_instance_count=1`) until a future minor
+moves auth-code state into a shared store.
+
 ## Endpoint coverage
 
 A complete index of Capsule v2 endpoints, grouped by what we do with
