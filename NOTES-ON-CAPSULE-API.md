@@ -981,7 +981,48 @@ in §15 production verification.
 
 ---
 
-## How to add to this file
+## 29. Team membership is NOT exposed by the v2 REST API
+
+Capsule's `/teams` and `/users` endpoints surface team and user
+**identity** (id, name, timestamps, status, locale, etc.) but
+the **join** between them — which users belong to which teams —
+is not dereference-able through the REST surface from either
+side.
+
+Verified live (2026-05-13) against the production tenant by
+probing five plausible shapes:
+
+| Probe | Result |
+|---|---|
+| `GET /teams` | Returns `[{id, name, description, createdAt, updatedAt}]` only |
+| `GET /teams?embed=users` | `embed=users` silently ignored; identical response shape |
+| `GET /teams/{id}` | Same fields as the list, no membership |
+| `GET /teams/{id}/users` | **404** — endpoint does not exist |
+| `GET /users/{id}` | Returns party info, locale, timezone, status — no `teams` field |
+
+So the team↔user relationship lives in a part of Capsule's
+data model that's only readable by the web UI. The
+`update_project { ownerId, teamId } → 422 owner is not a member
+of the team` validation path (see §27) is the only way to
+determine membership programmatically — by probing each
+(user, team) pair the caller is interested in.
+
+**Practical effect on connectors:** the `list_teams` tool can
+list teams the API token has visibility into, and `list_users`
+can list users, but neither can describe membership. Workflows
+that need to choose a `(owner, team)` pair compatible with
+Capsule's membership constraint have to either know the rosters
+out-of-band (web UI / operator knowledge) or accept the 422 as
+the discovery mechanism.
+
+**Where in our code:** [`src/tools/metadata.ts`](src/tools/metadata.ts)
+`listTeams` wraps `GET /teams` with no embed; nothing higher-
+level is achievable without an additional Capsule API endpoint
+that doesn't currently exist. The
+[`update_project.teamId` description](src/tools/projects.ts)
+mentions the 422 path as the membership-validation shape.
+
+**No Capsule docs page mentions the missing membership surface.**
 
 When you discover a new Capsule API quirk:
 

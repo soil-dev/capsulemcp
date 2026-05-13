@@ -540,7 +540,8 @@ export function createCapsuleMcpServer(): McpServer {
   // ── Reference metadata (teams, lost reasons, activity types) ──────────────
 
   registerTool(server, "list_teams",
-    "List all teams configured in the Capsule account. Useful as input for filter_* queries that scope by team, and for reporting.",
+    "List all teams configured in the Capsule account. Useful as input for filter_* queries that scope by team, and for reporting. " +
+      "LIMITATION: returns team identity only (id, name, description, timestamps). Capsule's v2 API does not expose team↔user membership through any endpoint — `GET /teams/{id}/users` 404s, `embed=users` is silently ignored, and `GET /users/{id}` doesn't include a `teams` field. To determine whether a given user belongs to a given team, either check Capsule's web UI Team Membership page, or probe via `update_project { ownerId: U, teamId: T }` and read the response — 422 'owner is not a member of the team' means U ∉ T.",
     listTeamsSchema, listTeams);
 
   registerTool(server, "list_lostreasons",
