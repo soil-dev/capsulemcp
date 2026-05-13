@@ -637,11 +637,11 @@ specifically for booleans; the API has no other documented "clear"
 shape for them. Workaround: set the field to `false`.
 
 **BOOLEAN fields are observably two-state, not three-state.**
-Verified live in the beta.1 verification: setting `value: false`
-on a BOOLEAN field is accepted by Capsule (200 OK, `updatedAt`
-advances), but the **read-back via `embed=fields` returns the
-row absent**, not a row with `value: false`. So the observable
-states for a BOOLEAN custom field are:
+Setting `value: false` on a BOOLEAN field is accepted by Capsule
+(200 OK, `updatedAt` advances), but the **read-back via
+`embed=fields` returns the row absent**, not a row with
+`value: false`. So the observable states for a BOOLEAN custom
+field are:
 
 - A row exists with `value: true`
 - No row exists (achievable via either initial unset OR `value: false`)
@@ -652,6 +652,23 @@ are not achievable through Capsule's API. (Earlier versions of
 this section suggested a `_delete: true` row-shape workaround for
 tri-state; that workaround doesn't actually help because the
 read-back from `value: false` is also row-absent.)
+
+**Is this a Capsule bug?** Defensible as a deliberate design
+choice: BOOLEAN's value domain is `{true, false}`, so `null` is
+genuinely not a valid BOOLEAN, and the 422 is a type rejection
+like any other. The framing "BOOLEAN row-existence is the
+semantic; `value: false` removes the row" is internally
+consistent IF you accept that frame. The visible **API
+asymmetry** with other field types' null-clear mechanism is the
+hard-to-defend piece — a caller writing generic field-clearing
+code has to special-case BOOLEAN — but the behaviour has been
+stable across the API-v2 lifetime and there's no signal Capsule
+plans to change it. We treat this as **documented Capsule
+behaviour with a clean workaround**, not a bug to be fixed.
+
+Re-verified live on 2026-05-13 against the production tenant:
+BOOLEAN-null still 422s with the same wording, `value: false`
+still removes the row.
 
 **Where in our code:** [`src/tools/custom-field-helpers.ts`](src/tools/custom-field-helpers.ts)
 `CustomFieldWriteSchema.value` description spells out the
