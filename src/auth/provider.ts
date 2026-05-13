@@ -29,7 +29,7 @@
  * memory; they're consumed within seconds so this is fine.
  */
 
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import type { Response } from "express";
 import type { OAuthRegisteredClientsStore } from "@modelcontextprotocol/sdk/server/auth/clients.js";
 import type {
@@ -168,6 +168,20 @@ export class OAuthProvider implements OAuthServerProvider {
   private readonly resourceUrl: URL | undefined;
   private readonly gcTimer: NodeJS.Timeout | undefined;
 
+  /**
+   * Tell the MCP SDK's /token handler to NOT run its own PKCE
+   * verification — we own it inside `exchangeAuthorizationCode`
+   * below, using a constant-time compare. The SDK's bundled
+   * `pkce-challenge` does the comparison with native `===`, which
+   * is a defence-in-depth gap (both sides are fixed-width public
+   * SHA-256 base64url strings so there's no realistic information
+   * leak, but the SDK exposes this exact opt-out for exactly this
+   * concern). See node_modules/.../auth/handlers/token.js — when
+   * this flag is true the SDK passes `code_verifier` straight
+   * through to our handler and skips verifyChallenge entirely.
+   */
+  readonly skipLocalPkceValidation = true;
+
   constructor(args: {
     clientsStore: OAuthRegisteredClientsStore;
     signingKey: string;
@@ -253,7 +267,7 @@ export class OAuthProvider implements OAuthServerProvider {
   async exchangeAuthorizationCode(
     client: OAuthClientInformationFull,
     authorizationCode: string,
-    _codeVerifier?: string,
+    codeVerifier?: string,
     redirectUri?: string,
     resource?: URL,
   ): Promise<OAuthTokens> {
@@ -266,6 +280,26 @@ export class OAuthProvider implements OAuthServerProvider {
     }
     if (redirectUri && redirectUri !== state.redirectUri) {
       throw new InvalidGrantError("redirect_uri mismatch");
+    }
+    // PKCE verification — constant-time. `skipLocalPkceValidation =
+    // true` on this class tells the SDK to defer this check to us
+    // instead of calling pkce-challenge's `===`-based verifyChallenge.
+    // We assume RFC 7636 method=S256 (the recommended method, and
+    // what every modern client — including Anthropic's — uses).
+    // Compute the expected challenge as base64url(SHA-256(verifier))
+    // and compare against the stored value via timingSafeEqual.
+    if (!codeVerifier) {
+      throw new InvalidGrantError("code_verifier required");
+    }
+    const expected = createHash("sha256").update(codeVerifier).digest("base64url");
+    const expectedBuf = Buffer.from(expected, "utf8");
+    const storedBuf = Buffer.from(state.codeChallenge, "utf8");
+    // Both sides are SHA-256 base64url = 43 chars, so equal-length is
+    // guaranteed by construction. Check anyway: a malformed stored
+    // challenge would otherwise crash timingSafeEqual rather than
+    // returning a clean InvalidGrantError.
+    if (expectedBuf.length !== storedBuf.length || !timingSafeEqual(expectedBuf, storedBuf)) {
+      throw new InvalidGrantError("code_verifier does not match the challenge");
     }
     const requestedResource = this.resolveResource(resource);
     if (requestedResource && state.resource && requestedResource !== state.resource) {

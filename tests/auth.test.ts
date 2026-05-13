@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { createHash } from "node:crypto";
 import {
   issueToken,
   verifyToken,
@@ -20,6 +21,15 @@ function autoApproveProvider(signingKey: string): OAuthProvider {
 }
 
 const KEY = "0123456789abcdef0123456789abcdef";
+
+// PKCE test fixture. `exchangeAuthorizationCode` does a constant-time
+// PKCE check (`skipLocalPkceValidation = true` on the provider tells
+// the SDK to defer to us). Tests that drive the authorize → token
+// roundtrip need a real (verifier, challenge) pair so the check
+// passes; tests that probe the rejection path use a deliberately-
+// non-matching verifier.
+const PKCE_VERIFIER = "test-verifier-1234567890abcdefghijklmnopqrstuv";
+const PKCE_CHALLENGE = createHash("sha256").update(PKCE_VERIFIER).digest("base64url");
 
 // ── Token signing ───────────────────────────────────────────────────────────
 
@@ -136,7 +146,7 @@ describe("OAuthProvider in auto-approve mode (open DCR)", () => {
     await p.authorize(
       client,
       {
-        codeChallenge: "challenge-from-pkce-verifier",
+        codeChallenge: PKCE_CHALLENGE,
         redirectUri: "http://localhost/cb",
         state: "s1",
       },
@@ -151,10 +161,10 @@ describe("OAuthProvider in auto-approve mode (open DCR)", () => {
 
     // Server stored the challenge for the code (PKCE check is the SDK's job)
     const stashedChallenge = await p.challengeForAuthorizationCode(client, code!);
-    expect(stashedChallenge).toBe("challenge-from-pkce-verifier");
+    expect(stashedChallenge).toBe(PKCE_CHALLENGE);
 
     // Exchange the code for tokens
-    const tokens = await p.exchangeAuthorizationCode(client, code!);
+    const tokens = await p.exchangeAuthorizationCode(client, code!, PKCE_VERIFIER);
     expect(tokens.access_token).toBeTruthy();
     expect(tokens.refresh_token).toBeTruthy();
     expect(tokens.token_type).toBe("Bearer");
@@ -168,14 +178,16 @@ describe("OAuthProvider in auto-approve mode (open DCR)", () => {
     const p = autoApproveProvider(KEY);
     const client = await p.clientsStore.registerClient!({ redirect_uris: ["http://x/cb"] });
     let redirected: string | undefined;
-    await p.authorize(client, { codeChallenge: "c", redirectUri: "http://x/cb" }, {
+    await p.authorize(client, { codeChallenge: PKCE_CHALLENGE, redirectUri: "http://x/cb" }, {
       redirect: (u: string) => {
         redirected = u;
       },
     } as never);
     const code = new URL(redirected!).searchParams.get("code")!;
-    await p.exchangeAuthorizationCode(client, code);
-    await expect(p.exchangeAuthorizationCode(client, code)).rejects.toThrow(/invalid or expired/);
+    await p.exchangeAuthorizationCode(client, code, PKCE_VERIFIER);
+    await expect(p.exchangeAuthorizationCode(client, code, PKCE_VERIFIER)).rejects.toThrow(
+      /invalid or expired/,
+    );
   });
 
   it("rejects refresh tokens from a different client", async () => {
@@ -184,13 +196,13 @@ describe("OAuthProvider in auto-approve mode (open DCR)", () => {
     const b = await p.clientsStore.registerClient!({ redirect_uris: ["http://b/cb"] });
 
     let redirected: string | undefined;
-    await p.authorize(a, { codeChallenge: "c", redirectUri: "http://a/cb" }, {
+    await p.authorize(a, { codeChallenge: PKCE_CHALLENGE, redirectUri: "http://a/cb" }, {
       redirect: (u: string) => {
         redirected = u;
       },
     } as never);
     const code = new URL(redirected!).searchParams.get("code")!;
-    const tokens = await p.exchangeAuthorizationCode(a, code);
+    const tokens = await p.exchangeAuthorizationCode(a, code, PKCE_VERIFIER);
 
     await expect(p.exchangeRefreshToken(b, tokens.refresh_token!)).rejects.toThrow(
       /different client/,
@@ -201,13 +213,13 @@ describe("OAuthProvider in auto-approve mode (open DCR)", () => {
     const p = autoApproveProvider(KEY);
     const client = await p.clientsStore.registerClient!({ redirect_uris: ["http://x/cb"] });
     let redirected: string | undefined;
-    await p.authorize(client, { codeChallenge: "c", redirectUri: "http://x/cb" }, {
+    await p.authorize(client, { codeChallenge: PKCE_CHALLENGE, redirectUri: "http://x/cb" }, {
       redirect: (u: string) => {
         redirected = u;
       },
     } as never);
     const code = new URL(redirected!).searchParams.get("code")!;
-    const tokens = await p.exchangeAuthorizationCode(client, code);
+    const tokens = await p.exchangeAuthorizationCode(client, code, PKCE_VERIFIER);
 
     await expect(p.verifyAccessToken(tokens.refresh_token!)).rejects.toThrow();
   });
@@ -251,6 +263,119 @@ describe("FixedClientStore", () => {
   // MCP SDK's auth router (which compares secrets itself), so it was
   // dead code and the misleading "constant-time defense-in-depth" comment
   // was removed in the post-pre-1.0 audit cleanup.
+});
+
+// ── PKCE verification (we do this ourselves, constant-time) ────────────────
+
+describe("OAuthProvider PKCE verification (constant-time, S256)", () => {
+  // The SDK's bundled pkce-challenge does its compare with native `===`.
+  // We opt out via `skipLocalPkceValidation = true` and do the check
+  // ourselves with timingSafeEqual in exchangeAuthorizationCode. These
+  // tests cover the happy path and each of the rejection paths.
+
+  it("accepts a code_verifier that hashes to the stored challenge", async () => {
+    const p = autoApproveProvider(KEY);
+    const client = await p.clientsStore.registerClient!({ redirect_uris: ["http://x/cb"] });
+    let redirected: string | undefined;
+    await p.authorize(client, { codeChallenge: PKCE_CHALLENGE, redirectUri: "http://x/cb" }, {
+      redirect: (u: string) => {
+        redirected = u;
+      },
+    } as never);
+    const code = new URL(redirected!).searchParams.get("code")!;
+    const tokens = await p.exchangeAuthorizationCode(client, code, PKCE_VERIFIER);
+    expect(tokens.access_token).toBeTruthy();
+  });
+
+  it("rejects a code_verifier whose hash doesn't match the stored challenge", async () => {
+    const p = autoApproveProvider(KEY);
+    const client = await p.clientsStore.registerClient!({ redirect_uris: ["http://x/cb"] });
+    let redirected: string | undefined;
+    await p.authorize(client, { codeChallenge: PKCE_CHALLENGE, redirectUri: "http://x/cb" }, {
+      redirect: (u: string) => {
+        redirected = u;
+      },
+    } as never);
+    const code = new URL(redirected!).searchParams.get("code")!;
+    await expect(
+      p.exchangeAuthorizationCode(client, code, "wrong-verifier-deadbeefdeadbeefdeadbeefdead"),
+    ).rejects.toThrow(/code_verifier does not match/);
+    // The code must NOT be consumed by a failed PKCE check — otherwise a
+    // network glitch on the legitimate exchange would burn the code.
+    // Retrying with the correct verifier should still succeed.
+    const tokens = await p.exchangeAuthorizationCode(client, code, PKCE_VERIFIER);
+    expect(tokens.access_token).toBeTruthy();
+  });
+
+  it("rejects a missing code_verifier with a clear InvalidGrantError", async () => {
+    const p = autoApproveProvider(KEY);
+    const client = await p.clientsStore.registerClient!({ redirect_uris: ["http://x/cb"] });
+    let redirected: string | undefined;
+    await p.authorize(client, { codeChallenge: PKCE_CHALLENGE, redirectUri: "http://x/cb" }, {
+      redirect: (u: string) => {
+        redirected = u;
+      },
+    } as never);
+    const code = new URL(redirected!).searchParams.get("code")!;
+    await expect(p.exchangeAuthorizationCode(client, code, undefined)).rejects.toThrow(
+      /code_verifier required/,
+    );
+  });
+
+  it("rejects a verifier valid for a DIFFERENT code (cross-code attack)", async () => {
+    // Each authorization code's stored challenge is independent. A
+    // verifier that satisfies code A's challenge must not be accepted
+    // for code B's exchange.
+    const p = autoApproveProvider(KEY);
+    const client = await p.clientsStore.registerClient!({ redirect_uris: ["http://x/cb"] });
+
+    const verifierB = "different-verifier-abcdefghijklmnopqrstuvwxyz";
+    const challengeB = createHash("sha256").update(verifierB).digest("base64url");
+
+    const redirects: string[] = [];
+    const fakeRes = (i: number) => ({
+      redirect: (u: string) => {
+        redirects[i] = u;
+      },
+    });
+
+    await p.authorize(
+      client,
+      { codeChallenge: PKCE_CHALLENGE, redirectUri: "http://x/cb" },
+      fakeRes(0) as never,
+    );
+    await p.authorize(
+      client,
+      { codeChallenge: challengeB, redirectUri: "http://x/cb" },
+      fakeRes(1) as never,
+    );
+    const codeA = new URL(redirects[0]!).searchParams.get("code")!;
+    const codeB = new URL(redirects[1]!).searchParams.get("code")!;
+
+    // verifierB satisfies challengeB → must be rejected against codeA.
+    await expect(p.exchangeAuthorizationCode(client, codeA, verifierB)).rejects.toThrow(
+      /code_verifier does not match/,
+    );
+    // PKCE_VERIFIER satisfies PKCE_CHALLENGE → must be rejected against codeB.
+    await expect(p.exchangeAuthorizationCode(client, codeB, PKCE_VERIFIER)).rejects.toThrow(
+      /code_verifier does not match/,
+    );
+    // Sanity: each verifier accepted against its own code.
+    expect(
+      (await p.exchangeAuthorizationCode(client, codeA, PKCE_VERIFIER)).access_token,
+    ).toBeTruthy();
+    expect((await p.exchangeAuthorizationCode(client, codeB, verifierB)).access_token).toBeTruthy();
+  });
+
+  it("exposes skipLocalPkceValidation = true (so the SDK defers to us)", () => {
+    // The opt-out is what tells the SDK's /token handler to pass
+    // code_verifier through instead of running its own (non-constant-
+    // time) verifyChallenge. If this flag ever flips back to false the
+    // tests above would still pass — but the SDK's `===` would run
+    // first, defeating the point of doing this ourselves.
+    const p = autoApproveProvider(KEY);
+    expect(p.skipLocalPkceValidation).toBe(true);
+  });
 });
 
 describe("OAuthProvider authCodes cap (DoS hardening)", () => {
@@ -310,7 +435,7 @@ describe("OAuthProvider + FixedClientStore", () => {
     await p.authorize(
       client,
       {
-        codeChallenge: "c",
+        codeChallenge: PKCE_CHALLENGE,
         redirectUri: "http://x/cb",
         resource: RESOURCE_URL,
       },
@@ -321,7 +446,7 @@ describe("OAuthProvider + FixedClientStore", () => {
       } as never,
     );
     const code = new URL(redirected!).searchParams.get("code")!;
-    const tokens = await p.exchangeAuthorizationCode(client, code);
+    const tokens = await p.exchangeAuthorizationCode(client, code, PKCE_VERIFIER);
     expect(tokens.access_token).toBeTruthy();
     const auth = await p.verifyAccessToken(tokens.access_token);
     expect(auth.clientId).toBe("fixed-id");
@@ -334,7 +459,7 @@ describe("OAuthProvider + FixedClientStore", () => {
       p.authorize(
         client,
         {
-          codeChallenge: "c",
+          codeChallenge: PKCE_CHALLENGE,
           redirectUri: "http://x/cb",
           resource: new URL("https://attacker.example/mcp"),
         },
@@ -350,7 +475,7 @@ describe("OAuthProvider + FixedClientStore", () => {
     await p.authorize(
       client,
       {
-        codeChallenge: "c",
+        codeChallenge: PKCE_CHALLENGE,
         redirectUri: "http://x/cb",
         resource: RESOURCE_URL,
       },
@@ -366,7 +491,7 @@ describe("OAuthProvider + FixedClientStore", () => {
       p.exchangeAuthorizationCode(
         client,
         code,
-        undefined,
+        PKCE_VERIFIER,
         "http://x/cb",
         new URL("https://mcp.example.com/other"),
       ),
