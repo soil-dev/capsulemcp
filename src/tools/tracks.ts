@@ -143,7 +143,7 @@ export const removeTrackSchema = z.object({
   confirm: z
     .literal(true)
     .describe(
-      "Must be set to true. Removes the track instance from its entity. Tasks already created by the track stay on the entity and must be deleted separately if desired.",
+      "Must be set to true. Removes the track instance from its entity. **Capsule also deletes the auto-tasks the track created when it was applied** — they go with the track and become unreachable (404 on GET /tasks/{id}, gone from list_tasks on the parent entity). If you need any of those tasks to outlive the track, copy their content into fresh tasks (or use the web UI) before calling remove_track.",
     ),
 });
 

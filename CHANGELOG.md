@@ -26,6 +26,21 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ### Documented
 
+- **`remove_track` deletes the track's auto-tasks too.** §11
+  production verification (2026-05-13) caught a stale claim in
+  the `confirm` description: it said "Tasks already created by
+  the track stay on the entity and must be deleted separately
+  if desired." Wrong. Capsule deletes the auto-tasks alongside
+  the track instance — verified isolated: apply track → 1 task
+  alive (200), `DELETE /tracks/{T}` → 204, then GET on the
+  same task id → 404 "task not found", and
+  `GET /opportunities/{O}/tasks` returns 0. Description updated
+  to spell this out and to suggest copying task content
+  elsewhere if the operator needs anything to outlive the
+  track. NOTES §25 (cascade on parent delete) stays accurate —
+  it correctly says auto-tasks are cascaded with their parent
+  opp/project; the new finding is just that the same happens
+  on a direct `remove_track`.
 - **`update_entry.subject` on plain notes is a true no-op, not
   audit noise.** §8 production verification (2026-05-13) showed
   that PUT-ing a subject onto a note-type entry returns HTTP 200
