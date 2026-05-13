@@ -158,6 +158,90 @@ describe("atomic child-array operations", () => {
     ).toBe(true);
   });
 
+  it("add_party_website rejects non-URL address when service is 'URL' or omitted", async () => {
+    // Capsule stores user-supplied strings verbatim — a bare handle
+    // mistakenly tagged service='URL' (or service omitted, which
+    // defaults to URL) would land in Capsule as-is and surface to
+    // any downstream UI that renders party websites. Schema-level
+    // rejection avoids that.
+    const { addPartyWebsiteSchema } = await import("../src/tools/parties.js");
+    expect(
+      addPartyWebsiteSchema.safeParse({
+        partyId: 1,
+        address: "@acmeco",
+        service: "URL",
+      }).success,
+    ).toBe(false);
+    // service omitted → Capsule defaults to URL → also rejected.
+    expect(
+      addPartyWebsiteSchema.safeParse({
+        partyId: 1,
+        address: "not a url",
+      }).success,
+    ).toBe(false);
+    // Bare hostname (no scheme) is also not a URL per WHATWG.
+    expect(
+      addPartyWebsiteSchema.safeParse({
+        partyId: 1,
+        address: "example.com",
+        service: "URL",
+      }).success,
+    ).toBe(false);
+    // https / http are accepted.
+    expect(
+      addPartyWebsiteSchema.safeParse({
+        partyId: 1,
+        address: "https://example.com",
+        service: "URL",
+      }).success,
+    ).toBe(true);
+    expect(
+      addPartyWebsiteSchema.safeParse({
+        partyId: 1,
+        address: "http://example.com",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("add_party_website rejects XSS-vector protocols (javascript:/data:/vbscript:)", async () => {
+    // Defence-in-depth against the connector being used to plant
+    // an XSS payload via a write tool — Capsule's API stores these
+    // verbatim, and any rendering UI that treats stored URLs as
+    // clickable would execute the script.
+    const { addPartyWebsiteSchema } = await import("../src/tools/parties.js");
+    for (const dangerous of [
+      "javascript:alert(1)",
+      "data:text/html,<script>alert(1)</script>",
+      "vbscript:msgbox(1)",
+    ]) {
+      const result = addPartyWebsiteSchema.safeParse({
+        partyId: 1,
+        address: dangerous,
+        service: "URL",
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0]?.message).toMatch(/protocol .* is not allowed/);
+      }
+    }
+  });
+
+  it("add_party_website leaves non-URL services unvalidated (handles are OK)", async () => {
+    // The URL validator only fires when service === 'URL' (or is
+    // omitted). For TWITTER/BLUESKY/etc., '@handle' or any other
+    // service-specific string is accepted as-is.
+    const { addPartyWebsiteSchema } = await import("../src/tools/parties.js");
+    for (const service of ["TWITTER", "BLUESKY", "GITHUB", "SKYPE"]) {
+      expect(
+        addPartyWebsiteSchema.safeParse({
+          partyId: 1,
+          address: "@acmeco",
+          service,
+        }).success,
+      ).toBe(true);
+    }
+  });
+
   it("add_party_website PUTs one website with the documented shape", async () => {
     mockFetch(200, { party: { id: 99 } });
     const { addPartyWebsite } = await import("../src/tools/parties.js");

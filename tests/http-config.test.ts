@@ -192,7 +192,7 @@ describe("resolveBaseConfig", () => {
   });
 
   it("accepts MCP_HTTP_TRUST_PROXY=0 for bare-IP deployments", () => {
-    // Without any proxy in front, trusting X-Forwarded-File at all
+    // Without any proxy in front, trusting X-Forwarded-For at all
     // lets a client spoof their bucket. `0` disables the trust.
     const result = resolveBaseConfig({
       PUBLIC_BASE_URL: "https://example.run.app",

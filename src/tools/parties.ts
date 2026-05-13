@@ -40,48 +40,97 @@ const AddressSchema = z.object({
 // Capsule's API names this field `address`, not `url`. The name is
 // generic because the value depends on `service`: a URL when
 // `service: "URL"`, but a handle (e.g. "@acmeco") for social
-// services like "TWITTER", "INSTAGRAM" — so URL-validation here
+// services like "TWITTER", "INSTAGRAM" — so blanket URL-validation
 // would reject valid Capsule data. The 422 message Capsule returns
 // when the wrong key is sent is "website.address: address is required".
-const WebsiteSchema = z.object({
-  address: z
-    .string()
-    .min(1)
-    .describe(
-      "The website address. A URL when service='URL', or a handle (e.g. '@acmeco') for social services like 'TWITTER', 'INSTAGRAM'. Capsule names this field `address` regardless of service type.",
-    ),
-  // Capsule's complete service list, copied verbatim from a 422
-  // response body for a `PIGEON_POST` test:
-  //   "options are: URL, SKYPE, TWITTER, LINKED_IN, FACEBOOK, XING,
-  //    FEED, GOOGLE_PLUS, FLICKR, GITHUB, YOUTUBE, INSTAGRAM,
-  //    PINTEREST, TIKTOK, THREADS, BLUESKY, SNAPCHAT"
-  // Locked at the schema layer so typos surface before any HTTP
-  // round-trip. If Capsule adds new services, the 422 will tell us.
-  service: z
-    .enum([
-      "URL",
-      "SKYPE",
-      "TWITTER",
-      "LINKED_IN",
-      "FACEBOOK",
-      "XING",
-      "FEED",
-      "GOOGLE_PLUS",
-      "FLICKR",
-      "GITHUB",
-      "YOUTUBE",
-      "INSTAGRAM",
-      "PINTEREST",
-      "TIKTOK",
-      "THREADS",
-      "BLUESKY",
-      "SNAPCHAT",
-    ])
-    .optional()
-    .describe(
+//
+// The cross-field check below applies URL-validation *only* when
+// `service` is `"URL"` (or omitted — Capsule defaults to URL). Two
+// gates:
+//
+//   1. Syntactic — must parse as a URL via the WHATWG URL parser.
+//   2. Scheme — must not be javascript:/data:/vbscript:, which
+//      would store an XSS-like payload in the CRM that a
+//      downstream UI rendering party websites could execute.
+//
+// Without the scheme gate, the connector would happily write
+// `javascript:alert(1)` into Capsule's website field; Capsule
+// stores user-supplied strings verbatim, so the impact lives in
+// whoever renders them later. Reject at the schema layer to avoid
+// shifting that responsibility to every consumer.
+function validateWebsiteAddress(
+  data: { address: string; service?: string | undefined },
+  ctx: z.RefinementCtx,
+): void {
+  // Only validate when the address will be interpreted as a URL.
+  // Empty `service` defaults to "URL" per Capsule's docs.
+  const isUrlService = data.service === undefined || data.service === "URL";
+  if (!isUrlService) return;
+
+  if (!URL.canParse(data.address)) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["address"],
+      message:
+        "When service is 'URL' (or omitted), address must be a valid URL like 'https://example.com'. For a social handle, set service to the matching type (e.g. service='TWITTER', address='@handle').",
+    });
+    return;
+  }
+  const parsed = new URL(data.address);
+  // Capsule itself doesn't sanitize what it stores; this is a
+  // defence-in-depth gate against the connector being used to plant
+  // a XSS payload via a write tool. http(s) / ftp are the realistic
+  // 'website' protocols; anything exotic is suspicious here.
+  const BLOCKED = new Set(["javascript:", "data:", "vbscript:"]);
+  if (BLOCKED.has(parsed.protocol)) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["address"],
+      message: `When service is 'URL', address protocol '${parsed.protocol}' is not allowed. Use http: or https:.`,
+    });
+  }
+}
+
+// Capsule's complete service list, copied verbatim from a 422
+// response body for a `PIGEON_POST` test:
+//   "options are: URL, SKYPE, TWITTER, LINKED_IN, FACEBOOK, XING,
+//    FEED, GOOGLE_PLUS, FLICKR, GITHUB, YOUTUBE, INSTAGRAM,
+//    PINTEREST, TIKTOK, THREADS, BLUESKY, SNAPCHAT"
+// Locked at the schema layer so typos surface before any HTTP
+// round-trip. If Capsule adds new services, the 422 will tell us.
+const WebsiteServiceEnum = z.enum([
+  "URL",
+  "SKYPE",
+  "TWITTER",
+  "LINKED_IN",
+  "FACEBOOK",
+  "XING",
+  "FEED",
+  "GOOGLE_PLUS",
+  "FLICKR",
+  "GITHUB",
+  "YOUTUBE",
+  "INSTAGRAM",
+  "PINTEREST",
+  "TIKTOK",
+  "THREADS",
+  "BLUESKY",
+  "SNAPCHAT",
+]);
+
+const WebsiteSchema = z
+  .object({
+    address: z
+      .string()
+      .min(1)
+      .describe(
+        "The website address. A URL when service='URL', or a handle (e.g. '@acmeco') for social services like 'TWITTER', 'INSTAGRAM'. Capsule names this field `address` regardless of service type.",
+      ),
+    service: WebsiteServiceEnum.optional().describe(
       "Service type. One of: URL, SKYPE, TWITTER, LINKED_IN, FACEBOOK, XING, FEED, GOOGLE_PLUS, FLICKR, GITHUB, YOUTUBE, INSTAGRAM, PINTEREST, TIKTOK, THREADS, BLUESKY, SNAPCHAT. Defaults to 'URL' if omitted.",
     ),
-});
+  })
+  .superRefine(validateWebsiteAddress);
 
 // ── Tool definitions ────────────────────────────────────────────────────────
 
@@ -472,37 +521,18 @@ export async function removePartyAddressById(input: z.infer<typeof removePartyAd
 
 // websites ───────────────────────────────────────────────────────────
 
-export const addPartyWebsiteSchema = z.object({
-  partyId: z.number().int().positive(),
-  address: z
-    .string()
-    .min(1)
-    .describe(
-      "The website address. A URL when service='URL', or a handle (e.g. '@acmeco') for social services.",
-    ),
-  service: z
-    .enum([
-      "URL",
-      "SKYPE",
-      "TWITTER",
-      "LINKED_IN",
-      "FACEBOOK",
-      "XING",
-      "FEED",
-      "GOOGLE_PLUS",
-      "FLICKR",
-      "GITHUB",
-      "YOUTUBE",
-      "INSTAGRAM",
-      "PINTEREST",
-      "TIKTOK",
-      "THREADS",
-      "BLUESKY",
-      "SNAPCHAT",
-    ])
-    .optional()
-    .describe("Defaults to 'URL' if omitted."),
-});
+export const addPartyWebsiteSchema = z
+  .object({
+    partyId: z.number().int().positive(),
+    address: z
+      .string()
+      .min(1)
+      .describe(
+        "The website address. A URL when service='URL', or a handle (e.g. '@acmeco') for social services.",
+      ),
+    service: WebsiteServiceEnum.optional().describe("Defaults to 'URL' if omitted."),
+  })
+  .superRefine(validateWebsiteAddress);
 
 export async function addPartyWebsite(input: z.infer<typeof addPartyWebsiteSchema>) {
   const { partyId, address, service } = input;
