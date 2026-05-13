@@ -34,6 +34,8 @@
  *                         needs to fit a 25MB attachment base64-encoded
  *                         in the upload_attachment tool call. Express
  *                         accepts shorthand like '50mb' or raw bytes.)
+ *   MCP_HTTP_TRUST_PROXY  Number of proxy hops to trust (default 1).
+ *                         See src/http/config.ts for the decision tree.
  */
 
 import { isReadOnly } from "./capsule/client.js";
@@ -50,7 +52,7 @@ function fatal(message: string): never {
 
 const baseResult = resolveBaseConfig();
 if ("error" in baseResult) fatal(baseResult.error);
-const { publicBaseUrl, signingKey, port, jsonLimit } = baseResult.ok;
+const { publicBaseUrl, signingKey, port, jsonLimit, trustProxy } = baseResult.ok;
 
 // Pass publicBaseUrl so selectMode can refuse insecure-auto-approve mode
 // for non-loopback hostnames (defence-in-depth for misconfigured public
@@ -89,6 +91,7 @@ const app = createApp({
   issuerUrl,
   jsonLimit,
   allowedOrigins: baseResult.ok.allowedOrigins,
+  trustProxy,
 });
 
 app.listen(port, () => {

@@ -136,6 +136,17 @@ export interface BaseConfig {
   port: number;
   jsonLimit: string;
   allowedOrigins: string[];
+  /**
+   * Value passed to `app.set("trust proxy", ...)`. Controls how
+   * express derives the client IP for rate limiting on
+   * unauthenticated paths. Default `1` (trust one proxy hop —
+   * correct for Cloud Run's single L7 frontend). Multi-hop ingress
+   * (Cloudflare → Cloud Run, nginx → app) needs `2+`. Bare-IP
+   * deployments without any proxy in front should set `0` so a
+   * client can't spoof `X-Forwarded-For: <attacker>` to dodge the
+   * per-IP limit.
+   */
+  trustProxy: number;
 }
 
 export type BaseConfigResult = { ok: BaseConfig } | { error: string };
@@ -150,6 +161,13 @@ export type BaseConfigResult = { ok: BaseConfig } | { error: string };
  *   attachment base64-encoded in upload_attachment).
  * - MCP_ALLOWED_ORIGINS: optional comma-separated browser origins allowed to
  *   send Origin-bearing /mcp requests.
+ * - MCP_HTTP_TRUST_PROXY: optional integer, default '1'. Number of
+ *   proxy hops to trust when deriving the client IP for rate
+ *   limiting. `1` is correct for single-frontend deployments like
+ *   Cloud Run. Set higher for multi-hop ingress (Cloudflare → Cloud
+ *   Run = `2`), set `0` for bare-IP deployments with no proxy in
+ *   front (otherwise a client can spoof X-Forwarded-For to dodge
+ *   per-IP rate limits on unauthenticated paths).
  */
 export function resolveBaseConfig(env: NodeJS.ProcessEnv = process.env): BaseConfigResult {
   const publicBaseUrl = env["PUBLIC_BASE_URL"];
@@ -237,5 +255,19 @@ export function resolveBaseConfig(env: NodeJS.ProcessEnv = process.env): BaseCon
       ...parsedExtraOrigins.map((origin) => origin.origin),
     ]),
   );
-  return { ok: { publicBaseUrl, signingKey, port, jsonLimit, allowedOrigins } };
+
+  const trustProxyRaw = env["MCP_HTTP_TRUST_PROXY"] ?? "1";
+  const trustProxy = Number(trustProxyRaw);
+  // 0 disables proxy trust; 1..N trusts that many hops. Anything else
+  // (NaN, negative, fractional, > ~10) is almost certainly a typo —
+  // refuse to start rather than silently mis-key the rate limiter.
+  if (!Number.isInteger(trustProxy) || trustProxy < 0 || trustProxy > 10) {
+    return {
+      error: `MCP_HTTP_TRUST_PROXY must be an integer in 0..10 (got ${JSON.stringify(trustProxyRaw)}). Use 1 for Cloud Run / single-proxy fronts, 2+ for multi-hop ingress, 0 for bare-IP deployments.`,
+    };
+  }
+
+  return {
+    ok: { publicBaseUrl, signingKey, port, jsonLimit, allowedOrigins, trustProxy },
+  };
 }

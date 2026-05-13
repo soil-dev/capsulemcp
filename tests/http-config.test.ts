@@ -174,8 +174,49 @@ describe("resolveBaseConfig", () => {
         port: 8080,
         jsonLimit: "35mb",
         allowedOrigins: ["https://example.run.app", ...DEFAULT_MCP_CLIENT_ORIGINS],
+        trustProxy: 1,
       },
     });
+  });
+
+  it("uses MCP_HTTP_TRUST_PROXY env when set", () => {
+    // Multi-hop ingress (e.g. Cloudflare in front of Cloud Run)
+    // needs `2`. Single-frontend deployments stay on the default.
+    const result = resolveBaseConfig({
+      PUBLIC_BASE_URL: "https://example.run.app",
+      MCP_OAUTH_SIGNING_KEY: VALID_KEY,
+      MCP_HTTP_TRUST_PROXY: "2",
+    });
+    if ("ok" in result) expect(result.ok.trustProxy).toBe(2);
+    else throw new Error(`unexpected error: ${result.error}`);
+  });
+
+  it("accepts MCP_HTTP_TRUST_PROXY=0 for bare-IP deployments", () => {
+    // Without any proxy in front, trusting X-Forwarded-File at all
+    // lets a client spoof their bucket. `0` disables the trust.
+    const result = resolveBaseConfig({
+      PUBLIC_BASE_URL: "https://example.run.app",
+      MCP_OAUTH_SIGNING_KEY: VALID_KEY,
+      MCP_HTTP_TRUST_PROXY: "0",
+    });
+    if ("ok" in result) expect(result.ok.trustProxy).toBe(0);
+    else throw new Error(`unexpected error: ${result.error}`);
+  });
+
+  it("rejects malformed MCP_HTTP_TRUST_PROXY (negative / huge / non-integer)", () => {
+    // Each of these is almost certainly a typo. Surface clearly at
+    // startup rather than silently mis-key the rate limiter.
+    for (const bad of ["-1", "11", "1.5", "yes", "true"]) {
+      const result = resolveBaseConfig({
+        PUBLIC_BASE_URL: "https://example.run.app",
+        MCP_OAUTH_SIGNING_KEY: VALID_KEY,
+        MCP_HTTP_TRUST_PROXY: bad,
+      });
+      expect("error" in result).toBe(true);
+      if ("error" in result) {
+        expect(result.error).toMatch(/MCP_HTTP_TRUST_PROXY must be an integer/);
+      }
+    }
   });
 
   it("uses PORT env when set", () => {
