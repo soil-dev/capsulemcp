@@ -1,0 +1,68 @@
+# PR & main-branch checks. Every gate that lands here is one we want to
+# enforce before a human reviewer spends time on the diff: typecheck,
+# tests, build, lint+format, dependency audit, and the leak guard.
+#
+# Keep this fast — under ~2 minutes is the goal. The test suite is the
+# long pole (~10s locally, ~30s in CI cold-cache), everything else is
+# sub-second.
+
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+# Cancel in-flight runs for the same PR when a new push arrives.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: typecheck · test · build · lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          # Pin to the LTS we develop against; `engines.node` in
+          # package.json requires >=22.
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint (Biome)
+        run: npm run lint
+
+      - name: Format check (Biome)
+        # Separate step from lint so reviewers see exactly which gate
+        # failed in the GitHub UI.
+        run: npm run format:check
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        # Catches regressions where typecheck passes but the bundler
+        # chokes — happened once with a tsup config change.
+        run: npm run build
+
+      - name: Leak guard
+        run: npm run check:leaks
+
+      - name: Audit dependencies
+        # `--audit-level=high` because npm flags a steady drip of
+        # low/moderate transitive advisories that aren't actionable.
+        # Tighten if we want to be stricter.
+        run: npm audit --audit-level=high
