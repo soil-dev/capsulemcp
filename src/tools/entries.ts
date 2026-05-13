@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { confirmFlag } from "./confirm-flag.js";
 import { idempotent } from "../capsule/idempotent.js";
 import {
   capsuleDelete,
@@ -175,8 +176,7 @@ export async function updateEntry(input: z.infer<typeof updateEntrySchema>) {
 
 export const deleteEntrySchema = z.object({
   id: z.number().int().positive().describe("Entry (note/email/task-record) ID"),
-  confirm: z
-    .literal(true)
+  confirm: confirmFlag()
     .describe("Must be set to true. Permanently deletes the entry — use this to remove a note from a party/opportunity/project. Irreversible."),
 });
 

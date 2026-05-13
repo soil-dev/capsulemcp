@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { confirmFlag } from "./confirm-flag.js";
 import {
   capsuleDelete,
   capsuleGet,
@@ -164,8 +165,7 @@ export async function completeTask(input: z.infer<typeof completeTaskSchema>) {
 
 export const deleteTaskSchema = z.object({
   id: z.number().int().positive(),
-  confirm: z
-    .literal(true)
+  confirm: confirmFlag()
     .describe("Must be set to true. Permanently deletes the task. To mark done without losing history use complete_task. Irreversible."),
 });
 

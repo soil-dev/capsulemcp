@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { confirmFlag } from "./confirm-flag.js";
 import {
   CapsuleApiError,
   capsuleDelete,
@@ -119,8 +120,7 @@ export const removeAdditionalPartySchema = z.object({
   entity: RelationshipEntity,
   entityId: z.number().int().positive(),
   partyId: z.number().int().positive(),
-  confirm: z
-    .literal(true)
+  confirm: confirmFlag()
     .describe(
       "Must be set to true. Removes the link between the entity and the additional party. The party itself is not deleted. Reversible by re-adding the link.",
     ),

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { confirmFlag } from "./confirm-flag.js";
 import {
   capsuleDelete,
   capsuleGet,
@@ -240,8 +241,7 @@ export async function updateProject(input: z.infer<typeof updateProjectSchema>) 
 
 export const deleteProjectSchema = z.object({
   id: z.number().int().positive(),
-  confirm: z
-    .literal(true)
+  confirm: confirmFlag()
     .describe("Must be set to true. Permanently deletes the project (case). Consider update_project status='CLOSED' instead. Irreversible."),
 });
 

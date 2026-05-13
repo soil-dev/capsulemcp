@@ -13,6 +13,22 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ### Fixed
 
+- **Friendlier `confirm: true` rejection message on all 7 gated tools.**
+  Zod's default error on `z.literal(true)` reads
+  `"Invalid input: expected true"` — technically correct but unhelpful,
+  especially for an LLM caller trying to self-correct (sounds like
+  "you passed false" even when the field was missing entirely). New
+  shared helper `confirmFlag()` in `src/tools/confirm-flag.ts` returns
+  a `z.literal(true)` with a custom error message:
+  `"confirm: true is required to perform this irreversible operation
+  (set the parameter explicitly to acknowledge the destructive intent)"`.
+  Applied to `delete_party`, `delete_opportunity`, `delete_project`,
+  `delete_task`, `delete_entry`, `remove_track`, and
+  `remove_additional_party`. Per-tool `.describe(...)` text (cascade
+  semantics, irreversibility notes) is unchanged at each call site —
+  only the rejection message is normalised. Regression coverage in
+  `tests/confirm-flag.test.ts`: missing/false/true probes against
+  each of the 7 schemas.
 - **`create_opportunity.value.currency` missing-field error is now
   operator-readable.** Previously the schema emitted Zod's default
   `"Invalid input: expected string, received undefined"` when

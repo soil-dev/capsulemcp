@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { confirmFlag } from "./confirm-flag.js";
 import {
   capsuleDelete,
   capsuleGet,
@@ -211,8 +212,7 @@ export async function updateOpportunity(
 
 export const deleteOpportunitySchema = z.object({
   id: z.number().int().positive(),
-  confirm: z
-    .literal(true)
+  confirm: confirmFlag()
     .describe("Must be set to true. Permanently deletes the opportunity. Irreversible."),
 });
 

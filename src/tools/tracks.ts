@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { confirmFlag } from "./confirm-flag.js";
 import { idempotent } from "../capsule/idempotent.js";
 import {
   capsuleDelete,
@@ -140,8 +141,7 @@ export async function updateTrack(input: z.infer<typeof updateTrackSchema>) {
 
 export const removeTrackSchema = z.object({
   trackId: z.number().int().positive(),
-  confirm: z
-    .literal(true)
+  confirm: confirmFlag()
     .describe(
       "Must be set to true. Removes the track instance from its entity. **Capsule also deletes the auto-tasks the track created when it was applied** — they go with the track and become unreachable (404 on GET /tasks/{id}, gone from list_tasks on the parent entity). If you need any of those tasks to outlive the track, copy their content into fresh tasks (or use the web UI) before calling remove_track.",
     ),

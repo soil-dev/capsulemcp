@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { confirmFlag } from "./confirm-flag.js";
 import {
   capsuleDelete,
   capsuleGet,
@@ -286,8 +287,7 @@ export async function updateParty(input: z.infer<typeof updatePartySchema>) {
 
 export const deletePartySchema = z.object({
   id: z.number().int().positive(),
-  confirm: z
-    .literal(true)
+  confirm: confirmFlag()
     .describe(
       "Must be set to true. Deletes the party AND all linked notes, tasks, opportunities, and projects (kases). " +
         "Deleting an ORGANISATION does NOT delete people linked to it via organisationId — their `organisation` field is silently cleared to null and they survive as standalone records. " +
