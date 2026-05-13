@@ -152,7 +152,7 @@ export const updateEntrySchema = z.object({
     .string()
     .optional()
     .describe(
-      "New subject line. Mostly meaningful on email-type entries; on plain notes Capsule accepts the call (advances `updatedAt`) but does not store the subject — confusing if `updatedAt` is being used as a 'last meaningful change' signal. `entryAt` (when the note was authored) is preserved across edits; only `updatedAt` advances. To sort/filter by 'when did this happen', use `entryAt`; for 'last touched', use `updatedAt`.",
+      "New subject line. Mostly meaningful on email-type entries; on plain notes Capsule accepts the call (HTTP 200) but **does not store the subject and does not advance `updatedAt`** — a true no-op for inapplicable fields. `entryAt` (when the note was authored) is preserved across edits; `updatedAt` advances only when an applicable field actually changes. To sort/filter by 'when did this happen', use `entryAt`; for 'last touched', use `updatedAt`.",
     ),
 });
 
