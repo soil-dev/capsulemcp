@@ -104,8 +104,9 @@ describe("tools/list", () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
 
-    // Spot-check shape
-    expect(tools.length).toBeGreaterThan(40);
+    // README advertises the exact catalogue size; keep it locked here
+    // so docs drift is caught before release.
+    expect(tools.length).toBe(81);
 
     // Reads we always expect
     for (const r of [
@@ -156,6 +157,9 @@ describe("tools/list", () => {
     const { client } = await spawn({ readOnly: true });
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name);
+
+    // README advertises 49 tools in read-only mode.
+    expect(tools.length).toBe(49);
 
     // No write tools should appear
     const writePrefixes = [
@@ -210,6 +214,15 @@ describe("tools/list", () => {
       expect(t.description).toBeTruthy();
       expect(t.description!.length).toBeGreaterThan(10);
     }
+  });
+
+  it("keeps remove_track's tool description aligned with its cascade semantics", async () => {
+    const { client } = await spawn();
+    const { tools } = await client.listTools();
+    const removeTrack = tools.find((t) => t.name === "remove_track");
+
+    expect(removeTrack?.description).toContain("auto-tasks");
+    expect(removeTrack?.description).toContain("copy any task details");
   });
 });
 

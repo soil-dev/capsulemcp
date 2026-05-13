@@ -1,7 +1,7 @@
 /**
  * Shared `confirm: true` literal for destructive write tools.
  *
- * Capsule's connector gates 7 irreversible tools behind an explicit
+ * Capsule's connector gates 7 destructive/removal tools behind an explicit
  * `confirm: true` flag (delete_party / _opportunity / _project / _task
  * / _entry, plus remove_track and remove_additional_party). Zod's
  * default error on a missing or `false` value of a `z.literal(true)`
@@ -20,7 +20,7 @@
 import { z } from "zod";
 
 const CONFIRM_REQUIRED_MESSAGE =
-  "confirm: true is required to perform this irreversible operation (set the parameter explicitly to acknowledge the destructive intent)";
+  "confirm: true is required to perform this destructive operation (set the parameter explicitly to acknowledge the destructive intent)";
 
 export function confirmFlag(): z.ZodLiteral<true> {
   return z.literal(true, { error: () => CONFIRM_REQUIRED_MESSAGE });

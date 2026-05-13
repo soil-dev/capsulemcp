@@ -78,7 +78,7 @@ Set `CAPSULE_MCP_READONLY=1` to disable every write/delete tool at the MCP layer
 
 ### Delete safety
 
-Every `delete_*` tool requires `confirm: true` in its arguments. Without it, the schema rejects the call before any HTTP is made. Tool descriptions tell Claude to read the entity first and confirm with the user before invoking. The combined design — read-scoped token, read-only mode flag, schema-level confirm gate — means destructive actions are deliberate, not accidental.
+Every whole-record `delete_*` tool, plus `remove_track` and `remove_additional_party`, requires `confirm: true` in its arguments. Without it, the schema rejects the call before any HTTP is made. Tool descriptions tell Claude to read the entity first and confirm with the user before invoking. The combined design — read-scoped token, read-only mode flag, schema-level confirm gate — means destructive actions are deliberate, not accidental.
 
 ## License
 
