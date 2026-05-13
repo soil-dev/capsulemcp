@@ -189,30 +189,16 @@ async function parseErrorBody(res: Response): Promise<string> {
 }
 
 /**
- * Per-request timeout for outbound Capsule HTTP calls. Defense in
- * depth: a slow or stuck Capsule response surfaces as a clean error
- * to the caller instead of pinning the connection.
+ * Per-request timeout for outbound Capsule HTTP calls. A slow or
+ * stuck upstream response surfaces as a clean error to the caller
+ * instead of pinning the connection. Bounds the outbound budget
+ * against DNS hiccups, TCP keepalive holes, and slow-failing
+ * Capsule responses.
  *
  * Reaches into the `signal` slot on the fetch options unless the
- * caller already provided one. Tests that need to bypass the timeout
- * (e.g. fake-timer tests that drive the 429-retry delay) can pass
- * their own signal.
- *
- * Backstory: early alpha verification surfaced three "tool call
- * hung for ~4 minutes" reports (on `add_additional_party`,
- * `remove_tag_by_id`, and `list_entity_tracks`). The operator
- * later confirmed all three were the same artifact: the
- * Claude.ai tool-approval prompt's own timeout firing while the
- * operator was AFK and never clicked "approve" — the tool call
- * never reached the connector at all. So those reports weren't
- * connector hangs; they're an interaction-design quirk between
- * Claude.ai's tool-approval UX and an absent operator.
- *
- * This timeout doesn't address those reports (it can't — the
- * connector isn't involved in that failure mode), but it is
- * still the right thing to have: real Capsule slowness, DNS
- * hiccups, TCP keepalive holes, and Capsule outages that return
- * slowly all benefit from a bounded outbound budget.
+ * caller already provided one. Tests that need to bypass the
+ * timeout (e.g. fake-timer tests that drive the 429-retry delay)
+ * can pass their own signal.
  */
 const REQUEST_TIMEOUT_MS = 60_000;
 
