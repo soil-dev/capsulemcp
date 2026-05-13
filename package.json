@@ -31,6 +31,11 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
+    "lint": "biome lint src tests scripts",
+    "format": "biome format --write src tests scripts",
+    "format:check": "biome format src tests scripts",
+    "check": "biome check src tests scripts",
+    "check:leaks": "scripts/check-leaks.sh",
     "prepare": "npm run build:icon && tsup"
   },
   "repository": {
@@ -45,6 +50,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.4.15",
     "@types/express": "^5.0.6",
     "@types/node": "^25.6.2",
     "tsup": "^8.3.0",
