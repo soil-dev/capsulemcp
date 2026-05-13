@@ -11,6 +11,21 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.0.0] — 2026-05-13
+
+First stable release.
+
+Promotes [1.0.0-beta.4] to GA — no code change vs. beta.4. From this
+point on the project follows [Semantic Versioning](https://semver.org)
+strictly: breaking changes require a major bump, new tools / env vars
+get a minor bump, bug fixes and doc updates get patches. The two most
+recent minor lines receive security backports.
+
+The full feature set, surface area, and design rationale are unchanged
+from beta.4 — see that section below for the substantive notes, and
+[DESIGN.md](DESIGN.md) (L1..L12) for the known limitations the project
+intentionally ships with.
+
 ## [1.0.0-beta.4] — 2026-05-13
 
 Pre-1.0 security review pass. Three Sev-3 findings fixed in code,

@@ -31,7 +31,7 @@ For most individual users the install is a single JSON snippet pasted into Claud
      "mcpServers": {
        "capsule": {
          "command": "npx",
-         "args": ["-y", "github:soil-dev/capsulemcp#v1.0.0-beta.4"],
+         "args": ["-y", "github:soil-dev/capsulemcp#v1.0.0"],
          "env": {
            "CAPSULE_API_TOKEN": "<paste token here>",
            "CAPSULE_MCP_READONLY": "1"
