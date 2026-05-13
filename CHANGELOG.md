@@ -46,6 +46,28 @@ versions adhere to [Semantic Versioning](https://semver.org).
   `javascript:` / `data:` / `vbscript:` rejected even when
   syntactically parseable. Non-URL services (TWITTER, BLUESKY,
   GITHUB, …) are untouched.
+- **Constant-time PKCE verification.** The MCP SDK's bundled
+  `pkce-challenge` does its verifier-vs-challenge compare with
+  native `===`. Both sides are fixed-width SHA-256 base64url
+  strings so there's no realistic information leak, but the SDK
+  exposes an explicit `skipLocalPkceValidation` opt-out for
+  exactly this concern. The OAuth provider now sets it and does
+  the PKCE check itself: `base64url(SHA-256(verifier))` compared
+  against the stored challenge via `timingSafeEqual`. The check
+  runs before the resource-binding check, and a failed compare
+  does NOT consume the code (so a network glitch on a legitimate
+  exchange doesn't burn it).
+
+### Documented (limitations)
+
+- **DESIGN.md gains L11** (Capsule error bodies pass through to
+  MCP responses verbatim — relevant for adversarial-tenant
+  scenarios; same trust boundary as L1, sanitisation is a future-
+  minor candidate) and **L12** (authorization-code state is
+  in-process — multi-instance deployments without session affinity
+  need sticky sessions or vertical scaling until auth-code state
+  moves to a shared store; Cloud Run's single-instance affinity
+  covers the worked example in DEPLOY.md).
 
 ### Tooling
 
