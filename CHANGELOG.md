@@ -11,6 +11,30 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Documented
+
+- **Address `country` field is dictionary-validated, not
+  free-text.** §1 production verification showed that Capsule
+  rejects inputs not in its canonical-English-name dictionary
+  with `422 address.country: unknown country` — not silently
+  passes them through. The previous description's
+  "normalisation, not rejection" framing was wrong for any
+  input that wasn't already a dictionary hit. Updated:
+  - `AddressSchema.country` and `addPartyAddressSchema.country`
+    descriptions now list the dictionary edges discovered
+    (accepted, aliased, and notable rejections like
+    `Czech Republic`, `UK`, `Deutschland`).
+  - NOTES-ON-CAPSULE-API.md §30 documents the dictionary
+    behaviour with the full probe table.
+- **Capsule's v2 REST API does not expose team↔user membership.**
+  Verified live on the production tenant by probing five
+  plausible shapes (`GET /teams`, `embed=users`,
+  `GET /teams/{id}`, `GET /teams/{id}/users`, `GET /users/{id}`)
+  — all return identity but no join. NOTES §29 and the
+  `list_teams` tool description carry the limitation
+  explicitly, including the `update_project { ownerId, teamId } →
+  422` membership-probe workaround.
+
 ## [1.0.0-beta.3] — 2026-05-11
 
 Container-image-build fix. v1.0.0-beta.1 and v1.0.0-beta.2

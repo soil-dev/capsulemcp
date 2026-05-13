@@ -207,7 +207,7 @@ const PartyWriteBaseSchema = {
     .array(AddressSchema)
     .optional()
     .describe(
-      "APPEND-ONLY: items are merged into the existing list, never replaced. For atomic add/remove/replace use add_party_address and remove_party_address_by_id. Capsule canonicalises `country` through its country dictionary (e.g. 'USA' → 'United States') — normalisation, not rejection.",
+      "APPEND-ONLY: items are merged into the existing list, never replaced. For atomic add/remove/replace use add_party_address and remove_party_address_by_id. The `country` field is mapped through Capsule's country dictionary — see `add_party_address.country` for the dictionary edges (small canonical-English-name list; inputs not in the dictionary are REJECTED with 422, not silently dropped).",
     ),
   websites: z
     .array(WebsiteSchema)
@@ -439,7 +439,9 @@ export const addPartyAddressSchema = z.object({
     .string()
     .optional()
     .describe(
-      "Capsule canonicalises through its country dictionary (e.g. 'USA' is stored as 'United States') — normalisation, not rejection.",
+      "Country name. Capsule validates this against a small canonical-English-name dictionary; inputs not in the dictionary are REJECTED with 422 'address.country: unknown country' (NOT silently passed through or normalised). " +
+        "Probed examples — accepted: `United States`, `United Kingdom`, `Czechia`, `Germany`. Aliased: `USA → United States`. Rejected: `United States of America`, `Czech Republic` (use `Czechia`), `UK`/`Britain` (use `United Kingdom`), `Deutschland` (use `Germany`). " +
+        "Empty string is accepted and stored as `null` — a de-facto 'clear' shape. To discover an accepted name, read an existing party that already has the country set.",
     ),
   zip: z.string().optional(),
   type: z.string().optional().describe("Free-form label, e.g. 'Office', 'Home'."),

@@ -1024,6 +1024,59 @@ mentions the 422 path as the membership-validation shape.
 
 **No Capsule docs page mentions the missing membership surface.**
 
+---
+
+## 30. Address `country` is dictionary-validated, not free-text
+
+Capsule validates `address.country` against a small canonical-
+English-name dictionary. Inputs not in the dictionary are
+**rejected** with `422 address.country: unknown country` —
+**not** silently passed through or normalised. This contradicts
+the impression that "Capsule normalises country through its
+dictionary" gives, and was discovered during the §1 (child-array
+semantics) production verification on 2026-05-13.
+
+Probed against the production tenant via fresh, isolated test
+parties:
+
+| Input | Result |
+|---|---|
+| `United States` | accept |
+| `USA` | canonicalise → `United States` |
+| `United Kingdom` | accept |
+| `Czechia` | accept |
+| `Germany` | accept |
+| `United States of America` | **422 unknown country** |
+| `Czech Republic` | **422 unknown country** |
+| `UK` | **422 unknown country** |
+| `Britain` | **422 unknown country** |
+| `Deutschland` | **422 unknown country** |
+| `Atlantis` | **422 unknown country** |
+| `""` (empty string) | accept, stored as `null` |
+
+So the dictionary is canonical-English-only with a small
+aliases table (`USA` is one — others not yet probed). Common
+alternative names (`UK`, `Czech Republic`, `Deutschland`,
+`United States of America`) are rejected even though a human
+reader would consider them obvious synonyms.
+
+**Practical effect on callers:** any workflow that takes a
+free-text country from the operator (form input, CSV import,
+LLM-paraphrased address) needs to either pre-normalise to the
+dictionary or be ready to handle the 422. The connector cannot
+discover the full accepted list — Capsule's API exposes no
+`/countries` enumeration endpoint.
+
+**Where in our code:** [`src/tools/parties.ts`](src/tools/parties.ts)
+`AddressSchema` and `addPartyAddressSchema.country` descriptions
+spell out the dictionary edges with the probed examples above.
+
+**No Capsule docs page lists the accepted country names.**
+
+---
+
+## How to add to this file
+
 When you discover a new Capsule API quirk:
 
 1. Verify the behaviour live (don't trust the docs alone — Capsule's
