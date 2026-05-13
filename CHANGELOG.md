@@ -26,6 +26,16 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ### Documented
 
+- **`update_entry.subject` on plain notes is a true no-op, not
+  audit noise.** §8 production verification (2026-05-13) showed
+  that PUT-ing a subject onto a note-type entry returns HTTP 200
+  but **neither persists the subject nor advances `updatedAt`**
+  (verified with a 2-second gap to rule out timestamp-resolution
+  collisions). The previous description claimed Capsule accepts
+  the call and advances `updatedAt` — wrong, possibly stale from
+  an older API behaviour. Updated to: true no-op for inapplicable
+  fields; `updatedAt` only advances when an applicable field
+  actually changes.
 - **`create_task` description now covers the no-target case.** §4
   production verification confirmed Capsule accepts a task with no
   `partyId` / `opportunityId` / `projectId` (standalone task — useful
