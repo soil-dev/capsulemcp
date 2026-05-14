@@ -1,5 +1,7 @@
 # capsulemcp
 
+[![capsulemcp MCP server](https://glama.ai/mcp/servers/soil-dev/capsulemcp/badges/score.svg)](https://glama.ai/mcp/servers/soil-dev/capsulemcp)
+
 A [Model Context Protocol](https://modelcontextprotocol.io) server for [Capsule CRM](https://capsulecrm.com). Connect Claude (Desktop, Code, or web Projects via Custom Connector) to your CRM and let it answer natural-language questions across the full record graph: contacts, organisations, opportunities, projects, tasks, and timeline activity. Beyond the basics it covers structured filters with field/operator conditions, saved searches with sort, workflow tracks (templates and instances), file attachments (read + write), audit of deleted records, and batch fetches up to 10 records per call.
 
 - **81 tools** across the Capsule resource graph (49 in read-only mode) — full read coverage plus careful, confirm-gated writes
