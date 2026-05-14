@@ -203,16 +203,19 @@ describe("atomic child-array operations", () => {
     ).toBe(true);
   });
 
-  it("add_party_website rejects XSS-vector protocols (javascript:/data:/vbscript:)", async () => {
+  it("add_party_website rejects non-http(s) URL protocols", async () => {
     // Defence-in-depth against the connector being used to plant
-    // an XSS payload via a write tool — Capsule's API stores these
-    // verbatim, and any rendering UI that treats stored URLs as
-    // clickable would execute the script.
+    // a harmful link via a write tool — Capsule's API stores these
+    // verbatim, and downstream UIs may render stored websites as
+    // clickable links.
     const { addPartyWebsiteSchema } = await import("../src/tools/parties.js");
     for (const dangerous of [
       "javascript:alert(1)",
       "data:text/html,<script>alert(1)</script>",
       "vbscript:msgbox(1)",
+      "file:///etc/passwd",
+      "ftp://example.com",
+      "mailto:admin@example.com",
     ]) {
       const result = addPartyWebsiteSchema.safeParse({
         partyId: 1,

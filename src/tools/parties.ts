@@ -49,15 +49,15 @@ const AddressSchema = z.object({
 // gates:
 //
 //   1. Syntactic — must parse as a URL via the WHATWG URL parser.
-//   2. Scheme — must not be javascript:/data:/vbscript:, which
-//      would store an XSS-like payload in the CRM that a
-//      downstream UI rendering party websites could execute.
+//   2. Scheme — must be http: or https:. A small deny-list blocks the
+//      obvious XSS schemes, but a positive web-URL allow-list is safer
+//      for downstream UIs that may turn stored websites into links.
 //
-// Without the scheme gate, the connector would happily write
-// `javascript:alert(1)` into Capsule's website field; Capsule
-// stores user-supplied strings verbatim, so the impact lives in
-// whoever renders them later. Reject at the schema layer to avoid
-// shifting that responsibility to every consumer.
+// Without the scheme gate, the connector would happily write values
+// like `javascript:alert(1)` or `file:///...` into Capsule's website
+// field; Capsule stores user-supplied strings verbatim, so the impact
+// lives in whoever renders them later. Reject at the schema layer to
+// avoid shifting that responsibility to every consumer.
 function validateWebsiteAddress(
   data: { address: string; service?: string | undefined },
   ctx: z.RefinementCtx,
@@ -79,10 +79,11 @@ function validateWebsiteAddress(
   const parsed = new URL(data.address);
   // Capsule itself doesn't sanitize what it stores; this is a
   // defence-in-depth gate against the connector being used to plant
-  // a XSS payload via a write tool. http(s) / ftp are the realistic
-  // 'website' protocols; anything exotic is suspicious here.
-  const BLOCKED = new Set(["javascript:", "data:", "vbscript:"]);
-  if (BLOCKED.has(parsed.protocol)) {
+  // a harmful link via a write tool. Keep URL websites to normal web
+  // URLs; non-web identifiers belong under their explicit service
+  // types (TWITTER, GITHUB, SKYPE, etc.).
+  const ALLOWED_PROTOCOLS = new Set(["http:", "https:"]);
+  if (!ALLOWED_PROTOCOLS.has(parsed.protocol)) {
     ctx.addIssue({
       code: "custom",
       path: ["address"],
