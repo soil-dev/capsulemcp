@@ -17,6 +17,10 @@ versions adhere to [Semantic Versioning](https://semver.org).
   to fetch the repository, so the workflow now declares
   `permissions: contents: read` instead of inheriting repository/org
   defaults.
+- **Party website URL validation tightened to an http(s) allow-list.**
+  `service: "URL"` addresses already had syntax validation and blocked
+  the obvious scriptable schemes; the schema now rejects every non-web
+  protocol instead of relying on a deny-list.
 
 ## [1.0.0] — 2026-05-13
 
