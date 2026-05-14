@@ -11,6 +11,13 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Security
+
+- **GitHub Actions token permissions pinned to read-only.** CI only needs
+  to fetch the repository, so the workflow now declares
+  `permissions: contents: read` instead of inheriting repository/org
+  defaults.
+
 ## [1.0.0] — 2026-05-13
 
 First stable release.
