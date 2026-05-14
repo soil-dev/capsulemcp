@@ -261,7 +261,7 @@ export function createCapsuleMcpServer(): McpServer {
   registerTool(
     server,
     "list_party_opportunities",
-    "List all opportunities linked to a given party.",
+    "List opportunities linked to a given party. Returns the same record shape as get_opportunity, filtered to one party — use this to answer 'what deals do we have with X?' without enumerating all opportunities. Accepts optional embed (e.g. 'tags,fields') to include those in one round-trip.",
     listPartyOpportunitiesSchema,
     listPartyOpportunities,
   );
@@ -269,7 +269,7 @@ export function createCapsuleMcpServer(): McpServer {
   registerTool(
     server,
     "list_party_projects",
-    "List all projects (cases) linked to a given party.",
+    "List projects (cases) linked to a given party. Returns the same record shape as get_project, filtered to one party — use this to answer 'what cases is X involved in?' without enumerating all projects. Accepts optional embed (e.g. 'tags,fields'). For the opportunity-side analogue, use list_party_opportunities.",
     listPartyProjectsSchema,
     listPartyProjects,
   );
@@ -418,7 +418,7 @@ export function createCapsuleMcpServer(): McpServer {
   registerTool(
     server,
     "get_opportunity",
-    "Fetch a single opportunity by its numeric ID.",
+    "Fetch a single opportunity by its numeric id. Returns the full record including value, milestone, owner, party, and any embedded tags/custom fields. Use embed='tags,fields' to include those in one round-trip. For batch fetches of up to 10 opportunities at once, use get_opportunities instead.",
     getOpportunitySchema,
     getOpportunity,
   );
@@ -450,7 +450,7 @@ export function createCapsuleMcpServer(): McpServer {
   registerTool(
     server,
     "list_associated_projects",
-    "List projects (cases) associated with a given opportunity. The inverse direction (project → opportunity) is on each project's `opportunity` field directly.",
+    "List projects (cases) associated with a given opportunity. Returns the same record shape as list_projects, filtered to one opportunity. The inverse direction (project → opportunity) is on each project's `opportunity` field directly, so this tool is only needed for opportunity → projects discovery — use list_party_projects for party → projects.",
     listAssociatedProjectsSchema,
     listAssociatedProjects,
   );
@@ -459,7 +459,7 @@ export function createCapsuleMcpServer(): McpServer {
     registerTool(
       server,
       "create_opportunity",
-      "Create a new opportunity linked to a party and a pipeline milestone.",
+      "Create a new opportunity linked to a party. Requires partyId and milestoneId (which pins the deal to a specific pipeline stage — pipeline is inferred from the milestone). Value is optional but if amount is set, currency must be set too (3-letter ISO 4217 code, e.g. 'USD'). Discover valid milestone ids via list_pipelines + list_milestones first. For multi-party deals, use add_additional_party after creation.",
       createOpportunitySchema,
       createOpportunity,
     );
@@ -527,7 +527,7 @@ export function createCapsuleMcpServer(): McpServer {
     registerTool(
       server,
       "create_project",
-      "Create a new project (case) in Capsule CRM linked to a party.",
+      "Create a new project (case) in Capsule CRM linked to a party. Requires partyId and name; description, status, owner, and starting board/stage are optional. To pin a project to a specific board+stage on creation, pass stageId (which uniquely identifies a stage within a board). Discover valid ids via list_boards + list_stages. Returns the created project including its assigned id.",
       createProjectSchema,
       createProject,
     );
@@ -604,7 +604,7 @@ export function createCapsuleMcpServer(): McpServer {
   registerTool(
     server,
     "get_task",
-    "Fetch a single task by its numeric ID.",
+    "Fetch a single task by its numeric id. Returns the task's description, due date, owner, completion state, and the entity it's attached to (party / opportunity / project, if any — standalone tasks not tied to a record are also valid). For batch fetches of up to 10 tasks at once, use get_tasks instead.",
     getTaskSchema,
     getTask,
   );
@@ -666,7 +666,7 @@ export function createCapsuleMcpServer(): McpServer {
   registerTool(
     server,
     "list_opportunity_entries",
-    "List timeline entries (notes, captured emails, completed-task records) for an opportunity.",
+    "List timeline entries (notes, captured emails, completed-task records) for an opportunity. Returns entries newest-first. Each entry has a type ('note', 'email', 'task'), free-text content, and timestamps. Use this to answer 'what's the latest on deal X?' For party or project timelines, use list_party_entries or list_project_entries respectively.",
     listOpportunityEntriesSchema,
     listOpportunityEntries,
   );
@@ -674,7 +674,7 @@ export function createCapsuleMcpServer(): McpServer {
   registerTool(
     server,
     "list_project_entries",
-    "List timeline entries (notes, captured emails, completed-task records) for a project (case).",
+    "List timeline entries (notes, captured emails, completed-task records) for a project (case). Returns entries newest-first. Each entry has a type ('note', 'email', 'task'), free-text content, and timestamps. Use this to answer 'what's the latest on case X?' For party or opportunity timelines, use list_party_entries or list_opportunity_entries respectively.",
     listProjectEntriesSchema,
     listProjectEntries,
   );
@@ -839,7 +839,7 @@ export function createCapsuleMcpServer(): McpServer {
   registerTool(
     server,
     "list_pipelines",
-    "List all sales pipelines defined in Capsule CRM.",
+    "List all sales pipelines defined in Capsule CRM. Returns each pipeline's id, name, and milestones (deal stages, ordered by position). Use this to discover the pipelineId when creating an opportunity, then pick a milestone from the same pipeline via list_milestones. Pipelines are stable per Capsule account — list once and cache; they rarely change.",
     listPipelinesSchema,
     listPipelines,
   );
@@ -847,7 +847,7 @@ export function createCapsuleMcpServer(): McpServer {
   registerTool(
     server,
     "list_milestones",
-    "List all milestones (stages) within a specific opportunity pipeline.",
+    "List milestones (deal stages) within a specific opportunity pipeline. Returns each milestone's id, name, probability, and position. Used when creating opportunities (pass milestoneId to create_opportunity) or moving them across stages (set milestoneId in update_opportunity). Discover the pipelineId first via list_pipelines. Milestones are pipeline-scoped — not interchangeable across pipelines.",
     listMilestonesSchema,
     listMilestones,
   );
@@ -860,7 +860,7 @@ export function createCapsuleMcpServer(): McpServer {
   registerTool(
     server,
     "list_boards",
-    "List all project (kase) boards defined in Capsule. A board is a grouping of stages that projects flow through — the project equivalent of an opportunity pipeline.",
+    "List all project (case) boards defined in Capsule. A board is a grouping of stages that projects flow through — the project equivalent of an opportunity pipeline. Returns each board's id, name, and stages. Use this to discover boardId when creating a project, then pick a starting stage via list_stages. Like pipelines, boards are stable per account.",
     listBoardsSchema,
     listBoards,
   );
@@ -895,7 +895,7 @@ export function createCapsuleMcpServer(): McpServer {
   registerTool(
     server,
     "list_activitytypes",
-    "List all configured activity types (e.g. Call, Meeting, Email). These are the categories used when logging timeline entries.",
+    "List all configured activity types (e.g. Call, Meeting, Email). These are the categories used when logging timeline entries via add_note. Returns each type's id and name. The set is account-configured rather than a fixed enum, so call this to discover valid values before referencing an activityType in entry creation.",
     listActivityTypesSchema,
     listActivityTypes,
   );
@@ -971,7 +971,7 @@ export function createCapsuleMcpServer(): McpServer {
   registerTool(
     server,
     "list_tags",
-    "List all tags available for a given entity type (parties, opportunities, or kases).",
+    "List all tags available for a given entity type (parties, opportunities, or kases). Returns each tag's id, name, and any data-tag field schema. Tags are entity-specific — a party tag is not interchangeable with an opportunity tag. Use this to discover valid tag ids before calling add_tag, or to display the tag catalogue to the user when they ask 'what tags do we use?'",
     listTagsSchema,
     listTags,
   );
@@ -999,7 +999,7 @@ export function createCapsuleMcpServer(): McpServer {
   registerTool(
     server,
     "list_users",
-    "List all users in the Capsule account.",
+    "List all users in the Capsule account. Returns each user's id, username, optional first/last name, role, and party reference. Some users may have null first/last name fields (only username set) — fall back to username for display. Use this to discover user ids for owner-filtered queries against opportunities, projects, and tasks, or to map a user to their party record via user.party.id.",
     listUsersSchema,
     listUsers,
   );

@@ -22,6 +22,22 @@ versions adhere to [Semantic Versioning](https://semver.org).
   the obvious scriptable schemes; the schema now rejects every non-web
   protocol instead of relying on a deny-list.
 
+### Documented
+
+- **15 tool descriptions rewritten for richer LLM routing.** All 5
+  tools that Glama's introspection scored as C-grade
+  (`list_party_opportunities`, `list_party_projects`,
+  `create_opportunity`, `list_milestones`, `list_users`) and the
+  10 B-grade tools (`get_opportunity`, `list_associated_projects`,
+  `create_project`, `get_task`, `list_opportunity_entries`,
+  `list_project_entries`, `list_pipelines`, `list_boards`,
+  `list_activitytypes`, `list_tags`) now follow the
+  what-it-does + when-to-use-it + what-it-returns + how-it-compares-
+  to-related-tools shape the A-grade tools already had. No behaviour
+  change — descriptions only affect LLM tool-selection. Bundle size
+  grows accordingly: `dist/index.js` 115 → 118 KB, `dist/http.js`
+  140 → 144 KB.
+
 ## [1.0.0] — 2026-05-13
 
 First stable release.
