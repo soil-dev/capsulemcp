@@ -245,7 +245,7 @@ export function createCapsuleMcpServer(): McpServer {
   registerTool(
     server,
     "get_party",
-    "Fetch a single party (person or organisation) by its numeric ID.",
+    "Fetch a single party (person or organisation) by its numeric id. Returns the full record including type, name fields, emails, phones, addresses, websites, and any embedded tags or custom fields. Use embed='tags,fields' to include those in one round-trip. For batch fetches of up to 10 parties at once, use get_parties instead.",
     getPartySchema,
     getParty,
   );
@@ -426,7 +426,7 @@ export function createCapsuleMcpServer(): McpServer {
   registerTool(
     server,
     "get_opportunities",
-    "Batch-fetch up to 10 opportunities by ID in a single call.",
+    "Batch-fetch up to 10 opportunities by id in a single call. Capsule caps batch fetches at 10 — passing more 422s at the API layer. Returns each opportunity's full record (value, milestone, owner, party). Use this when Claude already knows several ids and wants to avoid N round-trips of get_opportunity. For a single id, use get_opportunity instead.",
     getOpportunitiesSchema,
     getOpportunities,
   );
@@ -887,7 +887,7 @@ export function createCapsuleMcpServer(): McpServer {
   registerTool(
     server,
     "list_lostreasons",
-    "List all configured opportunity-loss reasons (e.g. 'Poor Qualification', 'Lost to competitor'). Useful for analysing closed-lost opportunities by reason.",
+    "List all configured opportunity-loss reasons (e.g. 'Poor Qualification', 'Lost to competitor', 'Price too high'). Returns each reason's id and name; the set is account-configured rather than a fixed enum, so call this to discover valid ids before referencing a lostReason in update_opportunity when closing a deal as lost. Useful for analysing closed-lost opportunities by reason.",
     listLostReasonsSchema,
     listLostReasons,
   );
@@ -903,7 +903,7 @@ export function createCapsuleMcpServer(): McpServer {
   registerTool(
     server,
     "list_categories",
-    "List configured entry/task categories (Call, Email, Meeting, Follow-up, etc.) with their colours. Used to label and filter timeline entries and tasks.",
+    "List configured entry/task categories (Call, Email, Meeting, Follow-up, etc.) with their colours. Returns each category's id, name, and colour. The set is account-configured rather than a fixed enum — call this to discover valid category ids before referencing one in add_note or create_task. Used to label and filter timeline entries and tasks.",
     listCategoriesSchema,
     listCategories,
   );

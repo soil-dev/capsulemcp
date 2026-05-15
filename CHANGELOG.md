@@ -11,6 +11,18 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Documented
+
+- **4 more tool descriptions rewritten for richer LLM routing.** After
+  v1.0.1 shipped, Glama's re-probe lifted all 15 previously rewritten
+  tools to A but tightened its grading rubric and demoted 4 tools that
+  were short A's (`get_party`, `get_opportunities`, `list_lostreasons`,
+  `list_categories`) to B. Rewriting them to the same when-to-use +
+  what-returns + compare-to-neighbours shape lifts them back to A,
+  bringing the catalogue to 81/81 at A. No behaviour change; bundle
+  size ticks `dist/index.js` 118 → 119 KB and `dist/http.js`
+  144 → 145 KB.
+
 ## [1.0.1] — 2026-05-14
 
 Post-1.0 hardening + LLM-routing polish. No behaviour change against
