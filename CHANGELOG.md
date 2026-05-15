@@ -11,6 +11,12 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.0.1] — 2026-05-14
+
+Post-1.0 hardening + LLM-routing polish. No behaviour change against
+correct callers; just smaller attack surface and richer tool
+descriptions.
+
 ### Security
 
 - **GitHub Actions token permissions pinned to read-only.** CI only needs
@@ -20,7 +26,11 @@ versions adhere to [Semantic Versioning](https://semver.org).
 - **Party website URL validation tightened to an http(s) allow-list.**
   `service: "URL"` addresses already had syntax validation and blocked
   the obvious scriptable schemes; the schema now rejects every non-web
-  protocol instead of relying on a deny-list.
+  protocol instead of relying on a deny-list. Affects `create_party`,
+  `update_party`, and `add_party_website` — `ftp:`/`file:`/`mailto:`
+  etc. previously passed; they now 422 at the schema layer. Web-only
+  service URLs were always the intended use case (other social
+  services like TWITTER/GITHUB have their own service types).
 
 ### Documented
 
@@ -37,6 +47,11 @@ versions adhere to [Semantic Versioning](https://semver.org).
   change — descriptions only affect LLM tool-selection. Bundle size
   grows accordingly: `dist/index.js` 115 → 118 KB, `dist/http.js`
   140 → 144 KB.
+- **Glama MCP server badge added to the README.** Links to the
+  third-party server-quality listing at
+  <https://glama.ai/mcp/servers/soil-dev/capsulemcp>.
+- **`glama.json` claim file** committed at repo root so the Glama
+  maintainer flow can verify the listing belongs to this project.
 
 ## [1.0.0] — 2026-05-13
 
