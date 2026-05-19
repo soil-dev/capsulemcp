@@ -11,6 +11,12 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.6.0-beta.2] — 2026-05-19
+
+Test-plan expansion on top of beta.1. No production-code changes —
+the only diff is in tests, scripts, and docs. Bumps because the
+package's test surface and verification tooling materially expanded.
+
 ### Added
 
 - **Test plan expansion for MCP Tasks (SEP-1686)** — 11 new tests + a
