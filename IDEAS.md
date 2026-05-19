@@ -399,4 +399,51 @@ the gate, so the opt-in is informed.
 
 ---
 
+## External-backed `TaskStore` for multi-instance MCP Tasks
+
+**Status**: future upgrade path. Not blocking v1.6.
+
+**Why**: v1.6 ships MCP Tasks (SEP-1686) on top of the SDK's
+`InMemoryTaskStore`, wrapped per-clientId in `src/tasks/store.ts`.
+In-memory is the right call for our current Cloud Run topology
+(`max_instance_count=1`, `min_instance_count=0`, 50 concurrent
+reqs/instance) — tasks survive across the stateless-POST request
+boundary because they live on the singleton, and there's never a
+second instance to disagree with.
+
+Two pressures could change that:
+
+1. **Scale to N instances.** If a tenant's traffic ever exceeds
+   what one instance can serve, the per-revision instance cap goes
+   up and the singleton stops being unique. A task created on
+   instance A is invisible to a `tasks/get` that lands on instance
+   B. This is the failure mode SEP-1686's spec text calls out.
+
+2. **Scale-to-zero loss.** Even today, a task created at second 0
+   and not polled to completion before the instance recycles
+   (Cloud Run's idle timer or a deploy) is silently dropped. With
+   `min_instance_count=0` this is real, even at low traffic.
+
+**Implementation sketch**: the SDK's `TaskStore` interface
+(`@modelcontextprotocol/sdk/experimental/tasks/interfaces.js`) is
+deliberately shaped to be swap-in. Drop a new file at
+`src/tasks/firestore-store.ts` (or `redis-store.ts`) implementing
+the same 6-method surface. Keep the per-clientId scoping wrapper
+unchanged — it works against any `TaskStore`. Add an env switch
+`MCP_TASKS_STORE=memory|firestore` (default `memory`).
+
+For Firestore specifically: one collection per server, document id
+= taskId, fields = `{ clientId, status, ttl, pollInterval, result,
+createdAt, completedAt }`. TTL eviction via a Firestore TTL policy
+on `createdAt + ttl` — no application-side timers needed.
+Per-clientId quota is a single counted-query on `where('clientId',
+'==', X)`. Reads cost one document GET; the SDK polls ~1500 ms by
+default, so a stuck task costs ~40 reads/minute per client — fine.
+
+Cost-wise: one tenant doing 100 batch_* tasks/day at ~4s wall-clock
+each ≈ 100 × (4s / 1.5s) = 270 polls = 270 reads/day = sub-cent.
+Add when needed, not before.
+
+---
+
 ## (Add new entries above this line.)

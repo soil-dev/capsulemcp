@@ -268,7 +268,14 @@ export function createApp(opts: AppOptions): express.Express {
     express.json({ limit: jsonLimit }),
     async (req, res) => {
       try {
-        const server = createCapsuleMcpServer();
+        // Forward the authenticated OAuth client_id so the McpServer
+        // factory can scope its task store to this caller. Without
+        // this, the in-memory tasks subsystem would be globally
+        // readable across clients (see src/tasks/store.ts). The
+        // requireBearerAuth middleware above guarantees `req.auth`
+        // is populated before we reach here.
+        const clientId = (req as { auth?: { clientId?: string } }).auth?.clientId;
+        const server = createCapsuleMcpServer({ clientId });
         const transport = new StreamableHTTPServerTransport({});
 
         res.on("close", () => {

@@ -2,6 +2,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { isReadOnly } from "./capsule/client.js";
 import { ICONS } from "./icon.js";
 import { registerTool } from "./server/register-tool.js";
+import { getTasksConfig } from "./tasks/config.js";
+import { createScopedTaskStore } from "./tasks/store.js";
 
 import {
   searchPartiesSchema,
@@ -223,16 +225,53 @@ import {
  * `get_attachment` (further down): its handler does content-type-aware
  * response shaping and stays as a raw `server.tool(...)` call.
  */
-export function createCapsuleMcpServer(): McpServer {
+/**
+ * Build an `McpServer` configured for one inbound HTTP request.
+ *
+ * `opts.clientId` is the authenticated OAuth client_id (from
+ * `req.auth.clientId`). It's optional because the stdio entrypoint
+ * (`src/index.ts`) has no OAuth and runs unauthenticated against
+ * Capsule. Tasks (SEP-1686) are only wired when both
+ * `MCP_TASKS_ENABLED=1` AND a `clientId` is present — the in-memory
+ * store needs a per-caller scope to be safe (see
+ * `src/tasks/store.ts`).
+ */
+export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer {
   const readOnly = isReadOnly();
-  const server = new McpServer({
-    name: "capsulemcp",
-    version: "1.5.0-alpha.2",
-    description:
-      "Read and (optionally) modify Capsule CRM data — parties, opportunities, projects, tasks, timeline entries, pipelines, tags.",
-    websiteUrl: "https://github.com/soil-dev/capsulemcp",
-    icons: ICONS,
-  });
+  const tasksCfg = getTasksConfig();
+  const tasksWired = tasksCfg.enabled && !!opts?.clientId;
+
+  // `taskStore` and `capabilities.tasks` go on the SDK ServerOptions,
+  // not on the high-level McpServer info object. McpServer accepts a
+  // second argument for these. See @modelcontextprotocol/sdk
+  // server/mcp.d.ts line 24.
+  const server = new McpServer(
+    {
+      name: "capsulemcp",
+      version: "1.5.0-alpha.2",
+      description:
+        "Read and (optionally) modify Capsule CRM data — parties, opportunities, projects, tasks, timeline entries, pipelines, tags.",
+      websiteUrl: "https://github.com/soil-dev/capsulemcp",
+      icons: ICONS,
+    },
+    tasksWired
+      ? {
+          // tasksWired guards clientId presence; narrow explicitly
+          // for the type-checker rather than using `!`.
+          taskStore: createScopedTaskStore(opts?.clientId ?? ""),
+          capabilities: {
+            tasks: {
+              // The SDK's task capability schema uses {} for "present"
+              // markers, not booleans — see ServerTasksCapabilitySchema
+              // in @modelcontextprotocol/sdk types.ts.
+              list: {},
+              cancel: {},
+              requests: { tools: { call: {} } },
+            },
+          },
+        }
+      : undefined,
+  );
 
   // ── Parties ───────────────────────────────────────────────────────────────
 
