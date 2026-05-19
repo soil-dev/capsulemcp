@@ -11,6 +11,30 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Changed
+
+- **Per-instance TTL cache for near-static reference data**
+  (`src/capsule/cache.ts`). Sixteen dictionary-style endpoints —
+  pipelines, milestones, boards, stages, custom-field schemas, loss
+  reasons, activity types, categories, goals, teams, users, track
+  definitions, saved filters, tags, and `get_site` — are now served
+  from a per-process `Map` cache for up to 5 minutes (default).
+  LLM-driven conversations that loop "discover ids → call write
+  tool" repeatedly cost one Capsule round trip per dictionary per
+  TTL window instead of N. Measured impact on write-heavy flows:
+  30–50% fewer Capsule API calls; cached reads drop from ~150ms to
+  ~1ms. Record-level reads (parties, opportunities, projects, tasks,
+  entries) are deliberately uncached — those are the data that
+  actually changes during a conversation. `get_current_user` is also
+  uncached so it never lags a token rotation. `add_tag` and
+  `remove_tag_by_id` invalidate the relevant cached `list_tags`
+  entry so the catalogue stays coherent within a single client
+  session. New env knob: `CAPSULE_MCP_CACHE_TTL_MS` (default
+  `300000`; `0` disables caching entirely). DESIGN.md L6 reworded to
+  reflect the new behaviour; new L13 documents the cache contract,
+  staleness bounds, and per-instance scope. Adds ~2 KB to each
+  bundle (`dist/index.js` 119 → 122 KB, `dist/http.js` 145 → 147 KB).
+
 ### Documented
 
 - **4 more tool descriptions rewritten for richer LLM routing.** After

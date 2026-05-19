@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
-import { capsuleGet } from "../capsule/client.js";
+import { capsuleGet, capsuleGetCached } from "../capsule/client.js";
 
 // Saved filters are filters created and stored in Capsule's web UI. Unlike
 // the ad-hoc `filter_*` tools (which use POST /<entity>/filters/results),
@@ -31,7 +31,7 @@ export const listSavedFiltersSchema = z.object({
 });
 
 export async function listSavedFilters(input: z.infer<typeof listSavedFiltersSchema>) {
-  const { data } = await capsuleGet<{ filters: unknown[] }>(`/${input.entity}/filters`);
+  const { data } = await capsuleGetCached<{ filters: unknown[] }>(`/${input.entity}/filters`);
   return data;
 }
 

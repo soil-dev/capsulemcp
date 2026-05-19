@@ -36,6 +36,10 @@
  *                         accepts shorthand like '50mb' or raw bytes.)
  *   MCP_HTTP_TRUST_PROXY  Number of proxy hops to trust (default 1).
  *                         See src/http/config.ts for the decision tree.
+ *   CAPSULE_MCP_CACHE_TTL_MS  TTL for the per-instance reference-data
+ *                             cache (default 300000 = 5 min, 0 disables).
+ *                             See src/capsule/cache.ts for the list of
+ *                             cached endpoints and DESIGN.md L13.
  */
 
 import { isReadOnly } from "./capsule/client.js";

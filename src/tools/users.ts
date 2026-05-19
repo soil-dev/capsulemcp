@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { capsuleGet } from "../capsule/client.js";
+import { capsuleGet, capsuleGetCached } from "../capsule/client.js";
 
 // Capsule's default page size is 50 — most accounts have fewer than 50
 // users so a single call returns everything, but a larger team would
@@ -12,7 +12,7 @@ export const listUsersSchema = z.object({
 });
 
 export async function listUsers(input: z.infer<typeof listUsersSchema>) {
-  const { data, nextPage } = await capsuleGet<{ users: unknown[] }>("/users", {
+  const { data, nextPage } = await capsuleGetCached<{ users: unknown[] }>("/users", {
     page: input.page ?? 1,
     perPage: input.perPage ?? 100,
   });

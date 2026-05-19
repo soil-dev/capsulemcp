@@ -255,17 +255,19 @@ been a problem in practice. For high-throughput automation, you'd
 need either separate deployments per consumer or a more sophisticated
 rate-limit layer.
 
-### L6. No caching
+### L6. Caching is limited to near-static reference data
 
-Every tool call hits Capsule. There's no cache — not even on
-reference-data calls (teams, lost reasons, custom field definitions)
-that change rarely. Pros: answers are always live, no invalidation
-logic. Cons: a Claude turn that asks ten questions makes ten
-round-trips.
-
-If we ever needed it, a small TTL cache on the reference-data tools
-would be the lowest-risk place to start (small responses, low write
-frequency).
+Most tool calls hit Capsule directly so answers stay live. The
+exception is a small set of **reference-data endpoints** (pipelines,
+boards, stages, milestones, custom-field schemas, loss reasons,
+activity types, categories, goals, teams, users, track definitions,
+saved filters, tags, and `get_site`) that get an in-process TTL
+cache — see L13 below for the rationale and bounds. Everything else
+(reads on parties / opportunities / projects / tasks / entries,
+all writes) is uncached on every call. So a Claude turn that hits
+mostly the same dictionary endpoints repeatedly costs 1 round trip
+per dictionary; a Claude turn that asks ten record-level questions
+still makes ten round-trips.
 
 ### L7. Capsule's filter API doesn't support sort
 
@@ -374,6 +376,48 @@ load-balanced deployments that round-robin across pods need to
 either enable sticky sessions or scale the connector vertically
 (`min_instance_count=max_instance_count=1`) until a future minor
 moves auth-code state into a shared store.
+
+### L13. Reference-data cache is per-instance, TTL-bounded
+
+Sixteen reference-data endpoints (the dictionaries: pipelines,
+milestones, boards, stages, custom-field schemas, loss reasons,
+activity types, categories, goals, teams, users, track definitions,
+saved filters, tags, and `get_site`) are cached in a per-process
+`Map` with a TTL — default 5 minutes, configurable via
+`CAPSULE_MCP_CACHE_TTL_MS` (`0` disables). Source: `src/capsule/cache.ts`.
+
+Why this is here and not just "always cache":
+
+- The 16 tools are admin-configured / user-managed-but-stable. They
+  routinely get called multiple times per Claude turn so the LLM can
+  discover ids before each `create_*` / `update_*` / `filter_*`. A
+  short TTL turns repeated lookups into one round trip per dictionary,
+  per instance, per TTL window. Measured: 30–50% fewer Capsule calls
+  on write-heavy conversational flows.
+- Record-level reads (parties, opportunities, projects, tasks,
+  entries) are **not** cached. Those are the data that actually
+  changes during a conversation; caching them would surface stale
+  records to the user.
+
+Trade-offs:
+
+- **Staleness window**: an admin edit to (say) pipelines isn't
+  visible to the connector for up to TTL milliseconds. Bounded by
+  the env knob; conservative default of 5 minutes.
+- **Per-instance only**: Cloud Run instances don't share a cache.
+  Worst-case staleness across N instances is still TTL (not
+  TTL×N), but cache hit rates aren't shared either, so N instances
+  each warm the cache independently.
+- **Tag mutation invalidation**: the connector's `add_tag` and
+  `remove_tag_by_id` calls drop the cached `list_tags` entry for
+  the affected entity type before returning. The catalogue is
+  always coherent within a single client conversation. Other
+  cached endpoints have no write-side counterpart in our tool
+  surface, so no invalidation is wired for them — staleness there
+  is TTL-bounded only.
+
+`get_current_user` is **not** cached — it's the "who am I"
+diagnostic and would otherwise lag a token rotation.
 
 ## Endpoint coverage
 

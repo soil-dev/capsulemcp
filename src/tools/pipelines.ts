@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { capsuleGet } from "../capsule/client.js";
+import { capsuleGetCached } from "../capsule/client.js";
 
 const paginationFields = {
   page: z.number().int().positive().optional(),
@@ -9,7 +9,7 @@ const paginationFields = {
 export const listPipelinesSchema = z.object({ ...paginationFields });
 
 export async function listPipelines(input: z.infer<typeof listPipelinesSchema>) {
-  const { data, nextPage } = await capsuleGet<{ pipelines: unknown[] }>("/pipelines", {
+  const { data, nextPage } = await capsuleGetCached<{ pipelines: unknown[] }>("/pipelines", {
     page: input.page ?? 1,
     perPage: input.perPage ?? 100,
   });
@@ -24,7 +24,7 @@ export const listMilestonesSchema = z.object({
 });
 
 export async function listMilestones(input: z.infer<typeof listMilestonesSchema>) {
-  const { data, nextPage } = await capsuleGet<{ milestones: unknown[] }>(
+  const { data, nextPage } = await capsuleGetCached<{ milestones: unknown[] }>(
     `/pipelines/${input.pipelineId}/milestones`,
     { page: input.page ?? 1, perPage: input.perPage ?? 100 },
   );

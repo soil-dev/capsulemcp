@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { capsuleGet } from "../capsule/client.js";
+import { capsuleGetCached } from "../capsule/client.js";
 
 // Custom field SCHEMA endpoints (read-only here). Each entity type
 // (parties, opportunities, kases) has its own custom-field namespace.
@@ -26,7 +26,7 @@ export const listCustomFieldsSchema = z.object({
 });
 
 export async function listCustomFields(input: z.infer<typeof listCustomFieldsSchema>) {
-  const { data } = await capsuleGet<{ definitions: unknown[] }>(
+  const { data } = await capsuleGetCached<{ definitions: unknown[] }>(
     `/${input.entity}/fields/definitions`,
   );
   return data;
@@ -40,7 +40,7 @@ export const getCustomFieldSchema = z.object({
 });
 
 export async function getCustomField(input: z.infer<typeof getCustomFieldSchema>) {
-  const { data } = await capsuleGet<{ definition: unknown }>(
+  const { data } = await capsuleGetCached<{ definition: unknown }>(
     `/${input.entity}/fields/definitions/${input.fieldId}`,
   );
   return data;

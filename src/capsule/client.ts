@@ -1,4 +1,5 @@
 import { fetch, type Response } from "undici";
+import { cacheDisabled, cacheGet, cacheKey, cacheSet } from "./cache.js";
 
 const DEFAULT_BASE_URL = "https://api.capsulecrm.com/api/v2";
 
@@ -352,6 +353,27 @@ export async function capsuleGet<T>(path: string, params?: QueryParams): Promise
   } finally {
     cleanup();
   }
+}
+
+/**
+ * GET with TTL caching for near-static reference data (pipelines,
+ * boards, custom-field schemas, …). See src/capsule/cache.ts for
+ * the full rationale and the list of opted-in tools. Falls through
+ * to `capsuleGet` on cache miss/stale and stores the fresh result.
+ * When `CAPSULE_MCP_CACHE_TTL_MS=0`, the cache is bypassed entirely
+ * and every call behaves identically to `capsuleGet`.
+ */
+export async function capsuleGetCached<T>(
+  path: string,
+  params?: QueryParams,
+): Promise<PagedResult<T>> {
+  if (cacheDisabled()) return capsuleGet<T>(path, params);
+  const key = cacheKey(path, params);
+  const hit = cacheGet<T>(key);
+  if (hit) return hit;
+  const result = await capsuleGet<T>(path, params);
+  cacheSet(key, result);
+  return result;
 }
 
 export async function capsulePost<T>(path: string, body: unknown): Promise<T> {

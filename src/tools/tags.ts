@@ -30,7 +30,8 @@
  */
 
 import { z } from "zod";
-import { capsuleGet, capsulePut } from "../capsule/client.js";
+import { capsuleGetCached, capsulePut } from "../capsule/client.js";
+import { invalidateByPrefix } from "../capsule/cache.js";
 import { idempotentWithResult, isCapsuleTagNotFound } from "../capsule/idempotent.js";
 
 const TAG_LIST_PATH = {
@@ -63,7 +64,7 @@ export const listTagsSchema = z.object({
 
 export async function listTags(input: z.infer<typeof listTagsSchema>) {
   const path = TAG_LIST_PATH[input.entity];
-  const { data, nextPage } = await capsuleGet<{ tags: unknown[] }>(path, {
+  const { data, nextPage } = await capsuleGetCached<{ tags: unknown[] }>(path, {
     page: input.page ?? 1,
     perPage: input.perPage ?? 100,
   });
@@ -86,9 +87,14 @@ export const addTagSchema = z.object({
 export async function addTag(input: z.infer<typeof addTagSchema>) {
   const { entity, entityId, tagName } = input;
   const wrapper = ENTITY_TO_WRAPPER[entity];
-  return capsulePut<Record<string, unknown>>(`/${entity}/${entityId}`, {
+  const result = await capsulePut<Record<string, unknown>>(`/${entity}/${entityId}`, {
     [wrapper]: { tags: [{ name: tagName }] },
   });
+  // A net-new tag created by this call would otherwise stay invisible
+  // to list_tags until TTL expiry. Drop the cached list for this
+  // entity type so the next read fetches fresh.
+  invalidateByPrefix(TAG_LIST_PATH[entity]);
+  return result;
 }
 
 // ── remove_tag_by_id (write) ──────────────────────────────────────────────
@@ -108,7 +114,7 @@ export const removeTagByIdSchema = z.object({
 export async function removeTagById(input: z.infer<typeof removeTagByIdSchema>) {
   const { entity, entityId, tagId } = input;
   const wrapper = ENTITY_TO_WRAPPER[entity];
-  return idempotentWithResult(
+  const result = await idempotentWithResult(
     () =>
       capsulePut<Record<string, unknown>>(`/${entity}/${entityId}`, {
         [wrapper]: { tags: [{ id: tagId, _delete: true }] },
@@ -127,4 +133,9 @@ export async function removeTagById(input: z.infer<typeof removeTagByIdSchema>) 
     // 404. Other 422s with different wording still surface.
     isCapsuleTagNotFound,
   );
+  // Detaching the last instance of a tag may remove it from the
+  // tenant-global list (Capsule's docs don't specify). Cheap to
+  // invalidate regardless.
+  invalidateByPrefix(TAG_LIST_PATH[entity]);
+  return result;
 }

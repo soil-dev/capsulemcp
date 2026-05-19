@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { capsuleGet } from "../capsule/client.js";
+import { capsuleGetCached } from "../capsule/client.js";
 
 // Boards and stages are the project (kase) equivalents of pipelines and
 // milestones for opportunities. A board has many stages; a project sits at
@@ -16,7 +16,7 @@ const paginationFields = {
 export const listBoardsSchema = z.object({ ...paginationFields });
 
 export async function listBoards(input: z.infer<typeof listBoardsSchema>) {
-  const { data, nextPage } = await capsuleGet<{ boards: unknown[] }>("/boards", {
+  const { data, nextPage } = await capsuleGetCached<{ boards: unknown[] }>("/boards", {
     page: input.page ?? 1,
     perPage: input.perPage ?? 100,
   });
@@ -44,7 +44,7 @@ export const listStagesSchema = z.object({
 
 export async function listStages(input: z.infer<typeof listStagesSchema>) {
   const path = input.boardId !== undefined ? `/boards/${input.boardId}/stages` : "/stages";
-  const { data, nextPage } = await capsuleGet<{ stages: unknown[] }>(path, {
+  const { data, nextPage } = await capsuleGetCached<{ stages: unknown[] }>(path, {
     page: input.page ?? 1,
     perPage: input.perPage ?? 100,
   });
