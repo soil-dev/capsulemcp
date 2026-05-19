@@ -233,8 +233,16 @@ export const batchUpdateOpportunitySchema = z.object({
     ),
 });
 
-export async function batchUpdateOpportunity(input: z.infer<typeof batchUpdateOpportunitySchema>) {
-  return batchExecute("batch_update_opportunity", input.items, (item) => updateOpportunity(item));
+export async function batchUpdateOpportunity(
+  input: z.infer<typeof batchUpdateOpportunitySchema>,
+  opts: { signal?: AbortSignal } = {},
+) {
+  return batchExecute(
+    "batch_update_opportunity",
+    input.items,
+    (item) => updateOpportunity(item),
+    opts,
+  );
 }
 
 // ───────────────────────────────────────────────────────────────────────────

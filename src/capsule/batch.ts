@@ -96,15 +96,26 @@ export function getBatchConcurrency(): number {
  *
  * `tool` is the connector-side tool name; emitted in the batch.complete
  * log event for grouping in queries.
+ *
+ * `options.signal` (added for MCP Tasks SEP-1686): an optional
+ * AbortSignal that workers consult between items. When the signal
+ * fires, in-flight requests run to completion (we can't pre-empt a
+ * Capsule HTTP round-trip mid-flight) but no new items are picked up;
+ * unclaimed slots are filled with `cancelled` errors. The aggregate
+ * batch.complete event still emits, with the cancellation visible in
+ * the summary's `failed` count. This is what gets wired when a
+ * `tasks/cancel` arrives mid-batch.
  */
 export async function batchExecute<TInput, TOutput>(
   tool: string,
   items: TInput[],
   action: (item: TInput, index: number) => Promise<TOutput>,
+  options: { signal?: AbortSignal } = {},
 ): Promise<BatchResponse<TOutput>> {
   const concurrency = getBatchConcurrency();
   const results: BatchItemResult<TOutput>[] = new Array(items.length);
   const startedAt = Date.now();
+  const signal = options.signal;
 
   // Simple promise-pool: a pointer walks the input array, N
   // workers each grab the next unclaimed index. No external
@@ -116,6 +127,16 @@ export async function batchExecute<TInput, TOutput>(
       const i = cursor;
       cursor += 1;
       if (i >= items.length) return;
+      // Pre-flight cancellation check. Items past this point in
+      // the cursor get a synthetic "cancelled" error rather than
+      // running.
+      if (signal?.aborted) {
+        results[i] = {
+          ok: false,
+          error: { message: "cancelled by tasks/cancel" },
+        };
+        continue;
+      }
       try {
         const result = await action(items[i] as TInput, i);
         results[i] = { ok: true, result };

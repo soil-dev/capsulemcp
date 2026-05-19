@@ -207,8 +207,11 @@ export const batchCompleteTaskSchema = z.object({
     ),
 });
 
-export async function batchCompleteTask(input: z.infer<typeof batchCompleteTaskSchema>) {
-  return batchExecute("batch_complete_task", input.ids, (id) => completeTask({ id }));
+export async function batchCompleteTask(
+  input: z.infer<typeof batchCompleteTaskSchema>,
+  opts: { signal?: AbortSignal } = {},
+) {
+  return batchExecute("batch_complete_task", input.ids, (id) => completeTask({ id }), opts);
 }
 
 // ───────────────────────────────────────────────────────────────────────────

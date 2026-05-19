@@ -285,6 +285,108 @@ Versioning convention:
 | Minor (`0.3.0` → `0.4.0`) | New tools, new env vars, new transport options. Backwards-compatible behaviour change |
 | Major (`0.x.y` → `1.0.0`) | Breaking change. Pre-1.0 there's no formal stability promise; treat 1.0 as the first time you commit to API stability |
 
+## Use MCP Tasks for long-running batch writes
+
+The 5 `batch_*` write tools (`batch_update_party`,
+`batch_update_opportunity`, `batch_complete_task`, `batch_add_tag`,
+`batch_remove_tag_by_id`) support the **MCP Tasks primitive**
+(SEP-1686, "call-now, fetch-later"). When the operator has
+`MCP_TASKS_ENABLED=1` set on the deployed instance, clients can
+augment a `tools/call` with `_meta.task` to dispatch the work
+asynchronously and poll for the result later.
+
+**You only need this if your client wants to do other work
+concurrently while a batch runs.** Most clients (including Claude
+today) don't augment with `_meta.task`, and they get the existing
+synchronous behaviour — the SDK runs `handleAutomaticTaskPolling`
+internally and returns the final `CallToolResult` as before. No
+configuration change is required for legacy callers.
+
+### Augmented request shape
+
+```jsonc
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "batch_update_party",
+    "arguments": {
+      "items": [
+        { "id": 101, "about": "Met at RSAC" },
+        { "id": 102, "about": "Met at RSAC" }
+      ]
+    },
+    "_meta": {
+      "io.modelcontextprotocol/task": {
+        "ttl": 60000
+      }
+    }
+  }
+}
+```
+
+The server responds immediately with a `CreateTaskResult` envelope:
+
+```jsonc
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "task": {
+      "taskId": "abc123…",
+      "status": "submitted",
+      "ttl": 60000,
+      "pollInterval": 1500,
+      "createdAt": "2026-05-19T13:00:00.000Z"
+    }
+  }
+}
+```
+
+### Poll for completion
+
+```jsonc
+{ "jsonrpc": "2.0", "id": 2, "method": "tasks/get",
+  "params": { "taskId": "abc123…" } }
+```
+
+When status reaches `completed`:
+
+```jsonc
+{ "jsonrpc": "2.0", "id": 3, "method": "tasks/result",
+  "params": { "taskId": "abc123…" } }
+```
+
+The response payload is the same `CallToolResult` shape a
+synchronous `tools/call` would have returned (content + summary).
+
+### Cancel a running batch
+
+```jsonc
+{ "jsonrpc": "2.0", "id": 4, "method": "tasks/cancel",
+  "params": { "taskId": "abc123…" } }
+```
+
+In-flight items run to completion (we can't pre-empt a Capsule
+HTTP round-trip mid-flight) but no new items are claimed. The
+result array reflects this — already-completed items show `ok:
+true`, items the worker pool hadn't claimed yet show `ok: false,
+error: { message: "cancelled by tasks/cancel" }`.
+
+### Sizing & limits
+
+- `ttl` is clamped to `MCP_TASKS_MAX_KEEP_ALIVE_MS` (default 15 min)
+- Each clientId can hold up to `MCP_TASKS_MAX_PER_CLIENT` tasks
+  concurrently (default 20)
+- Process-wide cap is `MCP_TASKS_MAX_TOTAL` (default 200)
+- Excess `createTask` calls return `InvalidParams` with a
+  `Task quota exceeded` message
+
+See DEPLOY.md for the full env-var table, DESIGN.md L10 for the
+trust/security model, and CHANGELOG `[1.6.0-alpha.1]` for the
+release notes.
+
 ## Debug a tool that's misbehaving
 
 Reproduce locally with the wire-trace if it's a write tool:
