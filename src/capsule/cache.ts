@@ -40,6 +40,7 @@
  *     wired for them.
  */
 
+import { readBool, readPositiveInt } from "../env.js";
 import { logEvent } from "../log.js";
 import type { PagedResult, QueryParams } from "./client.js";
 
@@ -85,23 +86,20 @@ const DEFAULT_TTL_MS = 5 * 60 * 1000; // 5 minutes
  * entries" from "should we cache at all".
  */
 export function getCacheTtlMs(): number {
-  const raw = process.env["CAPSULE_MCP_CACHE_TTL_MS"];
-  if (raw === undefined || raw === "") return DEFAULT_TTL_MS;
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n < 0) return DEFAULT_TTL_MS;
-  return Math.floor(n);
+  // Cache uses `min=0` because a TTL of 0 is the back-compat
+  // "disable caching" shortcut. The shared readPositiveInt uses
+  // `min=1` by default, so we override here.
+  return readPositiveInt("CAPSULE_MCP_CACHE_TTL_MS", DEFAULT_TTL_MS, 0);
 }
 
 /**
  * True when the operator has explicitly disabled caching via
- * `CAPSULE_MCP_CACHE_DISABLED`. Accepts the same truthy spellings
- * as the other binary env knobs in the codebase: `1`, `true`,
- * `yes`, `on` (case-insensitive). Anything else (including unset)
- * leaves the cache enabled.
+ * `CAPSULE_MCP_CACHE_DISABLED`. Accepts the standard truthy
+ * spellings (`1` / `true` / `yes` / `on`, case-insensitive).
+ * Anything else (including unset) leaves the cache enabled.
  */
 function explicitlyDisabled(): boolean {
-  const raw = process.env["CAPSULE_MCP_CACHE_DISABLED"]?.toLowerCase();
-  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+  return readBool("CAPSULE_MCP_CACHE_DISABLED");
 }
 
 /**

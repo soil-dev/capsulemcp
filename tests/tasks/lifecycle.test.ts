@@ -144,6 +144,14 @@ describe("MCP Tasks lifecycle on batch_update_party", () => {
     expect(createResult.task).toBeDefined();
     expect(createResult.task.taskId).toBeTruthy();
     expect(["submitted", "working"]).toContain(createResult.task.status);
+    // The caller asked for ttl: 60_000 — assert it actually round-
+    // tripped through the SDK -> our runner -> our scoped store.
+    // Before the refactor that landed alongside these tests, the
+    // runner called `extra.taskStore.createTask({})` (empty params),
+    // silently discarding the caller's hint and falling through to
+    // `MCP_TASKS_DEFAULT_TTL_MS` (5 min). The clamp logic in
+    // `src/tasks/store.ts` would have been dead code.
+    expect(createResult.task.ttl).toBe(60_000);
 
     // Now unblock Capsule and poll.
     resolveFirst(

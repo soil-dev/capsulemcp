@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { confirmFlag } from "./confirm-flag.js";
 import { capsuleDelete, capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
-import { batchExecute, chunk } from "../capsule/batch.js";
+import { type BatchOpts, batchExecute, chunk } from "../capsule/batch.js";
 import { idempotent } from "../capsule/idempotent.js";
 
 // ── Read ────────────────────────────────────────────────────────────────────
@@ -209,7 +209,7 @@ export const batchCompleteTaskSchema = z.object({
 
 export async function batchCompleteTask(
   input: z.infer<typeof batchCompleteTaskSchema>,
-  opts: { signal?: AbortSignal } = {},
+  opts: BatchOpts = {},
 ) {
   return batchExecute("batch_complete_task", input.ids, (id) => completeTask({ id }), opts);
 }

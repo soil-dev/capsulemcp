@@ -401,10 +401,11 @@ the gate, so the opt-in is informed.
 
 ## External-backed `TaskStore` for multi-instance MCP Tasks
 
-**Status**: future upgrade path. Not blocking v1.6.
+**Status**: future upgrade path. Not blocking.
 
-**Why**: v1.6 ships MCP Tasks (SEP-1686) on top of the SDK's
-`InMemoryTaskStore`, wrapped per-clientId in `src/tasks/store.ts`.
+**Why**: the connector ships MCP Tasks (SEP-1686) on top of the
+SDK's `InMemoryTaskStore`, wrapped per-clientId in
+`src/tasks/store.ts`.
 In-memory is the right call for our current Cloud Run topology
 (`max_instance_count=1`, `min_instance_count=0`, 50 concurrent
 reqs/instance) — tasks survive across the stateless-POST request

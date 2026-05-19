@@ -20,7 +20,47 @@ versions adhere to [Semantic Versioning](https://semver.org).
   with "No task store provided" before the underlying batch tool
   ran. Batch tools now register as task-capable only when
   `MCP_TASKS_ENABLED=1` and a clientId-backed task store is wired;
-  otherwise they stay synchronous. 433 total tests.
+  otherwise they stay synchronous.
+- **Caller-supplied `task.ttl` is now honoured.** The SDK surfaces
+  the inbound `_meta.task.ttl` as `extra.taskRequestedTtl`, but the
+  runner was calling `extra.taskStore.createTask({})` with empty
+  params — silently overwriting the caller's hint with
+  `MCP_TASKS_DEFAULT_TTL_MS` (5 min). The TTL-clamping logic in
+  `src/tasks/store.ts` was effectively dead code for the caller-
+  supplied path. New lifecycle assertion verifies the round-trip.
+
+### Changed
+
+- **Collapsed `registerToolTaskWhenEnabled`** into a single
+  closure-bound `registerBatchTool` inside `createCapsuleMcpServer`.
+  The `tasksWired` boolean is no longer threaded through 5 call
+  sites; the registration decision is made once at the top. Net
+  ~30 LOC reduction; behaviour identical.
+- **Unified `logEvent` and `logEventAlways`** into a single
+  `logEvent(event, fields, { force? })` in `src/log.ts`. Hot-path
+  events (`cache.*`, `task.*`) still default to verbose-gated;
+  `batch.complete` opts in with `{ force: true }`. One emitter,
+  one shape.
+- **Extracted `BatchOpts = { signal?: AbortSignal }`** type from
+  `src/capsule/batch.ts`. The 5 `batch_*` tool functions and the
+  task-runner handler signature in `src/server/register-tool.ts`
+  now reference the canonical type instead of repeating the
+  literal in 6 places.
+- **Extracted shared env-var readers** (`readBool`,
+  `readPositiveInt`) to `src/env.ts`. `getCacheTtlMs`,
+  `cacheDisabled`, `getBatchConcurrency`, `getTasksConfig`,
+  `isReadOnly`, and `logVerbose` all now share one parser. Side
+  effect: `CAPSULE_MCP_READONLY` now also accepts `on` as a
+  truthy spelling (was previously only `1` / `true` / `yes`),
+  matching every other binary flag in the codebase.
+
+### Docs
+
+- DESIGN.md and IDEAS.md sweeps: retrospective tone (no more
+  "planned for v1.6" or "v1.6 tool-side migration" — that work has
+  shipped). Added a sentence to `src/tasks/store.ts` explaining
+  why the owner map is separate from the SDK's
+  `InMemoryTaskStore`.
 
 ## [1.6.0-alpha.2] — 2026-05-19
 

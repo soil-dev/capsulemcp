@@ -19,6 +19,8 @@
  * response path. See OPTIMIZATIONS.md / DESIGN.md.
  */
 
+import { readBool, readPositiveInt } from "../env.js";
+
 /** Default TTL applied when a caller's `task.ttl` is absent. */
 const DEFAULT_TTL_MS = 5 * 60 * 1000; // 5 minutes
 /** Hard ceiling on requested `task.ttl`. Callers asking for more get clamped. */
@@ -45,19 +47,6 @@ export interface TasksConfig {
   maxPerClient: number;
   /** Process-wide task cap. Throws InvalidParams on overflow. */
   maxTotal: number;
-}
-
-function readBool(name: string): boolean {
-  const raw = process.env[name]?.toLowerCase();
-  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
-}
-
-function readPositiveInt(name: string, fallback: number, min = 1): number {
-  const raw = process.env[name];
-  if (raw === undefined || raw === "") return fallback;
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n < min) return fallback;
-  return Math.floor(n);
 }
 
 /**

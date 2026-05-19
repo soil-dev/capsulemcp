@@ -1,4 +1,5 @@
 import { fetch, type Response } from "undici";
+import { readBool } from "../env.js";
 import { logEvent, logVerbose } from "../log.js";
 import { cacheDisabled, cacheKey, cacheLookup, cacheSet } from "./cache.js";
 
@@ -38,12 +39,12 @@ function baseUrl(): string {
 
 /**
  * Returns true if the server is configured to refuse all writes.
- * Set CAPSULE_MCP_READONLY to "1", "true", or "yes" (case-insensitive)
- * to enable. Any other value (including unset) means writes are allowed.
+ * Set CAPSULE_MCP_READONLY to a truthy value (`1` / `true` / `yes`
+ * / `on`, case-insensitive) to enable. Any other value (including
+ * unset) means writes are allowed.
  */
 export function isReadOnly(): boolean {
-  const v = process.env["CAPSULE_MCP_READONLY"]?.toLowerCase();
-  return v === "1" || v === "true" || v === "yes";
+  return readBool("CAPSULE_MCP_READONLY");
 }
 
 export class CapsuleReadOnlyError extends Error {

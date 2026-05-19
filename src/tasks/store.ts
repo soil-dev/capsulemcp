@@ -75,6 +75,13 @@ function getGlobalStore(): InMemoryTaskStore {
  * hand out. Lookups against the SDK store are gated through this
  * map; mismatched-owner reads are reported as `not found` to avoid
  * leaking the existence of a foreign task.
+ *
+ * Kept as a separate map from the SDK's `InMemoryTaskStore` because
+ * the SDK has no concept of OAuth client identity by design — its
+ * store is tenant-blind. `countPerClient` walks this map linearly
+ * on every `createTask`; bounded by `MCP_TASKS_MAX_TOTAL`
+ * (default 200), so the walk is sub-microsecond and not worth a
+ * separate per-client counter map.
  */
 const owners = new Map<string, string>();
 
