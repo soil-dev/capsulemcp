@@ -79,7 +79,7 @@ Run's request logs:
 ```sh
 gcloud logging read \
   'resource.type="cloud_run_revision"
-   AND resource.labels.service_name="capsulemcp-production"
+   AND resource.labels.service_name="<your-service>"
    AND httpRequest.requestMethod="POST"
    AND httpRequest.requestUrl=~"/mcp$"
    AND httpRequest.status=200' \
@@ -101,16 +101,16 @@ gcloud:
 
 ```sh
 # Flip verbose logging on for an hour:
-gcloud run services update capsulemcp-production \
-  --region=europe-west1 \
+gcloud run services update <your-service> \
+  --region=<your-region> \
   --update-env-vars=CAPSULE_MCP_LOG_VERBOSE=1 \
   --project=<your-gcp-project>
 
 # … let real traffic run …
 
 # Flip it back off (recommended — log volume cost):
-gcloud run services update capsulemcp-production \
-  --region=europe-west1 \
+gcloud run services update <your-service> \
+  --region=<your-region> \
   --remove-env-vars=CAPSULE_MCP_LOG_VERBOSE \
   --project=<your-gcp-project>
 ```
@@ -184,15 +184,15 @@ windows, not as a steady-state setting.
 For a side-by-side reference where both passes hit Capsule:
 
 ```sh
-gcloud run services update capsulemcp-production \
-  --region=europe-west1 \
+gcloud run services update <your-service> \
+  --region=<your-region> \
   --update-env-vars=CAPSULE_MCP_CACHE_DISABLED=1 \
   --project=<your-gcp-project>
 
 # … run the same two-pass exercise …
 
-gcloud run services update capsulemcp-production \
-  --region=europe-west1 \
+gcloud run services update <your-service> \
+  --region=<your-region> \
   --remove-env-vars=CAPSULE_MCP_CACHE_DISABLED \
   --project=<your-gcp-project>
 ```
