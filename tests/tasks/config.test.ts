@@ -67,6 +67,14 @@ describe("getTasksConfig", () => {
     expect(cfg.defaultTtlMs).toBe(10000);
   });
 
+  it("floors task ttl bounds at the safety minimum", () => {
+    process.env["MCP_TASKS_MAX_KEEP_ALIVE_MS"] = "500";
+    process.env["MCP_TASKS_DEFAULT_TTL_MS"] = "250";
+    const cfg = getTasksConfig();
+    expect(cfg.maxKeepAliveMs).toBe(1000);
+    expect(cfg.defaultTtlMs).toBe(1000);
+  });
+
   it("floors defaultPollFrequencyMs at the safety minimum", () => {
     process.env["MCP_TASKS_DEFAULT_POLL_FREQUENCY_MS"] = "50";
     expect(getTasksConfig().defaultPollFrequencyMs).toBe(500);

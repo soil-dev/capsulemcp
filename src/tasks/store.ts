@@ -55,7 +55,7 @@ import {
   type Task,
 } from "@modelcontextprotocol/sdk/types.js";
 import { logEvent } from "../log.js";
-import { getTasksConfig } from "./config.js";
+import { getTasksConfig, MIN_TASK_TTL_MS } from "./config.js";
 
 /**
  * Process-singleton SDK store. Lazily initialised so importing this
@@ -185,15 +185,18 @@ export function createScopedTaskStore(clientId: string): TaskStore {
         throw new McpError(ErrorCode.InvalidParams, "Task quota exceeded for this client");
       }
 
-      // Clamp TTL to [0, maxKeepAliveMs]. `null` (unlimited) is
+      // Clamp TTL to [1000ms, maxKeepAliveMs]. `null` (unlimited) is
       // never honoured — we only support a bounded retention window
       // in the in-memory store, otherwise a stuck task pins memory
       // until process restart.
-      const requestedTtl = taskParams.ttl ?? cfg.defaultTtlMs;
+      const requestedTtl = taskParams.ttl;
       const clampedTtl =
         requestedTtl === null
           ? cfg.maxKeepAliveMs
-          : Math.max(1000, Math.min(requestedTtl, cfg.maxKeepAliveMs));
+          : Math.max(
+              MIN_TASK_TTL_MS,
+              Math.min(requestedTtl ?? cfg.defaultTtlMs, cfg.maxKeepAliveMs),
+            );
 
       // Same applies to pollInterval — accept the caller's hint but
       // floor it at the configured suggestion to avoid hot loops.

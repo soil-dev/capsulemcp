@@ -69,24 +69,24 @@ export function registerTool<Schema extends z.ZodObject<ZodRawShape>>(
  *
  * Behaviour with `taskSupport: 'optional'`:
  *
- *   - Caller does **not** send `_meta.task` → SDK runs
+ *   - Caller does **not** send `params.task` → SDK runs
  *     `handleAutomaticTaskPolling`: calls our `createTask`, polls
  *     the store internally, returns the final `CallToolResult` to
  *     the client. Caller never sees a task envelope. This is what
  *     existing clients (Claude, today) hit; behaviour is identical
  *     to the non-task path apart from the SDK's internal polling.
  *
- *   - Caller sends `_meta.task: { ttl?, pollInterval? }` → SDK
+ *   - Caller sends `params.task: { ttl?, pollInterval? }` → SDK
  *     calls our `createTask`, returns the `CreateTaskResult`
  *     envelope synchronously. Caller polls via `tasks/get` and
  *     retrieves via `tasks/result`.
  *
  * Handler signature mirrors `registerTool`'s, plus an optional
  * `opts: { signal?: AbortSignal }` second arg. The signal fires
- * when the caller sends `tasks/cancel` (or `notifications/cancelled`
- * on the original request id) — handlers that fan out (the 5
- * `batch_*` writes today) pass the signal into `batchExecute` so
- * unclaimed items get a `cancelled` error rather than running.
+ * when the caller sends `tasks/cancel` — handlers that fan out
+ * (the 5 `batch_*` writes today) pass the signal into
+ * `batchExecute` so unclaimed items get a `cancelled` error rather
+ * than running.
  *
  * The handler's return value is wrapped identically to
  * `registerTool` so the eventual `tasks/result` payload looks the
@@ -144,7 +144,7 @@ export function registerToolTask<Schema extends z.ZodObject<ZodRawShape>>(
         // on the underlying `TaskStore` we passed to the server.
         //
         // Forward the caller's requested TTL. The SDK parses
-        // `_meta.task.ttl` from the inbound request and surfaces it
+        // `params.task.ttl` from the inbound request and surfaces it
         // as `extra.taskRequestedTtl` (see
         // @modelcontextprotocol/sdk/.../shared/protocol.js:354).
         // Our scoped store (`src/tasks/store.ts`) clamps the value

@@ -11,12 +11,24 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Fixed
+
+- Corrected MCP Tasks request-shape docs and comments to use
+  `params.task`, which is the field parsed by the current SDK for
+  task creation. The stale `_meta.task` examples would not actually
+  activate task augmentation for hand-built clients.
+- Fixed task TTL edge cases in the scoped store: `ttl: null` now
+  maps to the bounded `MCP_TASKS_MAX_KEEP_ALIVE_MS` value as
+  documented, and TTL config values are floored at 1000 ms before
+  being exposed so an operator's ceiling cannot be exceeded by the
+  store-level minimum clamp. 436 total tests.
+
 ## [1.6.0-alpha.3] — 2026-05-19
 
 Cleanup pass on top of v1.6.0-alpha.2. One real defect found
 during the post-alpha.2 audit, plus structural simplifications.
 Behaviour is unchanged for any caller that worked under alpha.2;
-callers that send `_meta.task.ttl` now get the value they asked
+callers that send `params.task.ttl` now get the value they asked
 for instead of a silent fallback. Distribution tag `alpha` on
 npm — does NOT move the `latest` pointer.
 
@@ -31,7 +43,7 @@ npm — does NOT move the `latest` pointer.
   `MCP_TASKS_ENABLED=1` and a clientId-backed task store is wired;
   otherwise they stay synchronous.
 - **Caller-supplied `task.ttl` is now honoured.** The SDK surfaces
-  the inbound `_meta.task.ttl` as `extra.taskRequestedTtl`, but the
+  the inbound `params.task.ttl` as `extra.taskRequestedTtl`, but the
   runner was calling `extra.taskStore.createTask({})` with empty
   params — silently overwriting the caller's hint with
   `MCP_TASKS_DEFAULT_TTL_MS` (5 min). The TTL-clamping logic in
@@ -128,7 +140,7 @@ tag `alpha` on npm — does NOT move the `latest` pointer.
   `batch_update_party`, `batch_update_opportunity`,
   `batch_complete_task`, `batch_add_tag`, `batch_remove_tag_by_id`
   register via `registerToolTask` with `taskSupport: 'optional'`.
-  Aware clients send `_meta.task: { ttl }` and get a
+  Aware clients send `params.task: { ttl }` and get a
   `CreateTaskResult` envelope back immediately, then poll
   `tasks/get` and retrieve via `tasks/result`. **Unaware clients
   are unaffected** — the SDK's `handleAutomaticTaskPolling`

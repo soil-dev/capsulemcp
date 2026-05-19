@@ -136,6 +136,7 @@ describe("createScopedTaskStore", () => {
 
     it("clamps null ttl to maxKeepAliveMs (no unlimited)", async () => {
       process.env["MCP_TASKS_MAX_KEEP_ALIVE_MS"] = "8000";
+      process.env["MCP_TASKS_DEFAULT_TTL_MS"] = "2000";
       const a = createScopedTaskStore("client-a");
       const t = await a.createTask({ ttl: null }, 1, FAKE_REQUEST);
       expect(t.ttl).toBe(8000);

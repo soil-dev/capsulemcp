@@ -11,7 +11,7 @@ npm install
 npm test
 ```
 
-433 tests, all mocked — no Capsule API calls happen, no token needed. The suite has three layers:
+436 tests, all mocked — no Capsule API calls happen, no token needed. The suite has three layers:
 
 - **Per-tool unit tests** (e.g. `tests/parties.test.ts`): import the tool function, mock `undici.fetch`, assert on the URL, method, body, and response handling. Most tests live here.
 - **MCP-protocol integration tests** (`tests/mcp-integration.test.ts`): drive a real `McpServer` through the wire protocol via the SDK's in-memory transport pair, with `undici.fetch` still mocked. Catches the layer between "tool function works" and "MCP correctly registers and dispatches the tool". Includes the `get_attachment` content-type routing logic (which lives in `server.ts`, not the tool function).
@@ -46,7 +46,7 @@ for the contributor-facing summary.
 npm run build
 ```
 
-Produces `dist/index.js` (stdio entry, ~143 KB, with `#!/usr/bin/env node` shebang and the executable bit set) and `dist/http.js` (HTTP entry, ~168 KB, no shebang). Each is fully self-contained — tsup runs as two separate configs so the stdio entry can be invoked directly via npx while the HTTP entry isn't a CLI. tsup target is Node 22 (undici 8 requires Node 22+ for the `webidl.util.markAsUncloneable` runtime API).
+Produces `dist/index.js` (stdio entry, ~142 KB, with `#!/usr/bin/env node` shebang and the executable bit set) and `dist/http.js` (HTTP entry, ~167 KB, no shebang). Each is fully self-contained — tsup runs as two separate configs so the stdio entry can be invoked directly via npx while the HTTP entry isn't a CLI. tsup target is Node 22 (undici 8 requires Node 22+ for the `webidl.util.markAsUncloneable` runtime API).
 
 `npm run build` also chains `npm run build:icon` (`scripts/build-icon.mjs`), which regenerates `src/icon.ts` from the canonical `assets/icon.svg`. The TypeScript file is committed (so typecheck works without a build step) but is **generated** — edit the SVG, then run the build. A drift-guard test (`tests/icon-source.test.ts`) fails CI if the two ever fall out of sync.
 
@@ -292,12 +292,12 @@ The 5 `batch_*` write tools (`batch_update_party`,
 `batch_remove_tag_by_id`) support the **MCP Tasks primitive**
 (SEP-1686, "call-now, fetch-later"). When the operator has
 `MCP_TASKS_ENABLED=1` set on the OAuth HTTP deployment, clients
-can augment a `tools/call` with `_meta.task` to dispatch the work
+can augment a `tools/call` with `params.task` to dispatch the work
 asynchronously and poll for the result later.
 
 **You only need this if your client wants to do other work
 concurrently while a batch runs.** Most clients (including Claude
-today) don't augment with `_meta.task`, and they get the existing
+today) don't augment with `params.task`, and they get the existing
 synchronous behaviour. With tasks disabled, the connector registers
 ordinary synchronous tools. With tasks enabled, the SDK runs
 `handleAutomaticTaskPolling` internally and returns the final
@@ -319,10 +319,8 @@ legacy callers.
         { "id": 102, "about": "Met at RSAC" }
       ]
     },
-    "_meta": {
-      "io.modelcontextprotocol/task": {
-        "ttl": 60000
-      }
+    "task": {
+      "ttl": 60000
     }
   }
 }
