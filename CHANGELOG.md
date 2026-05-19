@@ -11,13 +11,35 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.5.0-alpha.2] — 2026-05-19
+
+Second alpha of the v1.5 line. Three small follow-ups since alpha.1
+— two privacy/operational hardening items and one routine dep bump.
+No new tool surface; no behaviour change for correct callers.
+Distribution tag `alpha` on npm — does NOT move the `latest` pointer.
+
 ### Security
 
 - **`batch.complete` no longer logs raw failure messages by default.**
   The event still emits always-on aggregate fields (`total`,
   `succeeded`, `failed`, `durationMs`, `concurrency`), but detailed
   `failureReasons` now require `CAPSULE_MCP_LOG_VERBOSE=1` because
-  Capsule error messages can contain CRM data.
+  Capsule error messages can contain CRM data. Same trust-boundary
+  reasoning as `MCP_HTTP_DEBUG`, which already gates raw `err.message`
+  on the `/mcp` error path.
+- **Rate-limit `keyGenerator` uses `ipKeyGenerator` helper.**
+  `express-rate-limit` 8.x warns (`ERR_ERL_KEY_GEN_IPV6`) when a
+  custom keyGenerator returns a raw IPv6 address, because /128
+  bucketing lets a single client trivially evade the limit by
+  rotating addresses inside its /64. We now run unauthenticated
+  fallback IPs through `ipKeyGenerator`, which groups by /64.
+  Authenticated requests still key on `clientId` and are unaffected.
+
+### Changed
+
+- **Dependency bumps** (Dependabot group + manual): `express-rate-
+  limit` 8.5.1 → 8.5.2, `undici` 8.2.0 → 8.3.0, `@types/node`
+  25.7.0 → 25.9.0. All patch/minor, no API changes consumed.
 
 ### Fixed
 
