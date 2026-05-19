@@ -11,17 +11,53 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.6.0-alpha.4] — 2026-05-19
+
+Post-alpha.3 review found two real correctness bugs and a docs
+inconsistency. None of them affect callers using our published
+client code (our own tests already used `params.task` directly,
+and we don't send `ttl: null` anywhere), but the published HOWTO
+recipe would have actively misled any hand-built client. Upgrade.
+
 ### Fixed
 
-- Corrected MCP Tasks request-shape docs and comments to use
-  `params.task`, which is the field parsed by the current SDK for
-  task creation. The stale `_meta.task` examples would not actually
-  activate task augmentation for hand-built clients.
-- Fixed task TTL edge cases in the scoped store: `ttl: null` now
-  maps to the bounded `MCP_TASKS_MAX_KEEP_ALIVE_MS` value as
-  documented, and TTL config values are floored at 1000 ms before
-  being exposed so an operator's ceiling cannot be exceeded by the
-  store-level minimum clamp. 436 total tests.
+- **Task augmentation request shape was misdocumented as
+  `_meta.task` everywhere.** The SDK reads `request.params.task`
+  directly (top-level on params, not nested under `_meta`) — see
+  `protocol.js:316`. SEP-1686's spec text says `_meta`, but the
+  SDK is what actually runs. HOWTO recipe, code comments, and
+  CHANGELOG history corrected to `params.task`. Hand-built clients
+  following the old recipe would never have activated task
+  augmentation — they'd hit the synchronous auto-poll path
+  instead, which works but provides none of the call-now-fetch-
+  later benefit.
+- **`ttl: null` branch in the scoped store was unreachable.**
+  The pre-fix code did `taskParams.ttl ?? cfg.defaultTtlMs`,
+  which converted `null` to the default BEFORE the `=== null`
+  check — so the documented "null → maxKeepAliveMs (no
+  unlimited)" branch never fired. The existing test passed only
+  because the test's max happened to be smaller than the default,
+  so the clamp produced the same number from a different path.
+  Tightened the test to actually discriminate.
+- **Operator-set TTL ceiling below 1000 ms was silently exceeded.**
+  `MCP_TASKS_MAX_KEEP_ALIVE_MS=500` would expose `500` via the
+  config, but the store's `Math.max(1000, ...)` floor enforced
+  `1000` effective — exceeding the operator's intent. Both
+  config bounds now floor at `MIN_TASK_TTL_MS = 1000`, so the
+  config view matches store behaviour.
+- **`CAPSULE_MCP_READONLY` documentation lagged the env-reader
+  refactor.** DEPLOY.md and `tests/readonly.test.ts` now reflect
+  the full truthy set (`1`/`true`/`yes`/`on`) introduced in
+  alpha.3.
+- **Stale `notifications/cancelled` comment removed** from the
+  task-runner signal docstring. Only `tasks/cancel` fires our
+  AbortController (via the `updateTaskStatus` hook in
+  `src/tasks/store.ts`); `notifications/cancelled` aborts the
+  original request controller, which is unrelated to background
+  task work.
+
+436 total tests (+3 new: ttl floor at safety minimum, plus two
+truthy-spelling cases for `CAPSULE_MCP_READONLY`).
 
 ## [1.6.0-alpha.3] — 2026-05-19
 
