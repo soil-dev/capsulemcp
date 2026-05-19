@@ -11,7 +11,7 @@
 
 import { createHash, timingSafeEqual } from "node:crypto";
 import express from "express";
-import { rateLimit } from "express-rate-limit";
+import { ipKeyGenerator, rateLimit } from "express-rate-limit";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   mcpAuthRouter,
@@ -221,11 +221,14 @@ export function createApp(opts: AppOptions): express.Express {
     legacyHeaders: false,
     keyGenerator: (req) => {
       const clientId = (req as { auth?: { clientId?: string } }).auth?.clientId;
+      if (clientId) return clientId;
       // Fallback to IP for unauthenticated paths (shouldn't reach here
-      // post-requireBearerAuth, but defensive). express-rate-limit's
-      // default IP key generator goes through `req.ip`, which respects
-      // the `trust proxy` setting we already configure.
-      return clientId ?? req.ip ?? "unknown";
+      // post-requireBearerAuth, but defensive). Use express-rate-limit's
+      // ipKeyGenerator helper rather than `req.ip` directly: it groups
+      // IPv6 addresses to a /64 prefix so a single client can't rotate
+      // through its subnet to bypass the per-IP bucket. `req.ip` respects
+      // the trust-proxy setting we already configure.
+      return ipKeyGenerator(req.ip ?? "");
     },
     skip: () => rateLimitDisabled,
     handler: (_req, res) => {
