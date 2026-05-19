@@ -21,6 +21,8 @@ describe("isReadOnly", () => {
     ["TRUE", true],
     ["yes", true],
     ["YES", true],
+    ["on", true],
+    ["ON", true],
     ["0", false],
     ["false", false],
     ["no", false],

@@ -7,12 +7,12 @@
  * three paths that matter operationally:
  *
  *   1. **Auto-poll fallback** — caller does NOT augment the request
- *      with `_meta.task`. The SDK runs `handleAutomaticTaskPolling`
+ *      with `params.task`. The SDK runs `handleAutomaticTaskPolling`
  *      and returns the final `CallToolResult` synchronously. This
  *      is what every existing client (Claude, today) hits — it
  *      MUST stay identical to the pre-tasks behaviour.
  *
- *   2. **Augmented path** — caller sends `_meta.task: { ttl }`. The
+ *   2. **Augmented path** — caller sends `params.task: { ttl }`. The
  *      SDK returns the `CreateTaskResult` envelope immediately;
  *      caller polls `tasks/get` until terminal, retrieves via
  *      `tasks/result`.
@@ -125,8 +125,8 @@ describe("MCP Tasks lifecycle on batch_update_party", () => {
       });
     });
 
-    // Send tools/call with _meta.task augmentation. The SDK's
-    // client.callTool helper doesn't expose the meta hook, so we
+    // Send tools/call with params.task augmentation. The SDK's
+    // client.callTool helper doesn't expose the task field, so we
     // use the raw request method.
     // biome-ignore lint/suspicious/noExplicitAny: exploring untyped raw request
     const createResult: any = await client.request(

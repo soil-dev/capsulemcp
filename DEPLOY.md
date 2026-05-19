@@ -49,7 +49,7 @@ If neither mode is configured, the server **refuses to start**. There's no path 
 | `MCP_ALLOWED_ORIGINS` | optional | Comma-separated browser origins allowed to send Origin-bearing `/mcp` requests. Defaults include `PUBLIC_BASE_URL`'s origin and `https://claude.ai` |
 | `MCP_OAUTH_INSECURE_AUTO_APPROVE` | yes for that mode | Set to `1` to enable auto-approve. Mutually exclusive with the static-client vars. Refused at startup unless `PUBLIC_BASE_URL` is loopback or `MCP_OAUTH_I_KNOW_WHAT_IM_DOING=yes` |
 | `MCP_OAUTH_I_KNOW_WHAT_IM_DOING` | only with insecure-auto-approve on a non-loopback host | Set to `yes` to acknowledge that you've put the deployment behind a private-network ingress (e.g. Tailscale, VPN). Required because the auto-approve mode lets anyone who reaches the URL register a client and use the shared Capsule token |
-| `CAPSULE_MCP_READONLY` | optional | Set to `1` to skip registering all write/delete tools at the MCP layer |
+| `CAPSULE_MCP_READONLY` | optional | Set to `1` (or `true` / `yes` / `on`) to skip registering all write/delete tools at the MCP layer |
 | `CAPSULE_API_BASE_URL` | optional | Override the Capsule API base URL (default `https://api.capsulecrm.com/api/v2`). Useful for testing |
 | `MCP_HTTP_JSON_LIMIT` | optional | Inbound JSON body limit for `/mcp` (default `35mb`). Leaves headroom for the base64 expansion of a 25 MB attachment binary; bump if you raise the attachment cap |
 | `MCP_HTTP_RATE_LIMIT_MAX` | optional | Max `/mcp` requests per client per window (default `600`). The connector tracks usage per authenticated client_id, so one runaway caller can't burn the shared Capsule quota |

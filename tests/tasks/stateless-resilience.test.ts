@@ -103,7 +103,7 @@ describe("stateless-POST resilience: notification throws don't crash the runner"
     try {
       await Promise.all([server.connect(serverT), client.connect(clientT)]);
 
-      // Augment with _meta.task so we hit the CreateTaskResult path
+      // Augment with params.task so we hit the CreateTaskResult path
       // (the auto-poll path doesn't trigger the bug — the
       // notification channel is kept alive for the duration of the
       // outer request).
