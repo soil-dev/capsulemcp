@@ -83,7 +83,7 @@ gcloud logging read \
    AND httpRequest.requestMethod="POST"
    AND httpRequest.requestUrl=~"/mcp$"
    AND httpRequest.status=200' \
-  --project=sixth-cider-400510 \
+  --project=<your-gcp-project> \
   --limit=30 \
   --format='value(timestamp, httpRequest.latency, httpRequest.responseSize)'
 ```
@@ -104,7 +104,7 @@ gcloud:
 gcloud run services update capsulemcp-production \
   --region=europe-west1 \
   --update-env-vars=CAPSULE_MCP_LOG_VERBOSE=1 \
-  --project=sixth-cider-400510
+  --project=<your-gcp-project>
 
 # … let real traffic run …
 
@@ -112,7 +112,7 @@ gcloud run services update capsulemcp-production \
 gcloud run services update capsulemcp-production \
   --region=europe-west1 \
   --remove-env-vars=CAPSULE_MCP_LOG_VERBOSE \
-  --project=sixth-cider-400510
+  --project=<your-gcp-project>
 ```
 
 Useful queries afterwards:
@@ -121,15 +121,15 @@ Useful queries afterwards:
 # Cache hit count over the last 24h, grouped by path:
 gcloud logging read \
   'jsonPayload.event="cache.hit"' \
-  --project=sixth-cider-400510 --freshness=24h --limit=10000 \
+  --project=<your-gcp-project> --freshness=24h --limit=10000 \
   --format='value(jsonPayload.path)' | sort | uniq -c | sort -rn
 
 # Miss rate (hits vs misses):
 HITS=$(gcloud logging read 'jsonPayload.event="cache.hit"' \
-  --project=sixth-cider-400510 --freshness=24h --limit=10000 \
+  --project=<your-gcp-project> --freshness=24h --limit=10000 \
   --format='value(timestamp)' | wc -l)
 MISSES=$(gcloud logging read 'jsonPayload.event="cache.miss"' \
-  --project=sixth-cider-400510 --freshness=24h --limit=10000 \
+  --project=<your-gcp-project> --freshness=24h --limit=10000 \
   --format='value(timestamp)' | wc -l)
 echo "hit rate: $(echo "scale=3; $HITS / ($HITS + $MISSES)" | bc)"
 
@@ -138,14 +138,14 @@ echo "hit rate: $(echo "scale=3; $HITS / ($HITS + $MISSES)" | bc)"
 # pattern):
 gcloud logging read \
   'jsonPayload.event="cache.miss"' \
-  --project=sixth-cider-400510 --freshness=24h --limit=10000 \
+  --project=<your-gcp-project> --freshness=24h --limit=10000 \
   --format='value(jsonPayload.reason)' | sort | uniq -c
 
 # Capsule API latency distribution (latencyMs is emitted on every
 # cache.miss — these are the actual Capsule round trips):
 gcloud logging read \
   'jsonPayload.event="cache.miss"' \
-  --project=sixth-cider-400510 --freshness=24h --limit=10000 \
+  --project=<your-gcp-project> --freshness=24h --limit=10000 \
   --format='value(jsonPayload.latencyMs)' | sort -n | \
   awk '{a[NR]=$1} END {
     print "p50:", a[int(NR*0.50)],
@@ -157,12 +157,12 @@ gcloud logging read \
 # Cap eviction events (high count = MAX_ENTRIES too small):
 gcloud logging read \
   'jsonPayload.event="cache.evict"' \
-  --project=sixth-cider-400510 --freshness=24h --format='value(timestamp)' | wc -l
+  --project=<your-gcp-project> --freshness=24h --format='value(timestamp)' | wc -l
 
 # Tag-mutation invalidations (audit trail of cache drops):
 gcloud logging read \
   'jsonPayload.event="cache.invalidate"' \
-  --project=sixth-cider-400510 --freshness=24h \
+  --project=<your-gcp-project> --freshness=24h \
   --format='value(timestamp, jsonPayload.trigger, jsonPayload.prefix, jsonPayload.droppedCount)'
 ```
 
@@ -187,14 +187,14 @@ For a side-by-side reference where both passes hit Capsule:
 gcloud run services update capsulemcp-production \
   --region=europe-west1 \
   --update-env-vars=CAPSULE_MCP_CACHE_DISABLED=1 \
-  --project=sixth-cider-400510
+  --project=<your-gcp-project>
 
 # … run the same two-pass exercise …
 
 gcloud run services update capsulemcp-production \
   --region=europe-west1 \
   --remove-env-vars=CAPSULE_MCP_CACHE_DISABLED \
-  --project=sixth-cider-400510
+  --project=<your-gcp-project>
 ```
 
 With caching disabled, pass 2's latencies should match pass 1's

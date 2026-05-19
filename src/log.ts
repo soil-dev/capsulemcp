@@ -8,11 +8,11 @@
  *
  *   gcloud logging read \
  *     'jsonPayload.event="cache.hit"' \
- *     --project=sixth-cider-400510 --freshness=7d --limit=100
+ *     --project=<your-gcp-project> --freshness=7d --limit=100
  *
  *   gcloud logging read \
  *     'jsonPayload.event="cache.miss" AND jsonPayload.reason="expired"' \
- *     --project=sixth-cider-400510 --freshness=7d
+ *     --project=<your-gcp-project> --freshness=7d
  *
  * Why opt-in:
  *

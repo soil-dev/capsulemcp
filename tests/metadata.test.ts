@@ -15,7 +15,7 @@ afterEach(() => {
 
 describe("listTeams", () => {
   it("GETs /teams and returns the response body", async () => {
-    mockFetch(200, { teams: [{ id: 1, name: "MarCom" }] });
+    mockFetch(200, { teams: [{ id: 1, name: "Sales" }] });
     const { listTeams } = await import("../src/tools/metadata.js");
     const result = await listTeams({});
     const [url] = vi.mocked(fetch).mock.calls[0]!;
