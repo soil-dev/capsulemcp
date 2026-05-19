@@ -40,6 +40,15 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ### Documented
 
+- **New `OPTIMIZATIONS.md`** captures the cache work end-to-end:
+  what was changed, design constraints, how to verify (Cloud Run
+  log-driven latency comparison + A/B with the disable flag +
+  unit tests), and the measured production result (mean
+  166 ms → 5 ms, ~30× speedup, byte-identical correctness).
+  Also documents the 4 planned optimisations (tool-catalog
+  tiering, bundle minification, `min_instance_count=1`, CI
+  parallelism) so we don't rediscover them later. Linked from
+  README's "Pick your install" table.
 - **4 more tool descriptions rewritten for richer LLM routing.** After
   v1.0.1 shipped, Glama's re-probe lifted all 15 previously rewritten
   tools to A but tightened its grading rubric and demoted 4 tools that

@@ -18,6 +18,7 @@ A [Model Context Protocol](https://modelcontextprotocol.io) server for [Capsule 
 | To deploy it once and have your whole team use it via Claude.ai | [DEPLOY.md](DEPLOY.md) |
 | To contribute, debug, add a tool, or cut a release | [HOWTO.md](HOWTO.md) (procedures) · [CONTRIBUTING.md](CONTRIBUTING.md) (style & PR checks) |
 | To understand what's intentionally not implemented (and why) | [DESIGN.md](DESIGN.md) |
+| To see what performance work has been done (and what's next) | [OPTIMIZATIONS.md](OPTIMIZATIONS.md) |
 | To see ideas for features that might land in future versions | [IDEAS.md](IDEAS.md) |
 | To learn the surprising parts of Capsule's v2 API (with verbatim doc quotes) | [NOTES-ON-CAPSULE-API.md](NOTES-ON-CAPSULE-API.md) |
 
