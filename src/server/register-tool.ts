@@ -167,31 +167,74 @@ export function registerToolTask<Schema extends z.ZodObject<ZodRawShape>>(
         // `failed` lifecycle status, which is reserved for
         // task-machinery failures, not the wrapped tool's own
         // error path. See SEP-1686 §7.2.
+        //
+        // CRITICAL: every interaction with `extra.taskStore` from
+        // the background goes through the SDK's protocol.js wrapper,
+        // which — after the store operation succeeds — attempts to
+        // emit `notifications/tasks/status` on the original request's
+        // notification channel. Under stateless HTTP POST `/mcp`,
+        // that channel is closed the instant we return `{ task }`,
+        // so the notification throws. The store side-effect already
+        // happened (verified by reading the underlying SDK store),
+        // but the throw propagates up as if the whole call failed.
+        // Wrap each call independently and swallow the throw:
+        //   - re-trying storeTaskResult after a successful store
+        //     means the task is in terminal status and the SDK
+        //     throws "results can only be stored once", which is
+        //     an unhandled rejection from the void IIFE → process
+        //     exit → instance recycle → all tasks lost.
+        // The integration test suite uses InMemoryTransport which
+        // keeps the channel open, so this codepath was invisible
+        // until production verification. See CHANGELOG.
         void (async () => {
+          if (abortController.signal.aborted) return;
+
+          // Status-→ working. The notification side may throw under
+          // stateless POST; the status flip is what matters.
           try {
             await extra.taskStore.updateTaskStatus(task.taskId, "working");
+          } catch {
+            // Swallow: the underlying store either succeeded (most
+            // likely; the throw came from notification) or the task
+            // was concurrently cancelled. Both cases recover below.
+          }
+
+          // Run the handler. Capture its result OR a CallToolResult-
+          // shaped error envelope — we always end up storing one
+          // payload, never re-entering this branch.
+          let payload: CallToolResult;
+          try {
             const result = await handler(input, {
               signal: abortController.signal,
             });
-            // If cancellation fired during execution, the task's
-            // status is already `cancelled` (terminal) — SEP-1686
-            // §4.3 forbids transitioning out of terminal states.
-            // Skip the storeTaskResult call rather than provoke
-            // the SDK's "cannot transition terminal task" error.
-            if (!abortController.signal.aborted) {
-              await extra.taskStore.storeTaskResult(task.taskId, "completed", wrapAsText(result));
-            }
+            payload = wrapAsText(result) as CallToolResult;
           } catch (err) {
             if (abortController.signal.aborted) return;
-            // Capsule error text can include CRM data; surface it
-            // via the same isError: true shape a synchronous tool
-            // call would have used, so callers using `tasks/result`
-            // see the same body shape they'd see from `tools/call`.
             const message = err instanceof Error ? err.message : String(err);
-            await extra.taskStore.storeTaskResult(task.taskId, "completed", {
+            payload = {
               content: [{ type: "text", text: message }],
               isError: true,
-            });
+            };
+          }
+
+          // If cancellation fired during execution, the task's
+          // status is already `cancelled` (terminal); SEP-1686 §4.3
+          // forbids transitioning out of terminal. Skip the store.
+          if (abortController.signal.aborted) return;
+
+          // Store once. Any throw past this point is the SDK's
+          // notification path hitting a closed stream — the
+          // underlying store already has the result, so we log and
+          // move on. Do NOT re-enter a catch that calls
+          // storeTaskResult again.
+          try {
+            await extra.taskStore.storeTaskResult(task.taskId, "completed", payload);
+          } catch {
+            // Best-effort: notification failed on a closed SSE
+            // stream. The result was stored before the notification
+            // attempt, so callers polling tasks/result will see it.
+            // No re-store — that would fail with "already in
+            // terminal status" and crash the process.
           }
         })();
 

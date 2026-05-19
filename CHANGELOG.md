@@ -11,6 +11,38 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.6.0-alpha.2] — 2026-05-19
+
+Hotfix on top of alpha.1. **alpha.1 is unsafe in production** — do
+not run with `MCP_TASKS_ENABLED=1` against the stateless HTTP
+transport. Upgrade to alpha.2.
+
+### Fixed
+
+- **Augmented-task lifecycle crashed the process on every call.**
+  Under stateless HTTP POST `/mcp`, the SDK's `storeTaskResult`
+  wrapper (`shared/protocol.js`) emits a
+  `notifications/tasks/status` push after writing the result. But
+  the original request's notification channel closes the instant we
+  return `{ task }` synchronously, so the push throws. The runner's
+  catch block treated that as a handler failure and called
+  `storeTaskResult` a second time to mark the task `failed` — but
+  the underlying store was already in terminal status, so the SDK
+  threw "results can only be stored once". That became an unhandled
+  rejection from the background `void(async()=>...)` IIFE → process
+  `exit(1)` → Cloud Run instance recycled → **all in-flight tasks
+  for all clients lost**. The runner now separates handler-failure
+  from store-failure paths and swallows post-store notification
+  errors. The result is in the underlying store regardless, so
+  callers polling `tasks/result` get the right payload.
+
+  Invisible in the alpha.1 test suite because `InMemoryTransport`
+  keeps the notification channel open for the whole test session.
+  New `tests/tasks/stateless-resilience.test.ts` reproduces the bug
+  by force-throwing on every `notifications/tasks/status` and
+  asserts (a) no unhandled rejection, (b) task reaches `completed`,
+  (c) `tasks/result` returns the right body. 432 total tests.
+
 ## [1.6.0-alpha.1] — 2026-05-19
 
 First alpha of the v1.6 line. Adds **MCP Tasks (SEP-1686)
