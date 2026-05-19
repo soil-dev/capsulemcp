@@ -8,7 +8,8 @@
  *   - Errors in one item don't poison the rest
  *   - Concurrency cap is respected (peak in-flight ≤ cap)
  *   - batch.complete event always emits (verbose-independent), with
- *     summary fields and deduplicated failureReasons
+ *     aggregate summary fields only by default
+ *   - detailed failureReasons are emitted only in verbose mode
  *   - The 5 wired-up batch tools (batch_update_party,
  *     batch_update_opportunity, batch_complete_task, batch_add_tag,
  *     batch_remove_tag_by_id) all PUT once per item and aggregate
@@ -175,7 +176,23 @@ describe("batchExecute", () => {
     expect(typeof events[0]?.["durationMs"]).toBe("number");
   });
 
-  it("includes deduplicated failureReasons on batch.complete (ordered by frequency)", async () => {
+  it("does not include raw failureReasons when verbose logging is off", async () => {
+    await batchExecute("test_tool", [1], async () => {
+      throw new Error("customer-specific validation detail");
+    });
+    const events = emittedEvents();
+    expect(events[0]).toMatchObject({
+      event: "batch.complete",
+      total: 1,
+      succeeded: 0,
+      failed: 1,
+    });
+    expect(events[0]).not.toHaveProperty("failureReasons");
+    expect(JSON.stringify(events[0])).not.toContain("customer-specific");
+  });
+
+  it("includes deduplicated failureReasons on batch.complete when verbose is on", async () => {
+    process.env["CAPSULE_MCP_LOG_VERBOSE"] = "1";
     const items = [1, 2, 3, 4, 5];
     await batchExecute("test_tool", items, async (n) => {
       if (n <= 3) {

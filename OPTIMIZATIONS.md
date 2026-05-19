@@ -314,11 +314,11 @@ See `src/capsule/batch.ts` for the helper API; tool descriptions in
 
 #### `batch.complete` event
 
-A single JSON line is emitted to stderr at the end of every batch,
-**regardless of `CAPSULE_MCP_LOG_VERBOSE`** (the verbose flag gates
-cache.* per-event chatter; batch.complete is low-volume — one line
-per batch tool call — and uniformly useful, so it's always-on).
-Shape:
+A single aggregate JSON line is emitted to stderr at the end of every
+batch, **regardless of `CAPSULE_MCP_LOG_VERBOSE`** (the verbose flag
+gates cache.* per-event chatter; batch.complete is low-volume — one
+line per batch tool call — and uniformly useful, so the summary is
+always-on). Default shape:
 
 ```json
 {
@@ -329,16 +329,23 @@ Shape:
   "failed": 2,
   "durationMs": 412,
   "concurrency": 5,
-  "failureReasons": [
-    { "status": 422, "message": "party.name: name is required", "count": 2 }
-  ],
   "timestamp": "2026-05-19T11:30:00.000Z"
 }
 ```
 
-`failureReasons` deduplicates identical errors (so a 50-item batch
-where 40 fail with the same 422 lands as one entry with `count: 40`).
-Top 5 by frequency.
+When `CAPSULE_MCP_LOG_VERBOSE=1`, failed batches also include
+`failureReasons` with the top 5 deduplicated errors by frequency:
+
+```json
+{
+  "failureReasons": [
+    { "status": 422, "message": "party.name: name is required", "count": 2 }
+  ]
+}
+```
+
+The opt-in matters: Capsule error messages can contain CRM data, so
+raw failure text should not land in default always-on logs.
 
 Useful gcloud queries (Cloud Run auto-parses these into `jsonPayload`):
 
@@ -352,14 +359,14 @@ gcloud logging read 'jsonPayload.event="batch.complete"' \
 gcloud logging read \
   'jsonPayload.event="batch.complete" AND jsonPayload.failed > 0' \
   --project=<your-gcp-project> --freshness=24h \
-  --format='value(timestamp, jsonPayload.tool, jsonPayload.total, jsonPayload.failed, jsonPayload.failureReasons)'
+  --format='value(timestamp, jsonPayload.tool, jsonPayload.total, jsonPayload.failed)'
 
 # Latency distribution per batch tool:
 gcloud logging read 'jsonPayload.event="batch.complete"' \
   --project=<your-gcp-project> --freshness=24h --limit=10000 \
   --format='value(jsonPayload.tool, jsonPayload.durationMs)'
 
-# Top failure reasons across all batches (useful for "where are we missing"):
+# Top failure reasons across all batches (requires CAPSULE_MCP_LOG_VERBOSE=1):
 gcloud logging read 'jsonPayload.event="batch.complete"' \
   --project=<your-gcp-project> --freshness=7d --limit=10000 \
   --format='value(jsonPayload.failureReasons)' | jq -s 'flatten | group_by(.message) | map({message: .[0].message, total: map(.count) | add}) | sort_by(-.total)'
@@ -367,10 +374,10 @@ gcloud logging read 'jsonPayload.event="batch.complete"' \
 
 #### Local regression tests
 
-`tests/batch.test.ts` (18 cases): concurrency env knob (default,
+`tests/batch.test.ts` (19 cases): concurrency env knob (default,
 clamping, malformed), batchExecute (per-item results, ordering,
 exception isolation, status extraction, concurrency cap enforcement,
-batch.complete shape, failureReasons dedup), tool-level wiring for
+batch.complete shape, verbose-gated failureReasons dedup), tool-level wiring for
 all 5 batch tools (one PUT per item, schema bounds).
 
 ### Empirical expectation
@@ -497,7 +504,7 @@ Reduce the per-conversation token cost of `tools/list`. Currently
 ~20 KB of JSON descriptions ships to every client per session. A
 `CAPSULE_MCP_TIER=core` env would register only the 20 most-used
 tools (search/filter/get/create across the four resources, plus
-tags) and skip the long-tail. Default leaves all 81 registered for
+tags) and skip the long-tail. Default leaves all 86 registered for
 back-compat.
 
 **Expected impact**: halves the `tools/list` payload, which is the
