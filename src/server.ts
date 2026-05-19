@@ -227,7 +227,7 @@ export function createCapsuleMcpServer(): McpServer {
   const readOnly = isReadOnly();
   const server = new McpServer({
     name: "capsulemcp",
-    version: "1.0.1",
+    version: "1.5.0-alpha.1",
     description:
       "Read and (optionally) modify Capsule CRM data — parties, opportunities, projects, tasks, timeline entries, pipelines, tags.",
     websiteUrl: "https://github.com/soil-dev/capsulemcp",

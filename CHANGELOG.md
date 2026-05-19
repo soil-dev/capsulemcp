@@ -11,6 +11,29 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.5.0-alpha.1] — 2026-05-19
+
+First alpha of the v1.5 line. Three optimisation tracks landed since
+v1.0.1, each independently verified against the production-deployed
+service before this cut. Distribution tag `alpha` on npm — does NOT
+move the `latest` pointer, so `npx capsulemcp` continues to resolve
+to the stable v1.0.1 unless callers opt in with `npx capsulemcp@alpha`
+or pin the explicit version.
+
+Headline numbers:
+
+- 5 new batched-write tools (`batch_*`) — 5–10× speedup on multi-
+  record write flows
+- 16 dictionary endpoints now cached per-instance with a 5-min TTL —
+  measured 30× speedup on cache hits, ~150 ms → ~5 ms
+- 4 `get_*` batch-fetch tools widened from 10 → 50 ids with
+  transparent fan-out — 3–5× speedup on "filter + fetch detail"
+  flows
+- Structured `cache.*` and `batch.complete` events for retroactive
+  log analysis (gcloud recipes in OPTIMIZATIONS.md)
+
+Full feature list below.
+
 ### Added
 
 - **`get_*` batch-fetch tools now accept up to 50 ids** (`get_parties`,
