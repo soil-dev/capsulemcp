@@ -11,6 +11,17 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Fixed
+
+- Kept `batch_*` tools callable when MCP Tasks are disabled. The
+  SDK's `taskSupport: "optional"` path still uses automatic task
+  polling for ordinary `tools/call` requests; registering task-aware
+  handlers without a task store made default/off deployments fail
+  with "No task store provided" before the underlying batch tool
+  ran. Batch tools now register as task-capable only when
+  `MCP_TASKS_ENABLED=1` and a clientId-backed task store is wired;
+  otherwise they stay synchronous. 433 total tests.
+
 ## [1.6.0-alpha.2] — 2026-05-19
 
 Hotfix on top of alpha.1. **alpha.1 is unsafe in production** — do

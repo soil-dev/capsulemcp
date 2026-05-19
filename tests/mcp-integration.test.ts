@@ -252,6 +252,24 @@ describe("tools/call (write tools)", () => {
     expect(result.content?.[0]?.text).toMatch(/not found/);
     expect(vi.mocked(fetch)).not.toHaveBeenCalled();
   });
+
+  it("batch tools stay callable when MCP tasks are disabled", async () => {
+    // Tasks are opt-in. When MCP_TASKS_ENABLED is unset, batch tools
+    // must register as ordinary synchronous tools; otherwise the SDK's
+    // optional-task auto-poll path fails with "No task store provided".
+    delete process.env["MCP_TASKS_ENABLED"];
+    const { client } = await spawn({ readOnly: false });
+    mockFetch(200, { party: { id: 1, type: "person" } });
+
+    const result = await client.callTool({
+      name: "batch_update_party",
+      arguments: { items: [{ id: 1, about: "still sync" }] },
+    });
+
+    const text = (result.content as Array<{ text: string }>)[0]!.text;
+    expect(JSON.parse(text).summary).toEqual({ total: 1, succeeded: 1, failed: 0 });
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+  });
 });
 
 // ── get_attachment content-type routing (server.ts handler logic) ───────────

@@ -12,10 +12,11 @@
  * are not registered. Existing callers see the connector behave
  * exactly as it did before this code shipped.
  *
- * Once tools opt in via PR2 (`registerToolTask` with
- * `taskSupport: "optional"`), enabling tasks is non-breaking: the
- * SDK's `handleAutomaticTaskPolling` keeps unaware clients on the
- * synchronous-response path. See OPTIMIZATIONS.md / DESIGN.md.
+ * The five `batch_*` write tools opt in when a task store is wired
+ * (`registerToolTask` with `taskSupport: "optional"`). Enabling
+ * tasks is non-breaking for callers that omit `_meta.task`: the
+ * SDK's `handleAutomaticTaskPolling` keeps them on the synchronous-
+ * response path. See OPTIMIZATIONS.md / DESIGN.md.
  */
 
 /** Default TTL applied when a caller's `task.ttl` is absent. */

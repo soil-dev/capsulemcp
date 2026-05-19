@@ -236,9 +236,9 @@ export function createScopedTaskStore(clientId: string): TaskStore {
       result: Result,
       sessionId?: string,
     ): Promise<void> {
-      // Result-storing comes from the task's own runner (in PR2),
-      // which already knows the owning clientId because it's the
-      // same scoped wrapper the createTask call ran through. Still
+      // Result-storing comes from the task's own runner, which
+      // already knows the owning clientId because it's the same
+      // scoped wrapper the createTask call ran through. Still
       // belt-and-braces: drop the write if the owner doesn't match.
       if (owners.get(taskId) !== clientId) {
         throw new McpError(ErrorCode.InvalidParams, "Task not found");

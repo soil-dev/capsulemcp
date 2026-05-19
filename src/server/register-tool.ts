@@ -249,3 +249,26 @@ export function registerToolTask<Schema extends z.ZodObject<ZodRawShape>>(
     },
   );
 }
+
+/**
+ * Register a batch tool as task-capable only when the server was
+ * constructed with a task store. The SDK's `taskSupport: "optional"`
+ * path still uses automatic task polling for legacy `tools/call`
+ * requests, so registering a task handler without a task store makes
+ * ordinary callers fail with "No task store provided" before the
+ * underlying tool runs.
+ */
+export function registerToolTaskWhenEnabled<Schema extends z.ZodObject<ZodRawShape>>(
+  server: McpServer,
+  tasksWired: boolean,
+  name: string,
+  description: string,
+  schema: Schema,
+  handler: (input: z.infer<Schema>, opts: { signal?: AbortSignal }) => Promise<unknown>,
+): void {
+  if (tasksWired) {
+    registerToolTask(server, name, description, schema, handler);
+    return;
+  }
+  registerTool(server, name, description, schema, (input) => handler(input, {}));
+}
