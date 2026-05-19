@@ -31,7 +31,7 @@
 
 import { z } from "zod";
 import { capsuleGetCached, capsulePut } from "../capsule/client.js";
-import { batchExecute } from "../capsule/batch.js";
+import { type BatchOpts, batchExecute } from "../capsule/batch.js";
 import { invalidateByPrefix } from "../capsule/cache.js";
 import { idempotentWithResult, isCapsuleTagNotFound } from "../capsule/idempotent.js";
 
@@ -153,10 +153,7 @@ export const batchAddTagSchema = z.object({
     ),
 });
 
-export async function batchAddTag(
-  input: z.infer<typeof batchAddTagSchema>,
-  opts: { signal?: AbortSignal } = {},
-) {
+export async function batchAddTag(input: z.infer<typeof batchAddTagSchema>, opts: BatchOpts = {}) {
   return batchExecute("batch_add_tag", input.items, (item) => addTag(item), opts);
 }
 
@@ -174,7 +171,7 @@ export const batchRemoveTagByIdSchema = z.object({
 
 export async function batchRemoveTagById(
   input: z.infer<typeof batchRemoveTagByIdSchema>,
-  opts: { signal?: AbortSignal } = {},
+  opts: BatchOpts = {},
 ) {
   return batchExecute("batch_remove_tag_by_id", input.items, (item) => removeTagById(item), opts);
 }

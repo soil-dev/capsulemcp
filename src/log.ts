@@ -36,22 +36,36 @@
  * shape: pick a verb, populate the relevant fields, call logEvent.
  */
 
+import { readBool } from "./env.js";
+
 /** True when verbose event logging is opted in via env. */
 export function logVerbose(): boolean {
-  const raw = process.env["CAPSULE_MCP_LOG_VERBOSE"]?.toLowerCase();
-  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+  return readBool("CAPSULE_MCP_LOG_VERBOSE");
 }
 
 /**
- * Emit a structured event to stderr if verbose logging is enabled.
- * No-op otherwise. Hot path; written to avoid allocating the JSON
- * string when verbose is off.
+ * Emit a structured event to stderr.
+ *
+ * Default behaviour is gated on `CAPSULE_MCP_LOG_VERBOSE` — the hot
+ * paths (cache, task store) only log when explicitly opted in.
+ *
+ * `opts.force: true` bypasses the gate. Used for low-cardinality,
+ * uniformly-useful events (`batch.complete`) that operators
+ * shouldn't have to flip verbose on to see. The detail fields on
+ * such events still respect the verbose gate at the call site —
+ * see how `src/capsule/batch.ts` strips `failureReasons` unless
+ * `logVerbose()` is also on.
+ *
+ * stderr (not stdout) so the MCP-protocol JSON on stdout for the
+ * stdio transport never collides with these. The HTTP transport
+ * doesn't use stdout, so the same code path works for both.
  */
-export function logEvent(event: string, fields: Record<string, unknown>): void {
-  if (!logVerbose()) return;
-  // stderr (not stdout) so MCP-protocol JSON on stdout for the stdio
-  // transport never collides with these. The HTTP transport doesn't
-  // use stdout, so the same code path works for both.
+export function logEvent(
+  event: string,
+  fields: Record<string, unknown>,
+  opts: { force?: boolean } = {},
+): void {
+  if (!opts.force && !logVerbose()) return;
   process.stderr.write(
     `${JSON.stringify({ event, ...fields, timestamp: new Date().toISOString() })}\n`,
   );

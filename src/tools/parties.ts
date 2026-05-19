@@ -2,7 +2,7 @@ import { z } from "zod";
 import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
 import { confirmFlag } from "./confirm-flag.js";
 import { capsuleDelete, capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
-import { batchExecute, chunk } from "../capsule/batch.js";
+import { type BatchOpts, batchExecute, chunk } from "../capsule/batch.js";
 import { idempotent, idempotentWithResult } from "../capsule/idempotent.js";
 import {
   CustomFieldWriteSchema,
@@ -363,7 +363,7 @@ export const batchUpdatePartySchema = z.object({
 
 export async function batchUpdateParty(
   input: z.infer<typeof batchUpdatePartySchema>,
-  opts: { signal?: AbortSignal } = {},
+  opts: BatchOpts = {},
 ) {
   return batchExecute("batch_update_party", input.items, (item) => updateParty(item), opts);
 }

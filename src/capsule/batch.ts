@@ -32,7 +32,8 @@
  *     See src/log.ts for the broader logging contract.
  */
 
-import { logVerbose } from "../log.js";
+import { readPositiveInt } from "../env.js";
+import { logEvent, logVerbose } from "../log.js";
 
 /**
  * Split an array into fixed-size chunks. Final chunk may be smaller.
@@ -52,6 +53,16 @@ export function chunk<T>(arr: T[], size: number): T[][] {
   }
   return out;
 }
+
+/**
+ * Common options threaded through every batched-write tool. `signal`
+ * fires when the caller sends `tasks/cancel`; `batchExecute` checks
+ * it between items so unclaimed slots get a `cancelled` error rather
+ * than running. Used both at the tool function boundary (the 5
+ * `batch_*` handlers in `src/tools/`) and inside `batchExecute`
+ * itself — so the shape is canonical and named.
+ */
+export type BatchOpts = { signal?: AbortSignal };
 
 /** Per-item result shape returned to the tool caller. */
 export type BatchItemResult<TOutput> =
@@ -81,11 +92,10 @@ const MAX_CONCURRENCY = 50;
  * MAX_CONCURRENCY; falls back to default on malformed input.
  */
 export function getBatchConcurrency(): number {
-  const raw = process.env["CAPSULE_MCP_BATCH_CONCURRENCY"];
-  if (raw === undefined || raw === "") return DEFAULT_CONCURRENCY;
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n < 1) return DEFAULT_CONCURRENCY;
-  return Math.min(Math.floor(n), MAX_CONCURRENCY);
+  return Math.min(
+    readPositiveInt("CAPSULE_MCP_BATCH_CONCURRENCY", DEFAULT_CONCURRENCY),
+    MAX_CONCURRENCY,
+  );
 }
 
 /**
@@ -110,7 +120,7 @@ export async function batchExecute<TInput, TOutput>(
   tool: string,
   items: TInput[],
   action: (item: TInput, index: number) => Promise<TOutput>,
-  options: { signal?: AbortSignal } = {},
+  options: BatchOpts = {},
 ): Promise<BatchResponse<TOutput>> {
   const concurrency = getBatchConcurrency();
   const results: BatchItemResult<TOutput>[] = new Array(items.length);
@@ -161,15 +171,19 @@ export async function batchExecute<TInput, TOutput>(
   // can contain Capsule response text / CRM data, so include them only
   // when verbose logging is explicitly enabled.
   const failureReasons = logVerbose() ? topFailureReasons(results, 5) : [];
-  logEventAlways("batch.complete", {
-    tool,
-    total: summary.total,
-    succeeded: summary.succeeded,
-    failed: summary.failed,
-    durationMs: Date.now() - startedAt,
-    concurrency,
-    ...(failureReasons.length > 0 ? { failureReasons } : {}),
-  });
+  logEvent(
+    "batch.complete",
+    {
+      tool,
+      total: summary.total,
+      succeeded: summary.succeeded,
+      failed: summary.failed,
+      durationMs: Date.now() - startedAt,
+      concurrency,
+      ...(failureReasons.length > 0 ? { failureReasons } : {}),
+    },
+    { force: true },
+  );
 
   return { results, summary };
 }
@@ -216,19 +230,4 @@ function topFailureReasons<T>(
   return Array.from(counts.values())
     .sort((a, b) => b.count - a.count)
     .slice(0, n);
-}
-
-/**
- * Direct stderr write that bypasses CAPSULE_MCP_LOG_VERBOSE. Used by
- * batch.complete summaries because the event is low-volume (one line
- * per batch tool call) and uniformly useful for retroactive analysis —
- * operators shouldn't have to flip verbose on just to confirm a batch
- * ran or to see its failure rate. Detailed failure reasons are already
- * stripped unless verbose is on. Same JSON shape as logEvent so it
- * parses into the same jsonPayload structure in Cloud Run.
- */
-function logEventAlways(event: string, fields: Record<string, unknown>): void {
-  process.stderr.write(
-    `${JSON.stringify({ event, ...fields, timestamp: new Date().toISOString() })}\n`,
-  );
 }

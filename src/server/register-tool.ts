@@ -25,6 +25,7 @@ import type {
 } from "@modelcontextprotocol/sdk/experimental/tasks/interfaces.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { z, ZodRawShape } from "zod";
+import type { BatchOpts } from "../capsule/batch.js";
 import { registerAbortController } from "../tasks/store.js";
 
 /** Wrap a handler's return value in the MCP `content: [{text}]` shape. */
@@ -96,7 +97,7 @@ export function registerToolTask<Schema extends z.ZodObject<ZodRawShape>>(
   name: string,
   description: string,
   schema: Schema,
-  handler: (input: z.infer<Schema>, opts: { signal?: AbortSignal }) => Promise<unknown>,
+  handler: (input: z.infer<Schema>, opts: BatchOpts) => Promise<unknown>,
 ): void {
   // We reach into the experimental namespace; the SDK explicitly
   // labels these APIs as such ("WARNING: These APIs are experimental
@@ -141,7 +142,19 @@ export function registerToolTask<Schema extends z.ZodObject<ZodRawShape>>(
         // `taskParams`; the SDK threads `requestId` and the original
         // `request` internally. The full 4-arg surface only exists
         // on the underlying `TaskStore` we passed to the server.
-        const task = await extra.taskStore.createTask({});
+        //
+        // Forward the caller's requested TTL. The SDK parses
+        // `_meta.task.ttl` from the inbound request and surfaces it
+        // as `extra.taskRequestedTtl` (see
+        // @modelcontextprotocol/sdk/.../shared/protocol.js:354).
+        // Our scoped store (`src/tasks/store.ts`) clamps the value
+        // to `[1000ms, maxKeepAliveMs]`; passing `undefined` falls
+        // through to `defaultTtlMs`. The SDK does NOT surface the
+        // caller's `pollInterval` hint on `extra` (only `ttl`), so
+        // pollInterval stays as our `defaultPollFrequencyMs`.
+        const task = await extra.taskStore.createTask({
+          ttl: extra.taskRequestedTtl,
+        });
 
         // Wire a per-task AbortController BEFORE kicking off the
         // background work. The SDK's `tasks/cancel` handler only
@@ -248,27 +261,4 @@ export function registerToolTask<Schema extends z.ZodObject<ZodRawShape>>(
       },
     },
   );
-}
-
-/**
- * Register a batch tool as task-capable only when the server was
- * constructed with a task store. The SDK's `taskSupport: "optional"`
- * path still uses automatic task polling for legacy `tools/call`
- * requests, so registering a task handler without a task store makes
- * ordinary callers fail with "No task store provided" before the
- * underlying tool runs.
- */
-export function registerToolTaskWhenEnabled<Schema extends z.ZodObject<ZodRawShape>>(
-  server: McpServer,
-  tasksWired: boolean,
-  name: string,
-  description: string,
-  schema: Schema,
-  handler: (input: z.infer<Schema>, opts: { signal?: AbortSignal }) => Promise<unknown>,
-): void {
-  if (tasksWired) {
-    registerToolTask(server, name, description, schema, handler);
-    return;
-  }
-  registerTool(server, name, description, schema, (input) => handler(input, {}));
 }

@@ -343,9 +343,9 @@ Notable design choices for this subsystem:
 
 - **In-memory, per-instance.** Mirrors the cache (see §L6). Cloud
   Run scale-to-zero will silently drop in-flight tasks; this is
-  documented in DEPLOY.md and acceptable for the v1.6 workload
-  (batched writes complete in ~4–8 s, well under typical instance
-  idle time). The SDK's `TaskStore` interface is swap-in; a
+  documented in DEPLOY.md and acceptable for our workload (batched
+  writes complete in ~4–8 s, well under typical instance idle
+  time). The SDK's `TaskStore` interface is swap-in; a
   Firestore-backed implementation is sketched in IDEAS.md as the
   future upgrade path if we ever need cross-instance durability.
 - **Polling-first.** The MCP `notifications/tasks/status` push
@@ -354,12 +354,17 @@ Notable design choices for this subsystem:
   soon as the original `tools/call` response is returned, so the
   status notification has nowhere to land. Clients must poll
   `tasks/get` — which is exactly what the spec recommends for this
-  transport shape anyway.
-- **Notifications-as-cancellation.** `notifications/cancelled`
-  (existing, JSON-RPC id) and `tasks/cancel` (new) both reach the
-  same place: the task's underlying request `AbortSignal`. The
-  v1.6 tool-side migration wires this signal into the batch
-  fan-out loop so cancellation halts further chunks promptly.
+  transport shape anyway. The runner swallows any throw from the
+  SDK's post-store notification path so a closed stream doesn't
+  crash the void IIFE (see `src/server/register-tool.ts`).
+- **Cancellation.** The SDK's `tasks/cancel` handler only flips
+  task status to `cancelled` — it does not fire any AbortSignal on
+  its own. Our scoped store (`src/tasks/store.ts`) keeps a per-task
+  `AbortController` registry; its `updateTaskStatus` override fires
+  the controller when status transitions to `cancelled`. The
+  runner wires this signal into `batchExecute`, which checks it
+  between items so unclaimed slots get a `cancelled` error rather
+  than running.
 
 If MCP clients standardise on prompts/resources for richer Claude UX,
 adding them would be a future change.
