@@ -326,15 +326,18 @@ We register tools and serve `serverInfo.icons`. We don't expose:
   descriptions carry per-tool guidance instead.
 
 We **do** ship infrastructure for the **MCP `tasks` capability**
-(SEP-1686, "call-now, fetch-later") — but it's off by default and
-no tools opt in yet (planned for v1.6). When `MCP_TASKS_ENABLED=1`
-and an OAuth client_id is present, the SDK's auto-handlers for
-`tasks/get`, `tasks/result`, `tasks/list`, and `tasks/cancel` light
-up against a per-clientId scoped wrapper (`src/tasks/store.ts`)
-around the SDK's `InMemoryTaskStore`. The wrapper enforces tenant
-isolation (a caller authenticated as client A gets `task not found`
-for a taskId owned by client B), plus two DoS caps
-(`MCP_TASKS_MAX_PER_CLIENT`, `MCP_TASKS_MAX_TOTAL`).
+(SEP-1686, "call-now, fetch-later") — but it's off by default.
+When `MCP_TASKS_ENABLED=1` and an OAuth client_id is present, the
+SDK's auto-handlers for `tasks/get`, `tasks/result`, `tasks/list`,
+and `tasks/cancel` light up against a per-clientId scoped wrapper
+(`src/tasks/store.ts`) around the SDK's `InMemoryTaskStore`, and
+the five high-latency `batch_*` write tools opt into optional task
+execution. When tasks are disabled, those batch tools register as
+ordinary synchronous tools so legacy callers never enter the SDK's
+task polling path. The wrapper enforces tenant isolation (a caller
+authenticated as client A gets `task not found` for a taskId owned
+by client B), plus two DoS caps (`MCP_TASKS_MAX_PER_CLIENT`,
+`MCP_TASKS_MAX_TOTAL`).
 
 Notable design choices for this subsystem:
 
