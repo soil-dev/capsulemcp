@@ -253,7 +253,153 @@ key lookup, JSON serialise.
 
 ---
 
-## 2. Planned candidates *(not yet landed)*
+## 2. Batched-write tools *(landed)*
+
+### What
+
+Five new tools that accept arrays and fan out parallel HTTP requests
+to Capsule, since Capsule v2 has no batch-write API and every
+write is one entity per call:
+
+- `batch_update_party`, `batch_update_opportunity`
+- `batch_complete_task`
+- `batch_add_tag`, `batch_remove_tag_by_id`
+
+Each accepts an `items` array (1–50 entries) shaped identically to
+its single-tool counterpart and returns
+`{ results: [{ ok, ...} per item], summary: { total, succeeded, failed } }`.
+Reads aren't covered — Capsule already supports native multi-id
+batch reads (`get_parties`, `get_opportunities`, `get_projects`,
+`get_tasks`) which take 1–10 ids in a single request.
+
+### Why
+
+LLM-driven flows like "tag these 20 people we met at the conference"
+or "mark these 15 follow-up tasks done" previously cost N sequential
+single-tool calls — each with its own MCP wire latency (~200 ms),
+OAuth verify, and Capsule round-trip. Sequential 20 × ~400 ms ≈ 8 s.
+Parallel-with-concurrency-cap collapses that to one tool call ≈
+one wire trip + (N / concurrency) Capsule rounds ≈ ~1 s. ~5–10×
+speedup for the common case.
+
+### Design
+
+- **Per-item results, not all-or-nothing.** Capsule has no rollback.
+  If 8 of 10 PUTs succeed and 2 422, you can't undo the 8. Return
+  shape surfaces every item's status so the LLM can react.
+- **Concurrency cap, not unlimited.** Default 5 parallel; configurable
+  via `CAPSULE_MCP_BATCH_CONCURRENCY` (clamped to [1, 50]). Keeps
+  the burst polite vs. Capsule's hourly 4000-req-per-token budget,
+  which is shared with every other tool call on the same token.
+- **Batch size cap 50.** Same rationale — a single tool call can't
+  burn more than ~1.25 % of the hourly budget per token.
+- **Errors are per-item, never poison the batch.** Item N rejecting
+  doesn't reject the outer promise; it lands in slot N with
+  `{ ok: false, error: { status?, message } }`.
+- **Same idempotency contract as single tools.** Each item routes
+  through the existing single-tool function (`updateParty`,
+  `completeTask`, etc.), so the idempotency wrappers
+  (`idempotent` / `idempotentWithResult`) and the
+  `remove_tag_by_id` "already-detached" semantics apply per-item.
+- **Read-only mode**: batch writes register inside the same
+  `if (!readOnly)` gate as the singles — disappear from the
+  catalogue when `CAPSULE_MCP_READONLY=1`.
+
+### Documented contract
+
+See `src/capsule/batch.ts` for the helper API; tool descriptions in
+`src/server.ts` are A-graded with explicit when-to-use guidance.
+
+### How to verify / observe
+
+#### `batch.complete` event
+
+A single JSON line is emitted to stderr at the end of every batch,
+**regardless of `CAPSULE_MCP_LOG_VERBOSE`** (the verbose flag gates
+cache.* per-event chatter; batch.complete is low-volume — one line
+per batch tool call — and uniformly useful, so it's always-on).
+Shape:
+
+```json
+{
+  "event": "batch.complete",
+  "tool": "batch_update_party",
+  "total": 12,
+  "succeeded": 10,
+  "failed": 2,
+  "durationMs": 412,
+  "concurrency": 5,
+  "failureReasons": [
+    { "status": 422, "message": "party.name: name is required", "count": 2 }
+  ],
+  "timestamp": "2026-05-19T11:30:00.000Z"
+}
+```
+
+`failureReasons` deduplicates identical errors (so a 50-item batch
+where 40 fail with the same 422 lands as one entry with `count: 40`).
+Top 5 by frequency.
+
+Useful gcloud queries (Cloud Run auto-parses these into `jsonPayload`):
+
+```sh
+# All batches in the last 24h, by tool:
+gcloud logging read 'jsonPayload.event="batch.complete"' \
+  --project=<your-gcp-project> --freshness=24h --limit=10000 \
+  --format='value(jsonPayload.tool)' | sort | uniq -c | sort -rn
+
+# Batches with any failures (worth investigating):
+gcloud logging read \
+  'jsonPayload.event="batch.complete" AND jsonPayload.failed > 0' \
+  --project=<your-gcp-project> --freshness=24h \
+  --format='value(timestamp, jsonPayload.tool, jsonPayload.total, jsonPayload.failed, jsonPayload.failureReasons)'
+
+# Latency distribution per batch tool:
+gcloud logging read 'jsonPayload.event="batch.complete"' \
+  --project=<your-gcp-project> --freshness=24h --limit=10000 \
+  --format='value(jsonPayload.tool, jsonPayload.durationMs)'
+
+# Top failure reasons across all batches (useful for "where are we missing"):
+gcloud logging read 'jsonPayload.event="batch.complete"' \
+  --project=<your-gcp-project> --freshness=7d --limit=10000 \
+  --format='value(jsonPayload.failureReasons)' | jq -s 'flatten | group_by(.message) | map({message: .[0].message, total: map(.count) | add}) | sort_by(-.total)'
+```
+
+#### Local regression tests
+
+`tests/batch.test.ts` (18 cases): concurrency env knob (default,
+clamping, malformed), batchExecute (per-item results, ordering,
+exception isolation, status extraction, concurrency cap enforcement,
+batch.complete shape, failureReasons dedup), tool-level wiring for
+all 5 batch tools (one PUT per item, schema bounds).
+
+### Empirical expectation
+
+For a 10-item batch at default concurrency 5, with Capsule ~150 ms
+per write: sequential ≈ 10 × 400 ms ≈ 4 s end-to-end; batch ≈ one
+wire trip (~200 ms) + ⌈10/5⌉ × 150 ms ≈ 500 ms. **~8× speedup**
+in the common case. Real production traffic will land in
+`batch.complete.durationMs` and can be cross-referenced against
+sequential equivalents.
+
+### Cost
+
+- **Bundle**: `dist/index.js` 123 → 131 KB, `dist/http.js` 148 → 156 KB
+  (~8 KB each — the 5 new tool descriptions plus the batch helper).
+- **Tool catalogue**: 81 → 86. Read-only count unchanged at 49.
+- **Test count**: +18 (383 → 401).
+
+### Not implemented (deferred to IDEAS.md)
+
+`batch_create_*`, `batch_delete_*`, `batch_update_task`,
+`batch_update_project`, `batch_update_entry`, `batch_add_note`, and
+batch variants of track operations. See `IDEAS.md` →
+*"Additional batched-write tools"* for the reasoning per tool and
+when each becomes worth implementing.
+
+---
+
+## 3. Planned candidates *(not yet landed)*
 
 Ranked by expected ROI. Each has a brief sketch; if/when one lands,
 move its row into a numbered section above with a real "what / why /

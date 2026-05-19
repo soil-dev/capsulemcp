@@ -31,6 +31,7 @@
 
 import { z } from "zod";
 import { capsuleGetCached, capsulePut } from "../capsule/client.js";
+import { batchExecute } from "../capsule/batch.js";
 import { invalidateByPrefix } from "../capsule/cache.js";
 import { idempotentWithResult, isCapsuleTagNotFound } from "../capsule/idempotent.js";
 
@@ -138,4 +139,36 @@ export async function removeTagById(input: z.infer<typeof removeTagByIdSchema>) 
   // invalidate regardless.
   invalidateByPrefix(TAG_LIST_PATH[entity], "remove_tag_by_id");
   return result;
+}
+
+// ── batch_add_tag (write, fan-out) ────────────────────────────────────────
+
+export const batchAddTagSchema = z.object({
+  items: z
+    .array(addTagSchema)
+    .min(1)
+    .max(50)
+    .describe(
+      "Array of 1–50 add_tag inputs. Useful for mass-tagging — e.g. 'tag these 20 contacts as RSAC26'. Each item is the same shape as a single add_tag call. The list_tags cache is invalidated for each affected entity type. Capped at 50.",
+    ),
+});
+
+export async function batchAddTag(input: z.infer<typeof batchAddTagSchema>) {
+  return batchExecute("batch_add_tag", input.items, (item) => addTag(item));
+}
+
+// ── batch_remove_tag_by_id (write, fan-out) ───────────────────────────────
+
+export const batchRemoveTagByIdSchema = z.object({
+  items: z
+    .array(removeTagByIdSchema)
+    .min(1)
+    .max(50)
+    .describe(
+      "Array of 1–50 remove_tag_by_id inputs. Each item is the same shape as a single remove_tag_by_id call. Detaches the tag from each specified entity; the tag definition itself persists in the tenant. Capped at 50.",
+    ),
+});
+
+export async function batchRemoveTagById(input: z.infer<typeof batchRemoveTagByIdSchema>) {
+  return batchExecute("batch_remove_tag_by_id", input.items, (item) => removeTagById(item));
 }

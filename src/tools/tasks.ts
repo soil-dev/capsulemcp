@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { confirmFlag } from "./confirm-flag.js";
 import { capsuleDelete, capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
+import { batchExecute } from "../capsule/batch.js";
 import { idempotent } from "../capsule/idempotent.js";
 
 // ── Read ────────────────────────────────────────────────────────────────────
@@ -182,6 +183,22 @@ export async function completeTask(input: z.infer<typeof completeTaskSchema>) {
   return capsulePut<{ task: unknown }>(`/tasks/${input.id}`, {
     task: { status: "COMPLETED" },
   });
+}
+
+// ── batch_complete_task (write, fan-out) ──────────────────────────────────
+
+export const batchCompleteTaskSchema = z.object({
+  ids: z
+    .array(z.number().int().positive())
+    .min(1)
+    .max(50)
+    .describe(
+      "Array of 1–50 task ids to mark COMPLETED in parallel. Each id resolves to one PUT /tasks/{id}; failures (e.g. 404 for a deleted task) surface per-item in the result array, the rest still complete. Capped at 50.",
+    ),
+});
+
+export async function batchCompleteTask(input: z.infer<typeof batchCompleteTaskSchema>) {
+  return batchExecute("batch_complete_task", input.ids, (id) => completeTask({ id }));
 }
 
 // ───────────────────────────────────────────────────────────────────────────

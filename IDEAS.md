@@ -52,23 +52,51 @@ etc.
 
 ---
 
-## Reference-data caching
+## Reference-data caching — *implemented in v1.0.2 (master)*
 
-Cache the rarely-changing reference data (teams, lost reasons,
-custom field definitions) with a short TTL. Bigger benefit if a
-single Claude turn asks many questions that need the same metadata.
+See `OPTIMIZATIONS.md §1` for the landed shape and measured result.
+Sixteen dictionary endpoints (pipelines, boards, custom-field
+schemas, etc.) are now cached in-process with a 5-min TTL by default.
 
-**Implementation sketch**: in-memory map with TTL, invalidated on
-process restart. Add it to the `metadata.ts` tools first; don't
-extend to anything that changes (parties, opportunities, entries) —
-the staleness window is worse than the round-trip cost.
+---
 
-**Cost**: low. Mostly thinking through invalidation: if an admin
-deletes a custom field in the Capsule UI mid-conversation, the
-cached copy lies until TTL expires.
+## Additional batched-write tools
 
-**When to consider**: traces show >50% of reference-data calls in a
-typical session are duplicates within seconds.
+The first batched-write pass (v1.0.2) covers the five highest-value
+operations: `batch_update_party`, `batch_update_opportunity`,
+`batch_complete_task`, `batch_add_tag`, `batch_remove_tag_by_id`.
+Deferred for now — would extend the same `batchExecute` helper if
+real traffic shows demand:
+
+- **`batch_create_*`** (create_party, create_opportunity, create_task,
+  create_project). Less common as a multi-record action because
+  creates typically have unique per-item data; LLM agents usually
+  call them sequentially with bespoke arguments. Add if mass-import
+  workflows (CSV → CRM) become common.
+- **`batch_delete_*`** (delete_party, delete_opportunity,
+  delete_project, delete_task, delete_entry). High blast radius —
+  per-item confirms become awkward in a batch. The right ergonomics
+  is one whole-batch `confirm: true` plus a top-N preview returned
+  from a dry-run mode. Worth a design pass before implementation.
+- **`batch_update_task`** / **`batch_update_project`** /
+  **`batch_update_entry`**. Lower observed frequency than the
+  party / opportunity / tag tools that shipped first. Wire the
+  same way as `batch_update_party` when a use case lands.
+- **`batch_add_note`**. "Add the same note to these 10 records" is
+  a real use case but currently rare. Each note is an entry create
+  via POST /entries; the batch shape is straightforward.
+- **`remove_track`** / **`apply_track`** in batch. Track operations
+  cascade in interesting ways (auto-tasks created/destroyed); needs
+  per-item failure handling care.
+
+**Cost** for each: ~30 LOC tool + ~5 LOC registration + 3-5 tests.
+The `batchExecute` helper is already in place so the heavy lift is
+just per-tool wrappers.
+
+**When to consider**: server-side telemetry (`batch.complete` log
+events) shows the existing batch tools are being used heavily, OR a
+specific user request highlights a workflow that needs a missing
+batch variant.
 
 ---
 

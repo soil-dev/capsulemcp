@@ -2,6 +2,7 @@ import { z } from "zod";
 import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
 import { confirmFlag } from "./confirm-flag.js";
 import { capsuleDelete, capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
+import { batchExecute } from "../capsule/batch.js";
 import { idempotent, idempotentWithResult } from "../capsule/idempotent.js";
 import {
   CustomFieldWriteSchema,
@@ -326,6 +327,22 @@ export async function updateParty(input: z.infer<typeof updatePartySchema>) {
   if (mappedFields !== undefined) body["fields"] = mappedFields;
 
   return capsulePut<{ party: unknown }>(`/parties/${id}`, { party: body });
+}
+
+// ── batch_update_party (write, fan-out) ────────────────────────────────────
+
+export const batchUpdatePartySchema = z.object({
+  items: z
+    .array(updatePartySchema)
+    .min(1)
+    .max(50)
+    .describe(
+      "Array of 1–50 update_party inputs. Each item is the same shape as a single update_party call — id is required, every other field is optional. Capped at 50 so a single tool call can't burn an outsized share of Capsule's hourly per-token rate budget (~4000 req/h).",
+    ),
+});
+
+export async function batchUpdateParty(input: z.infer<typeof batchUpdatePartySchema>) {
+  return batchExecute("batch_update_party", input.items, (item) => updateParty(item));
 }
 
 // ───────────────────────────────────────────────────────────────────────────

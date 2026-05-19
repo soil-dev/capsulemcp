@@ -51,7 +51,12 @@
  *                               jsonPayload fields for queryable logs.
  *                               Off by default — flip on briefly to
  *                               measure cache effectiveness, then off.
+ *                               batch.complete events emit regardless.
  *                               See OPTIMIZATIONS.md and src/log.ts.
+ *   CAPSULE_MCP_BATCH_CONCURRENCY  Max parallel HTTP requests when a
+ *                                  batch_* tool fans out (default 5;
+ *                                  clamped to [1, 50]). See
+ *                                  src/capsule/batch.ts.
  */
 
 import { isReadOnly } from "./capsule/client.js";

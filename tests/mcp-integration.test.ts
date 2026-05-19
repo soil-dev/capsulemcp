@@ -63,7 +63,7 @@ describe("tools/list", () => {
 
     // README advertises the exact catalogue size; keep it locked here
     // so docs drift is caught before release.
-    expect(tools.length).toBe(81);
+    expect(tools.length).toBe(86);
 
     // Reads we always expect
     for (const r of [

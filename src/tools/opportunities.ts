@@ -2,6 +2,7 @@ import { z } from "zod";
 import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
 import { confirmFlag } from "./confirm-flag.js";
 import { capsuleDelete, capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
+import { batchExecute } from "../capsule/batch.js";
 import { idempotent } from "../capsule/idempotent.js";
 import {
   CustomFieldWriteSchema,
@@ -202,6 +203,22 @@ export async function updateOpportunity(input: z.infer<typeof updateOpportunityS
   return capsulePut<{ opportunity: unknown }>(`/opportunities/${id}`, {
     opportunity: body,
   });
+}
+
+// ── batch_update_opportunity (write, fan-out) ─────────────────────────────
+
+export const batchUpdateOpportunitySchema = z.object({
+  items: z
+    .array(updateOpportunitySchema)
+    .min(1)
+    .max(50)
+    .describe(
+      "Array of 1–50 update_opportunity inputs. Each item is the same shape as a single update_opportunity call — id is required, every other field is optional. Capped at 50 so a single tool call can't burn an outsized share of Capsule's hourly per-token rate budget.",
+    ),
+});
+
+export async function batchUpdateOpportunity(input: z.infer<typeof batchUpdateOpportunitySchema>) {
+  return batchExecute("batch_update_opportunity", input.items, (item) => updateOpportunity(item));
 }
 
 // ───────────────────────────────────────────────────────────────────────────

@@ -11,6 +11,36 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Added
+
+- **Five batched-write tools** (`src/capsule/batch.ts` + per-tool
+  wrappers): `batch_update_party`, `batch_update_opportunity`,
+  `batch_complete_task`, `batch_add_tag`, `batch_remove_tag_by_id`.
+  Each accepts an `items` array (1–50) and fans out parallel HTTP
+  requests to Capsule with a default concurrency cap of 5
+  (configurable via `CAPSULE_MCP_BATCH_CONCURRENCY`, clamped to
+  `[1, 50]`). Returns `{ results: [{ ok, ...} per item], summary:
+  { total, succeeded, failed } }`. Use case: LLM flows that touch
+  many records homogeneously — "tag these 20 contacts as RSAC26",
+  "mark these 15 tasks done", "move this milestone batch to Won".
+  Sequential N × ~400 ms collapses to one tool call ≈ wire trip +
+  ⌈N/concurrency⌉ × Capsule round-trip, typically ~8× faster for a
+  10-item batch. Capsule has no rollback, so partial failures are
+  visible per-item in the result array — designed for the LLM to
+  read and react. Each item routes through the same single-tool
+  function as the non-batch variant, preserving idempotency
+  semantics. Catalogue grows 81 → 86; read-only count unchanged at
+  49. Bundle: `dist/index.js` 123 → 131 KB, `dist/http.js`
+  148 → 156 KB. 18 new tests in `tests/batch.test.ts`. Always emits
+  a `batch.complete` event to stderr (regardless of
+  `CAPSULE_MCP_LOG_VERBOSE`) with low-cardinality summary fields
+  (total, succeeded, failed, durationMs, concurrency,
+  deduplicated `failureReasons`) so operators can retroactively
+  analyse batch hit rates and failure patterns via gcloud — see
+  OPTIMIZATIONS.md "§2 / How to verify" for recipes. Deferred batch
+  variants (`batch_create_*`, `batch_delete_*`, batch task/project/
+  entry/note/track) listed in IDEAS.md.
+
 ### Changed
 
 - **Verbose cache logging for retroactive analysis** (`src/log.ts`).
