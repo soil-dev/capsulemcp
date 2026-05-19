@@ -361,8 +361,11 @@ export const batchUpdatePartySchema = z.object({
     ),
 });
 
-export async function batchUpdateParty(input: z.infer<typeof batchUpdatePartySchema>) {
-  return batchExecute("batch_update_party", input.items, (item) => updateParty(item));
+export async function batchUpdateParty(
+  input: z.infer<typeof batchUpdatePartySchema>,
+  opts: { signal?: AbortSignal } = {},
+) {
+  return batchExecute("batch_update_party", input.items, (item) => updateParty(item), opts);
 }
 
 // ───────────────────────────────────────────────────────────────────────────

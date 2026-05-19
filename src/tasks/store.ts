@@ -78,11 +78,37 @@ function getGlobalStore(): InMemoryTaskStore {
  */
 const owners = new Map<string, string>();
 
+/**
+ * Per-task AbortController registry. The SDK's `tasks/cancel`
+ * handler only updates the task status to `cancelled` — it does NOT
+ * fire any AbortSignal. To make cancellation actually halt our
+ * background batch fan-outs, the runner (`src/server/register-tool.ts`)
+ * registers a controller here before kicking off work, and our
+ * `updateTaskStatus` override below fires the controller when the
+ * SDK transitions a task to `cancelled`. Cleared on terminal
+ * transitions and on TTL eviction so the controllers don't leak.
+ */
+const abortControllers = new Map<string, AbortController>();
+
+/**
+ * Runner-facing hook. Registers an AbortController for a task; when
+ * the task's status flips to `cancelled` via the SDK's tasks/cancel
+ * handler (which calls `updateTaskStatus` on our store), the
+ * controller's `signal` fires. Called from the task runner right
+ * after `createTask` so there's no window where a tasks/cancel
+ * arrives before the abort handler is wired.
+ */
+export function registerAbortController(taskId: string, controller: AbortController): void {
+  abortControllers.set(taskId, controller);
+}
+
 /** Test-only reset hook. Clears the singleton and owner map. */
 export function _resetTaskStoreForTests(): void {
   _globalStore?.cleanup();
   _globalStore = null;
   owners.clear();
+  for (const ctrl of abortControllers.values()) ctrl.abort();
+  abortControllers.clear();
 }
 
 function countPerClient(clientId: string): number {
@@ -181,6 +207,7 @@ export function createScopedTaskStore(clientId: string): TaskStore {
       // (Cloud Run instances must be free to scale to zero).
       const timer = setTimeout(() => {
         owners.delete(task.taskId);
+        abortControllers.delete(task.taskId);
         logEvent("task.evicted", { taskId: task.taskId, clientId, reason: "ttl" });
       }, clampedTtl);
       timer.unref?.();
@@ -238,6 +265,22 @@ export function createScopedTaskStore(clientId: string): TaskStore {
       }
       logEvent("task.transition", { taskId, clientId, status, statusMessage });
       await global.updateTaskStatus(taskId, status, statusMessage, sessionId);
+      // Fire the runner-registered AbortController when the SDK's
+      // tasks/cancel handler transitions us into `cancelled` — that
+      // handler does the status flip but does NOT abort any
+      // signal, so without this hook the background batch
+      // fan-out runs to completion and the cancellation is purely
+      // bookkeeping. With this hook, the runner's batchExecute
+      // sees `signal.aborted` between items and stops claiming.
+      if (status === "cancelled") {
+        const ctrl = abortControllers.get(taskId);
+        if (ctrl && !ctrl.signal.aborted) ctrl.abort();
+      }
+      // Drop the controller reference on any terminal transition;
+      // no need to keep aborting nothing.
+      if (status === "completed" || status === "failed" || status === "cancelled") {
+        abortControllers.delete(taskId);
+      }
     },
 
     async listTasks(

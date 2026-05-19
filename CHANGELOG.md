@@ -11,27 +11,81 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.6.0-alpha.1] — 2026-05-19
+
+First alpha of the v1.6 line. Adds **MCP Tasks (SEP-1686)
+support** — the new "call-now, fetch-later" primitive for
+long-running tool calls. Off by default behind
+`MCP_TASKS_ENABLED=1`; non-breaking when enabled. Distribution
+tag `alpha` on npm — does NOT move the `latest` pointer.
+
 ### Added
 
-- **MCP Tasks (SEP-1686) infrastructure** — off by default. The
-  connector now ships a per-clientId scoped `TaskStore` wrapper
-  around the SDK's `InMemoryTaskStore` and advertises the `tasks`
-  capability when both `MCP_TASKS_ENABLED=1` and an authenticated
-  OAuth client_id is present. Once enabled, the SDK's auto-handlers
-  for `tasks/get`, `tasks/result`, `tasks/list`, and `tasks/cancel`
-  light up — but no tools opt into task augmentation yet (that's
-  PR2). This PR exists so the capability surface and store can be
-  validated in production before any tool risk lands. Six new env
-  vars: `MCP_TASKS_ENABLED`, `MCP_TASKS_DEFAULT_TTL_MS`,
+- **MCP Tasks capability (SEP-1686).** When
+  `MCP_TASKS_ENABLED=1` and an authenticated OAuth client_id is
+  present, the server advertises the `tasks` capability and lights
+  up the SDK's auto-handlers for `tasks/get`, `tasks/result`,
+  `tasks/list`, and `tasks/cancel` against a per-clientId scoped
+  wrapper around the SDK's `InMemoryTaskStore`
+  (`src/tasks/store.ts`). Tenant isolation is enforced on every
+  operation: a caller authenticated as client A gets `task not
+  found` for any taskId owned by client B, identical to the
+  genuinely-missing case. Two DoS caps (`maxPerClient`,
+  `maxTotal`) bound the singleton.
+- **Five `batch_*` writes are now task-augmented.**
+  `batch_update_party`, `batch_update_opportunity`,
+  `batch_complete_task`, `batch_add_tag`, `batch_remove_tag_by_id`
+  register via `registerToolTask` with `taskSupport: 'optional'`.
+  Aware clients send `_meta.task: { ttl }` and get a
+  `CreateTaskResult` envelope back immediately, then poll
+  `tasks/get` and retrieve via `tasks/result`. **Unaware clients
+  are unaffected** — the SDK's `handleAutomaticTaskPolling`
+  internally creates the task, polls it, and returns the final
+  `CallToolResult` synchronously. Same return shape, same arguments,
+  same partial-failure semantics. See HOWTO.md for the augmented-
+  request pattern.
+- **`tasks/cancel` halts the batch fan-out mid-flight.** A new
+  per-task `AbortController` registry in `src/tasks/store.ts` is
+  wired so the SDK's `tasks/cancel` (which only updates task
+  status on its own) actually aborts the underlying
+  `batchExecute` loop. In-flight items run to completion (we
+  can't pre-empt a Capsule HTTP round-trip mid-flight), but no
+  new items are claimed; the rest land in the result array as
+  `cancelled` errors. The summary's `failed` count reflects the
+  cancellation visibly.
+- **Six new env vars** (all default-safe, all documented in
+  DEPLOY.md): `MCP_TASKS_ENABLED`, `MCP_TASKS_DEFAULT_TTL_MS`,
   `MCP_TASKS_MAX_KEEP_ALIVE_MS`,
   `MCP_TASKS_DEFAULT_POLL_FREQUENCY_MS`,
-  `MCP_TASKS_MAX_PER_CLIENT`, `MCP_TASKS_MAX_TOTAL` (see
-  DEPLOY.md). Scope is enforced on every store operation: a caller
-  authenticated as client A cannot `getTask`, `getTaskResult`,
-  `updateTaskStatus`, or `listTasks` against a taskId owned by
-  client B — they get `task not found`, identical to the
-  genuinely-missing case. Two DoS caps (`maxPerClient`, `maxTotal`)
-  protect the singleton from runaway. 20 new tests, 428 total.
+  `MCP_TASKS_MAX_PER_CLIENT`, `MCP_TASKS_MAX_TOTAL`.
+
+### Changed
+
+- **`batchExecute` accepts an optional `signal: AbortSignal`.**
+  Workers consult the signal between items and skip remaining
+  slots when it fires. Non-breaking; existing call sites that
+  pass no options keep their pre-tasks behaviour.
+
+### Notes
+
+- **In-memory store, per Cloud Run instance.** Tasks created and
+  not yet polled to completion before the instance recycles
+  (scale-to-zero, deploy) are silently dropped. With
+  `max_instance_count=1` this is the only failure mode today. An
+  external `TaskStore` (Firestore/Redis) is the future upgrade
+  path noted in IDEAS.md.
+- **Polling is the primary delivery channel.** The MCP
+  `notifications/tasks/status` push rides the same SSE stream as
+  `notifications/progress`. Under stateless HTTP POST `/mcp` the
+  stream closes as soon as the original `tools/call` returns the
+  `CreateTaskResult` envelope, so the notification has nowhere to
+  land. Clients must poll `tasks/get` — which is the spec-
+  recommended pattern for this transport shape.
+
+23 new tests across config, store (tenant isolation, DoS caps,
+TTL clamping), capability advertisement, and lifecycle
+(auto-poll fallback, augmented path, cancellation halts fan-out).
+431 total tests.
 
 ## [1.5.0-alpha.2] — 2026-05-19
 

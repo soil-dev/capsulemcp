@@ -153,8 +153,11 @@ export const batchAddTagSchema = z.object({
     ),
 });
 
-export async function batchAddTag(input: z.infer<typeof batchAddTagSchema>) {
-  return batchExecute("batch_add_tag", input.items, (item) => addTag(item));
+export async function batchAddTag(
+  input: z.infer<typeof batchAddTagSchema>,
+  opts: { signal?: AbortSignal } = {},
+) {
+  return batchExecute("batch_add_tag", input.items, (item) => addTag(item), opts);
 }
 
 // ── batch_remove_tag_by_id (write, fan-out) ───────────────────────────────
@@ -169,6 +172,9 @@ export const batchRemoveTagByIdSchema = z.object({
     ),
 });
 
-export async function batchRemoveTagById(input: z.infer<typeof batchRemoveTagByIdSchema>) {
-  return batchExecute("batch_remove_tag_by_id", input.items, (item) => removeTagById(item));
+export async function batchRemoveTagById(
+  input: z.infer<typeof batchRemoveTagByIdSchema>,
+  opts: { signal?: AbortSignal } = {},
+) {
+  return batchExecute("batch_remove_tag_by_id", input.items, (item) => removeTagById(item), opts);
 }

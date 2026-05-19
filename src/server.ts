@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { isReadOnly } from "./capsule/client.js";
 import { ICONS } from "./icon.js";
-import { registerTool } from "./server/register-tool.js";
+import { registerTool, registerToolTask } from "./server/register-tool.js";
 import { getTasksConfig } from "./tasks/config.js";
 import { createScopedTaskStore } from "./tasks/store.js";
 
@@ -248,7 +248,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
   const server = new McpServer(
     {
       name: "capsulemcp",
-      version: "1.5.0-alpha.2",
+      version: "1.6.0-alpha.1",
       description:
         "Read and (optionally) modify Capsule CRM data — parties, opportunities, projects, tasks, timeline entries, pipelines, tags.",
       websiteUrl: "https://github.com/soil-dev/capsulemcp",
@@ -372,7 +372,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
       updateParty,
     );
 
-    registerTool(
+    registerToolTask(
       server,
       "batch_update_party",
       "Update 1–50 parties in parallel. Same input shape as update_party but wrapped in an `items` array. Use this — not N sequential update_party calls — for any homogeneous multi-record write (mass owner reassignment, bulk metadata corrections, etc.). Capsule has no batch-write API, so the connector fans out parallel HTTP requests with a default concurrency cap of 5 (configurable via CAPSULE_MCP_BATCH_CONCURRENCY). Returns { results: [{ok, ...} per item], summary: {total, succeeded, failed} }. Partial failures are possible — Capsule has no rollback, so successful items stay applied even if other items 4xx. Read the per-item result array to know which ones need follow-up.",
@@ -529,7 +529,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
       updateOpportunity,
     );
 
-    registerTool(
+    registerToolTask(
       server,
       "batch_update_opportunity",
       "Update 1–50 opportunities in parallel. Same input shape as update_opportunity but wrapped in an `items` array. Use this — not N sequential update_opportunity calls — for mass stage transitions (e.g. move a milestone batch to Won), owner reassignments, or value adjustments. Connector fans out parallel HTTP requests, default cap 5 (CAPSULE_MCP_BATCH_CONCURRENCY). Returns { results: [{ok, ...} per item], summary: {total, succeeded, failed} }. Partial failures possible; Capsule has no rollback.",
@@ -709,7 +709,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
       completeTask,
     );
 
-    registerTool(
+    registerToolTask(
       server,
       "batch_complete_task",
       "Mark 1–50 tasks COMPLETED in parallel. Pass `ids: [task_id, …]`. Natural for end-of-week catchups, 'close all the follow-ups from this campaign', etc. Connector fans out parallel HTTP requests, default cap 5 (CAPSULE_MCP_BATCH_CONCURRENCY). Returns { results: [{ok, ...} per id], summary: {total, succeeded, failed} }. A task that's already completed or deleted shows up as a per-item failure with the Capsule status; the rest still complete.",
@@ -1066,7 +1066,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
       removeTagById,
     );
 
-    registerTool(
+    registerToolTask(
       server,
       "batch_add_tag",
       "Attach tags to many entities in parallel — e.g. tag a list of 20 contacts as 'RSAC26' after a conference, or apply the 'Departed' tag to 10 people in a layoff batch. Pass `items: [{ entity, entityId, tagName }, ...]` (1–50 items). Each item is processed identically to a single add_tag call. Connector fans out parallel HTTP requests, default cap 5 (CAPSULE_MCP_BATCH_CONCURRENCY). Returns { results: [{ok, ...} per item], summary: {total, succeeded, failed} }. The list_tags cache is invalidated for each affected entity type.",
@@ -1074,7 +1074,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
       batchAddTag,
     );
 
-    registerTool(
+    registerToolTask(
       server,
       "batch_remove_tag_by_id",
       "Detach tags from many entities in parallel — cleanup counterpart to batch_add_tag. Pass `items: [{ entity, entityId, tagId }, ...]` (1–50 items). Each item is processed identically to a single remove_tag_by_id call (already-detached tags are reported as idempotent successes, not failures). Connector fans out parallel HTTP requests, default cap 5. Returns { results: [{ok, ...} per item], summary: {total, succeeded, failed} }.",
