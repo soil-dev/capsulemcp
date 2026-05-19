@@ -29,8 +29,11 @@ versions adhere to [Semantic Versioning](https://semver.org).
   uncached so it never lags a token rotation. `add_tag` and
   `remove_tag_by_id` invalidate the relevant cached `list_tags`
   entry so the catalogue stays coherent within a single client
-  session. New env knob: `CAPSULE_MCP_CACHE_TTL_MS` (default
-  `300000`; `0` disables caching entirely). DESIGN.md L6 reworded to
+  session. Two env knobs: `CAPSULE_MCP_CACHE_DISABLED=1` (canonical
+  on/off — unset means cache enabled) and `CAPSULE_MCP_CACHE_TTL_MS`
+  (entry lifetime when enabled, default `300000`). Setting
+  `TTL_MS=0` also disables as a back-compat shortcut. DESIGN.md L6
+  reworded to
   reflect the new behaviour; new L13 documents the cache contract,
   staleness bounds, and per-instance scope. Adds ~2 KB to each
   bundle (`dist/index.js` 119 → 122 KB, `dist/http.js` 145 → 147 KB).

@@ -383,8 +383,17 @@ Sixteen reference-data endpoints (the dictionaries: pipelines,
 milestones, boards, stages, custom-field schemas, loss reasons,
 activity types, categories, goals, teams, users, track definitions,
 saved filters, tags, and `get_site`) are cached in a per-process
-`Map` with a TTL — default 5 minutes, configurable via
-`CAPSULE_MCP_CACHE_TTL_MS` (`0` disables). Source: `src/capsule/cache.ts`.
+`Map` with a TTL. Two orthogonal knobs:
+
+- `CAPSULE_MCP_CACHE_DISABLED=1` — explicit on/off (default
+  unset → cache enabled). Canonical opt-out, useful for debugging
+  "is this stale?" questions or when running behind another cache
+  layer.
+- `CAPSULE_MCP_CACHE_TTL_MS` — entry lifetime when cache is
+  enabled (default 300000 = 5 minutes). Setting to `0` is also
+  honoured as a back-compat shortcut for "disable entirely".
+
+Source: `src/capsule/cache.ts`.
 
 Why this is here and not just "always cache":
 

@@ -63,8 +63,11 @@ const DEFAULT_TTL_MS = 5 * 60 * 1000; // 5 minutes
 /**
  * Resolved TTL in milliseconds. Read at call time (not module
  * init) so tests can flip the env var per case without reloading
- * the module. `0` means caching is disabled — every call should
- * fall through to a fresh fetch.
+ * the module. The TTL governs cached-entry lifetime when caching
+ * is enabled; setting it to `0` is also honoured as a back-compat
+ * shortcut for "disable caching entirely". The canonical opt-out
+ * is `CAPSULE_MCP_CACHE_DISABLED=1` — separates "how long to keep
+ * entries" from "should we cache at all".
  */
 export function getCacheTtlMs(): number {
   const raw = process.env["CAPSULE_MCP_CACHE_TTL_MS"];
@@ -74,9 +77,27 @@ export function getCacheTtlMs(): number {
   return Math.floor(n);
 }
 
-/** Cache disabled at the env level. */
+/**
+ * True when the operator has explicitly disabled caching via
+ * `CAPSULE_MCP_CACHE_DISABLED`. Accepts the same truthy spellings
+ * as the other binary env knobs in the codebase: `1`, `true`,
+ * `yes`, `on` (case-insensitive). Anything else (including unset)
+ * leaves the cache enabled.
+ */
+function explicitlyDisabled(): boolean {
+  const raw = process.env["CAPSULE_MCP_CACHE_DISABLED"]?.toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+}
+
+/**
+ * Cache disabled at the env level. Either the explicit opt-out flag
+ * (`CAPSULE_MCP_CACHE_DISABLED=1`) or the back-compat shortcut
+ * (`CAPSULE_MCP_CACHE_TTL_MS=0`) bypasses the cache. The flag is the
+ * canonical, more readable choice — the TTL knob should stay
+ * focused on "how long to keep entries when we ARE caching".
+ */
 export function cacheDisabled(): boolean {
-  return getCacheTtlMs() === 0;
+  return explicitlyDisabled() || getCacheTtlMs() === 0;
 }
 
 /**
@@ -105,8 +126,8 @@ export function cacheGet<T>(key: string): PagedResult<T> | undefined {
 }
 
 export function cacheSet<T>(key: string, result: PagedResult<T>): void {
+  if (cacheDisabled()) return;
   const ttl = getCacheTtlMs();
-  if (ttl <= 0) return; // caching disabled
   // Evict the oldest entries until we're under the cap. Map
   // iteration order is insertion order, so .keys().next() yields
   // the oldest live entry.

@@ -29,12 +29,14 @@ vi.mock("undici", () => ({ fetch: vi.fn() }));
 beforeEach(() => {
   process.env["CAPSULE_API_TOKEN"] = "test-token";
   delete process.env["CAPSULE_MCP_CACHE_TTL_MS"];
+  delete process.env["CAPSULE_MCP_CACHE_DISABLED"];
 });
 
 afterEach(() => {
   vi.clearAllMocks();
   delete process.env["CAPSULE_API_TOKEN"];
   delete process.env["CAPSULE_MCP_CACHE_TTL_MS"];
+  delete process.env["CAPSULE_MCP_CACHE_DISABLED"];
 });
 
 // ── Pure cache module ──────────────────────────────────────────────────────
@@ -45,10 +47,39 @@ describe("cache module", () => {
     expect(cacheDisabled()).toBe(false);
   });
 
-  it("CAPSULE_MCP_CACHE_TTL_MS=0 disables caching", () => {
+  it("CAPSULE_MCP_CACHE_TTL_MS=0 disables caching (back-compat shortcut)", () => {
     process.env["CAPSULE_MCP_CACHE_TTL_MS"] = "0";
     expect(getCacheTtlMs()).toBe(0);
     expect(cacheDisabled()).toBe(true);
+  });
+
+  it("CAPSULE_MCP_CACHE_DISABLED=1 is the canonical opt-out", () => {
+    process.env["CAPSULE_MCP_CACHE_DISABLED"] = "1";
+    // TTL still reads as default — disable is orthogonal.
+    expect(getCacheTtlMs()).toBe(5 * 60 * 1000);
+    expect(cacheDisabled()).toBe(true);
+  });
+
+  it("CAPSULE_MCP_CACHE_DISABLED accepts truthy spellings (1/true/yes/on)", () => {
+    for (const truthy of ["1", "true", "TRUE", "True", "yes", "YES", "on", "ON"]) {
+      process.env["CAPSULE_MCP_CACHE_DISABLED"] = truthy;
+      expect(cacheDisabled()).toBe(true);
+    }
+  });
+
+  it("CAPSULE_MCP_CACHE_DISABLED ignores non-truthy values (treated as enabled)", () => {
+    // "0", "false", empty, unrecognised — none of these should disable.
+    for (const falsy of ["0", "false", "no", "off", "", "garbage"]) {
+      process.env["CAPSULE_MCP_CACHE_DISABLED"] = falsy;
+      expect(cacheDisabled()).toBe(false);
+    }
+  });
+
+  it("when DISABLED=1, cacheSet is a no-op", async () => {
+    process.env["CAPSULE_MCP_CACHE_DISABLED"] = "1";
+    cacheSet("GET /x", { data: 1, nextPage: undefined });
+    expect(cacheGet<unknown>("GET /x")).toBeUndefined();
+    expect(cacheSize()).toBe(0);
   });
 
   it("falls back to default for malformed CAPSULE_MCP_CACHE_TTL_MS", () => {
@@ -141,6 +172,16 @@ describe("capsuleGetCached", () => {
 
   it("CAPSULE_MCP_CACHE_TTL_MS=0 bypasses cache — every call hits fetch", async () => {
     process.env["CAPSULE_MCP_CACHE_TTL_MS"] = "0";
+    mockFetch(200, { pipelines: [] });
+    mockFetch(200, { pipelines: [] });
+    const { capsuleGetCached } = await import("../src/capsule/client.js");
+    await capsuleGetCached("/pipelines");
+    await capsuleGetCached("/pipelines");
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
+  });
+
+  it("CAPSULE_MCP_CACHE_DISABLED=1 bypasses cache — every call hits fetch", async () => {
+    process.env["CAPSULE_MCP_CACHE_DISABLED"] = "1";
     mockFetch(200, { pipelines: [] });
     mockFetch(200, { pipelines: [] });
     const { capsuleGetCached } = await import("../src/capsule/client.js");
