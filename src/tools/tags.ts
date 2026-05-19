@@ -93,7 +93,7 @@ export async function addTag(input: z.infer<typeof addTagSchema>) {
   // A net-new tag created by this call would otherwise stay invisible
   // to list_tags until TTL expiry. Drop the cached list for this
   // entity type so the next read fetches fresh.
-  invalidateByPrefix(TAG_LIST_PATH[entity]);
+  invalidateByPrefix(TAG_LIST_PATH[entity], "add_tag");
   return result;
 }
 
@@ -136,6 +136,6 @@ export async function removeTagById(input: z.infer<typeof removeTagByIdSchema>) 
   // Detaching the last instance of a tag may remove it from the
   // tenant-global list (Capsule's docs don't specify). Cheap to
   // invalidate regardless.
-  invalidateByPrefix(TAG_LIST_PATH[entity]);
+  invalidateByPrefix(TAG_LIST_PATH[entity], "remove_tag_by_id");
   return result;
 }

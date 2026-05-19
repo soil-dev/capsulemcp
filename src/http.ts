@@ -44,6 +44,14 @@
  *                               consulted when caching is enabled. See
  *                               src/capsule/cache.ts for the list of
  *                               cached endpoints and DESIGN.md L13.
+ *   CAPSULE_MCP_LOG_VERBOSE     Set to 1 / true / yes / on to emit
+ *                               single-line JSON events to stderr for
+ *                               cache hit / miss / invalidate / evict.
+ *                               Cloud Run auto-parses these into
+ *                               jsonPayload fields for queryable logs.
+ *                               Off by default — flip on briefly to
+ *                               measure cache effectiveness, then off.
+ *                               See OPTIMIZATIONS.md and src/log.ts.
  */
 
 import { isReadOnly } from "./capsule/client.js";

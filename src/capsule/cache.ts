@@ -40,6 +40,7 @@
  *     wired for them.
  */
 
+import { logEvent } from "../log.js";
 import type { PagedResult, QueryParams } from "./client.js";
 
 interface CacheEntry {
@@ -47,8 +48,22 @@ interface CacheEntry {
   // as `unknown` because the cache is shared across return types;
   // the caller asserts the type back at read time.
   result: PagedResult<unknown>;
+  // Wall-clock when this entry was created. Needed for the `ageMs`
+  // field on cache.hit events — `expiresAt - TTL` would be wrong
+  // if the TTL env var changed between insert and read.
+  storedAt: number;
   expiresAt: number;
 }
+
+/**
+ * Discriminated result for cache lookups. `cacheGet` is kept as the
+ * back-compat shim returning just `PagedResult | undefined`, but
+ * callers that want to log a reason ("empty" vs "expired") use
+ * `cacheLookup` instead.
+ */
+export type CacheLookupResult<T> =
+  | { hit: true; result: PagedResult<T>; ageMs: number }
+  | { hit: false; reason: "empty" | "expired" };
 
 const cache = new Map<string, CacheEntry>();
 
@@ -115,14 +130,26 @@ export function cacheKey(path: string, params?: QueryParams): string {
   return `GET ${path}?${qs}`;
 }
 
-export function cacheGet<T>(key: string): PagedResult<T> | undefined {
+/**
+ * Rich lookup returning a discriminated result (`hit` with `ageMs`
+ * on hit; `reason` on miss). Used by `capsuleGetCached` so it can
+ * emit cache.hit / cache.miss events with the right reason. Tests
+ * and back-compat callers can keep using `cacheGet` below.
+ */
+export function cacheLookup<T>(key: string): CacheLookupResult<T> {
   const entry = cache.get(key);
-  if (!entry) return undefined;
-  if (entry.expiresAt < Date.now()) {
+  if (!entry) return { hit: false, reason: "empty" };
+  const now = Date.now();
+  if (entry.expiresAt < now) {
     cache.delete(key);
-    return undefined;
+    return { hit: false, reason: "expired" };
   }
-  return entry.result as PagedResult<T>;
+  return { hit: true, result: entry.result as PagedResult<T>, ageMs: now - entry.storedAt };
+}
+
+export function cacheGet<T>(key: string): PagedResult<T> | undefined {
+  const r = cacheLookup<T>(key);
+  return r.hit ? r.result : undefined;
 }
 
 export function cacheSet<T>(key: string, result: PagedResult<T>): void {
@@ -130,15 +157,20 @@ export function cacheSet<T>(key: string, result: PagedResult<T>): void {
   const ttl = getCacheTtlMs();
   // Evict the oldest entries until we're under the cap. Map
   // iteration order is insertion order, so .keys().next() yields
-  // the oldest live entry.
+  // the oldest live entry. Emit an event per eviction so capacity
+  // pressure is visible in the logs — under normal load this
+  // should be zero.
   while (cache.size >= MAX_ENTRIES) {
     const oldest = cache.keys().next().value;
     if (oldest === undefined) break;
     cache.delete(oldest);
+    logEvent("cache.evict", { evictedKey: oldest, cacheSize: cache.size, reason: "cap" });
   }
+  const now = Date.now();
   cache.set(key, {
     result: result as PagedResult<unknown>,
-    expiresAt: Date.now() + ttl,
+    storedAt: now,
+    expiresAt: now + ttl,
   });
 }
 
@@ -146,13 +178,24 @@ export function cacheSet<T>(key: string, result: PagedResult<T>): void {
  * Drop every cached entry whose key starts with `GET <pathPrefix>`.
  * Used by `add_tag` / `remove_tag_by_id` after a mutation to keep
  * subsequent `list_tags` reads consistent within the same process.
+ * `trigger` identifies the caller (e.g. "add_tag") for log diagnostics.
  */
-export function invalidateByPrefix(pathPrefix: string): void {
+export function invalidateByPrefix(pathPrefix: string, trigger?: string): void {
   const needle = `GET ${pathPrefix}`;
+  let droppedCount = 0;
   for (const k of cache.keys()) {
     if (k === needle || k.startsWith(`${needle}?`) || k.startsWith(`${needle}/`)) {
       cache.delete(k);
+      droppedCount++;
     }
+  }
+  if (droppedCount > 0) {
+    logEvent("cache.invalidate", {
+      prefix: pathPrefix,
+      droppedCount,
+      cacheSize: cache.size,
+      ...(trigger ? { trigger } : {}),
+    });
   }
 }
 

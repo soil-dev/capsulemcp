@@ -13,6 +13,18 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ### Changed
 
+- **Verbose cache logging for retroactive analysis** (`src/log.ts`).
+  New `CAPSULE_MCP_LOG_VERBOSE=1` env emits single-line JSON events
+  to stderr for every cache operation — `cache.hit` (with `ageMs`),
+  `cache.miss` (with `reason: empty | expired` and Capsule
+  `latencyMs`), `cache.invalidate` (with `trigger` label and
+  `droppedCount`), and `cache.evict` (capacity overflow). Cloud Run's
+  logging agent auto-parses these into `jsonPayload` fields so you
+  can query hit rate, miss-reason distribution, Capsule latency p50/
+  p99, eviction frequency, etc. retroactively via gcloud — recipes
+  in OPTIMIZATIONS.md "Method B". Off by default (one log line per
+  cache lookup is real volume); flip on for measurement windows
+  only. 12 new tests in `tests/log.test.ts`.
 - **Per-instance TTL cache for near-static reference data**
   (`src/capsule/cache.ts`). Sixteen dictionary-style endpoints —
   pipelines, milestones, boards, stages, custom-field schemas, loss

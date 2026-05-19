@@ -1,5 +1,6 @@
 import { fetch, type Response } from "undici";
-import { cacheDisabled, cacheGet, cacheKey, cacheSet } from "./cache.js";
+import { logEvent, logVerbose } from "../log.js";
+import { cacheDisabled, cacheKey, cacheLookup, cacheSet } from "./cache.js";
 
 const DEFAULT_BASE_URL = "https://api.capsulecrm.com/api/v2";
 
@@ -369,10 +370,32 @@ export async function capsuleGetCached<T>(
 ): Promise<PagedResult<T>> {
   if (cacheDisabled()) return capsuleGet<T>(path, params);
   const key = cacheKey(path, params);
-  const hit = cacheGet<T>(key);
-  if (hit) return hit;
+  const lookup = cacheLookup<T>(key);
+  if (lookup.hit) {
+    // Skip the JSON.stringify cost on the hot path when verbose
+    // logging is off — logEvent already short-circuits but the
+    // params object construction here is also avoidable.
+    if (logVerbose()) {
+      logEvent("cache.hit", {
+        path,
+        ...(params ? { params } : {}),
+        ageMs: lookup.ageMs,
+      });
+    }
+    return lookup.result;
+  }
+  const fetchStart = Date.now();
   const result = await capsuleGet<T>(path, params);
+  const latencyMs = Date.now() - fetchStart;
   cacheSet(key, result);
+  if (logVerbose()) {
+    logEvent("cache.miss", {
+      path,
+      ...(params ? { params } : {}),
+      reason: lookup.reason,
+      latencyMs,
+    });
+  }
   return result;
 }
 

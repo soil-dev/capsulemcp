@@ -428,6 +428,14 @@ Trade-offs:
 `get_current_user` is **not** cached — it's the "who am I"
 diagnostic and would otherwise lag a token rotation.
 
+**Observability**: `CAPSULE_MCP_LOG_VERBOSE=1` emits structured JSON
+events to stderr for every `cache.hit` / `cache.miss` /
+`cache.invalidate` / `cache.evict`. Cloud Run parses these into
+`jsonPayload` fields for retroactive analysis (hit-rate computation,
+miss-reason breakdown, cap-pressure detection). Off by default — log
+volume is real. See OPTIMIZATIONS.md "Method B" for the canonical
+gcloud-logging recipes.
+
 ## Endpoint coverage
 
 A complete index of Capsule v2 endpoints, grouped by what we do with

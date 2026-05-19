@@ -92,7 +92,94 @@ Pair pass-1 and pass-2 calls by `responseSize` (identical for the
 same query) and compare latencies. Cache hits should land in the
 ~5 ms band; cache misses ~130–200 ms.
 
-#### Method B — wall-clock A/B with the disable flag
+#### Method B — verbose event logging for retroactive analysis
+
+`CAPSULE_MCP_LOG_VERBOSE=1` makes the server emit one JSON line per
+cache event to stderr. Cloud Run's logging agent auto-parses these
+into `jsonPayload` fields, so you can query them weeks later with
+gcloud:
+
+```sh
+# Flip verbose logging on for an hour:
+gcloud run services update capsulemcp-production \
+  --region=europe-west1 \
+  --update-env-vars=CAPSULE_MCP_LOG_VERBOSE=1 \
+  --project=sixth-cider-400510
+
+# … let real traffic run …
+
+# Flip it back off (recommended — log volume cost):
+gcloud run services update capsulemcp-production \
+  --region=europe-west1 \
+  --remove-env-vars=CAPSULE_MCP_LOG_VERBOSE \
+  --project=sixth-cider-400510
+```
+
+Useful queries afterwards:
+
+```sh
+# Cache hit count over the last 24h, grouped by path:
+gcloud logging read \
+  'jsonPayload.event="cache.hit"' \
+  --project=sixth-cider-400510 --freshness=24h --limit=10000 \
+  --format='value(jsonPayload.path)' | sort | uniq -c | sort -rn
+
+# Miss rate (hits vs misses):
+HITS=$(gcloud logging read 'jsonPayload.event="cache.hit"' \
+  --project=sixth-cider-400510 --freshness=24h --limit=10000 \
+  --format='value(timestamp)' | wc -l)
+MISSES=$(gcloud logging read 'jsonPayload.event="cache.miss"' \
+  --project=sixth-cider-400510 --freshness=24h --limit=10000 \
+  --format='value(timestamp)' | wc -l)
+echo "hit rate: $(echo "scale=3; $HITS / ($HITS + $MISSES)" | bc)"
+
+# Misses broken down by reason ("empty" = first call, "expired" =
+# TTL elapsed; high "expired" means TTL is too short for the access
+# pattern):
+gcloud logging read \
+  'jsonPayload.event="cache.miss"' \
+  --project=sixth-cider-400510 --freshness=24h --limit=10000 \
+  --format='value(jsonPayload.reason)' | sort | uniq -c
+
+# Capsule API latency distribution (latencyMs is emitted on every
+# cache.miss — these are the actual Capsule round trips):
+gcloud logging read \
+  'jsonPayload.event="cache.miss"' \
+  --project=sixth-cider-400510 --freshness=24h --limit=10000 \
+  --format='value(jsonPayload.latencyMs)' | sort -n | \
+  awk '{a[NR]=$1} END {
+    print "p50:", a[int(NR*0.50)],
+          "p90:", a[int(NR*0.90)],
+          "p99:", a[int(NR*0.99)],
+          "max:", a[NR]
+  }'
+
+# Cap eviction events (high count = MAX_ENTRIES too small):
+gcloud logging read \
+  'jsonPayload.event="cache.evict"' \
+  --project=sixth-cider-400510 --freshness=24h --format='value(timestamp)' | wc -l
+
+# Tag-mutation invalidations (audit trail of cache drops):
+gcloud logging read \
+  'jsonPayload.event="cache.invalidate"' \
+  --project=sixth-cider-400510 --freshness=24h \
+  --format='value(timestamp, jsonPayload.trigger, jsonPayload.prefix, jsonPayload.droppedCount)'
+```
+
+Event payload shapes for reference:
+
+| Event | Fields |
+|---|---|
+| `cache.hit` | `path`, `params?`, `ageMs` (how old the entry was when served) |
+| `cache.miss` | `path`, `params?`, `reason` (`empty` \| `expired`), `latencyMs` (Capsule round trip) |
+| `cache.invalidate` | `prefix`, `trigger?` (e.g. `add_tag`), `droppedCount`, `cacheSize` |
+| `cache.evict` | `evictedKey`, `reason: "cap"`, `cacheSize` (capacity-eviction only) |
+
+All events also carry `timestamp` (ISO 8601). Off by default — log
+volume is real (one line per cache lookup), so flip on for measurement
+windows, not as a steady-state setting.
+
+#### Method C — wall-clock A/B with the disable flag
 
 For a side-by-side reference where both passes hit Capsule:
 
@@ -114,11 +201,12 @@ With caching disabled, pass 2's latencies should match pass 1's
 (both ~130–200 ms). Restoring the default brings pass 2 back to
 ~5 ms.
 
-#### Method C — local regression tests
+#### Method D — local regression tests
 
-`tests/cache.test.ts` covers 22 unit-level cases including hit, miss,
-TTL expiry, capacity eviction, invalidation on tag mutation, and
-both env knobs. Run via `npm test -- tests/cache.test.ts`.
+`tests/cache.test.ts` (22 unit cases) covers hit, miss, TTL expiry,
+capacity eviction, invalidation on tag mutation, and both env knobs.
+`tests/log.test.ts` (12 cases) covers the verbose-logging helper and
+the events emitted by the cache code. Run via `npm test`.
 
 ### Empirical result *(measured 2026-05-19 against production)*
 
