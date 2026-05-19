@@ -75,4 +75,25 @@ describe("tasks capability advertisement", () => {
     expect(caps?.tasks?.cancel).toEqual({});
     expect(caps?.tasks?.requests?.tools?.call).toEqual({});
   });
+
+  // P2: explicit assertion that calling `createCapsuleMcpServer()` with
+  // NO opts at all (the stdio entrypoint shape — see `src/index.ts`)
+  // never advertises tasks, regardless of env. The earlier test passes
+  // `{}` to spawn; this one omits the argument entirely so a refactor
+  // that defaults `opts = {}` differently is still caught.
+  it("stdio shape (no opts arg) NEVER advertises tasks, even with env set", async () => {
+    process.env["MCP_TASKS_ENABLED"] = "1";
+    vi.resetModules();
+    process.env["CAPSULE_API_TOKEN"] = "test-token";
+    process.env["CAPSULE_MCP_READONLY"] = "1";
+    const { createCapsuleMcpServer } = await import("../../src/server.js");
+
+    const [clientT, serverT] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "stdio-shape-test", version: "0.0.0" }, { capabilities: {} });
+    // Note: NO opts argument at all — not even `{}`. Mirrors src/index.ts.
+    const server = createCapsuleMcpServer();
+    await Promise.all([server.connect(serverT), client.connect(clientT)]);
+
+    expect(client.getServerCapabilities()?.tasks).toBeUndefined();
+  });
 });

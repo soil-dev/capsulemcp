@@ -158,5 +158,28 @@ describe("createScopedTaskStore", () => {
       expect(snap.get(t1.taskId)).toBe("client-a");
       expect(snap.get(t2.taskId)).toBe("client-a");
     });
+
+    // P0: TTL eviction must actually fire. The SDK's
+    // InMemoryTaskStore and our augment-map cleanup both rely on
+    // setTimeout. If either uses .unref() incorrectly or Cloud Run
+    // somehow kills the timer, tasks would accumulate until process
+    // restart. Real-timer test with a short ttl — fake timers don't
+    // play well with the SDK's internal scheduling so we wait for
+    // real wall-clock.
+    it("evicts the task from owner map after its ttl", async () => {
+      // Floor on TTL in the store is 1000 ms; use the minimum so we
+      // don't slow CI too much. Plus a small margin for the cleanup
+      // setTimeout to fire.
+      process.env["MCP_TASKS_MAX_KEEP_ALIVE_MS"] = "1000";
+      const a = createScopedTaskStore("client-a");
+      const t = await a.createTask({ ttl: 1000 }, 1, FAKE_REQUEST);
+      expect(_ownersSnapshot().has(t.taskId)).toBe(true);
+
+      await new Promise((r) => setTimeout(r, 1100));
+
+      expect(_ownersSnapshot().has(t.taskId)).toBe(false);
+      // SDK store is also gone — getTask returns null for evicted ids.
+      expect(await a.getTask(t.taskId)).toBeNull();
+    });
   });
 });
