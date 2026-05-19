@@ -325,6 +325,39 @@ We register tools and serve `serverInfo.icons`. We don't expose:
 - **`instructions` field** on `serverInfo` — not set; tool
   descriptions carry per-tool guidance instead.
 
+We **do** ship infrastructure for the **MCP `tasks` capability**
+(SEP-1686, "call-now, fetch-later") — but it's off by default and
+no tools opt in yet (planned for v1.6). When `MCP_TASKS_ENABLED=1`
+and an OAuth client_id is present, the SDK's auto-handlers for
+`tasks/get`, `tasks/result`, `tasks/list`, and `tasks/cancel` light
+up against a per-clientId scoped wrapper (`src/tasks/store.ts`)
+around the SDK's `InMemoryTaskStore`. The wrapper enforces tenant
+isolation (a caller authenticated as client A gets `task not found`
+for a taskId owned by client B), plus two DoS caps
+(`MCP_TASKS_MAX_PER_CLIENT`, `MCP_TASKS_MAX_TOTAL`).
+
+Notable design choices for this subsystem:
+
+- **In-memory, per-instance.** Mirrors the cache (see §L6). Cloud
+  Run scale-to-zero will silently drop in-flight tasks; this is
+  documented in DEPLOY.md and acceptable for the v1.6 workload
+  (batched writes complete in ~4–8 s, well under typical instance
+  idle time). The SDK's `TaskStore` interface is swap-in; a
+  Firestore-backed implementation is sketched in IDEAS.md as the
+  future upgrade path if we ever need cross-instance durability.
+- **Polling-first.** The MCP `notifications/tasks/status` push
+  rides the same SSE stream as `notifications/progress`. Under
+  stateless HTTP POST `/mcp` (which we use), the stream closes as
+  soon as the original `tools/call` response is returned, so the
+  status notification has nowhere to land. Clients must poll
+  `tasks/get` — which is exactly what the spec recommends for this
+  transport shape anyway.
+- **Notifications-as-cancellation.** `notifications/cancelled`
+  (existing, JSON-RPC id) and `tasks/cancel` (new) both reach the
+  same place: the task's underlying request `AbortSignal`. The
+  v1.6 tool-side migration wires this signal into the batch
+  fan-out loop so cancellation halts further chunks promptly.
+
 If MCP clients standardise on prompts/resources for richer Claude UX,
 adding them would be a future change.
 

@@ -11,6 +11,28 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Added
+
+- **MCP Tasks (SEP-1686) infrastructure** — off by default. The
+  connector now ships a per-clientId scoped `TaskStore` wrapper
+  around the SDK's `InMemoryTaskStore` and advertises the `tasks`
+  capability when both `MCP_TASKS_ENABLED=1` and an authenticated
+  OAuth client_id is present. Once enabled, the SDK's auto-handlers
+  for `tasks/get`, `tasks/result`, `tasks/list`, and `tasks/cancel`
+  light up — but no tools opt into task augmentation yet (that's
+  PR2). This PR exists so the capability surface and store can be
+  validated in production before any tool risk lands. Six new env
+  vars: `MCP_TASKS_ENABLED`, `MCP_TASKS_DEFAULT_TTL_MS`,
+  `MCP_TASKS_MAX_KEEP_ALIVE_MS`,
+  `MCP_TASKS_DEFAULT_POLL_FREQUENCY_MS`,
+  `MCP_TASKS_MAX_PER_CLIENT`, `MCP_TASKS_MAX_TOTAL` (see
+  DEPLOY.md). Scope is enforced on every store operation: a caller
+  authenticated as client A cannot `getTask`, `getTaskResult`,
+  `updateTaskStatus`, or `listTasks` against a taskId owned by
+  client B — they get `task not found`, identical to the
+  genuinely-missing case. Two DoS caps (`maxPerClient`, `maxTotal`)
+  protect the singleton from runaway. 20 new tests, 428 total.
+
 ## [1.5.0-alpha.2] — 2026-05-19
 
 Second alpha of the v1.5 line. Three small follow-ups since alpha.1
