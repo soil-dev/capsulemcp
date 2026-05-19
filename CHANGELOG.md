@@ -11,6 +11,15 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.6.0-alpha.3] — 2026-05-19
+
+Cleanup pass on top of v1.6.0-alpha.2. One real defect found
+during the post-alpha.2 audit, plus structural simplifications.
+Behaviour is unchanged for any caller that worked under alpha.2;
+callers that send `_meta.task.ttl` now get the value they asked
+for instead of a silent fallback. Distribution tag `alpha` on
+npm — does NOT move the `latest` pointer.
+
 ### Fixed
 
 - Kept `batch_*` tools callable when MCP Tasks are disabled. The
