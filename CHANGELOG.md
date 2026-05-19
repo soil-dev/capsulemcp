@@ -11,6 +11,57 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Added
+
+- **Test plan expansion for MCP Tasks (SEP-1686)** — 11 new tests + a
+  reusable production-write verifier. Total: 436 → 447 tests.
+  - **`tests/tasks/lifecycle.test.ts`** (+6 tests): augmenting a
+    non-task tool with `params.task` returns the SDK's loud
+    validation error (pins the known SDK bug); all-items-failing
+    batch reaches `completed` (not `failed`) with per-item 422s in
+    the result; `tasks/result` on a cancelled task throws a
+    structured error; multi-client `tasks/list` does not cross-leak;
+    per-client quota exhaustion returns `-32602` via the wire
+    (documents the SDK's schema-validation shadowing of our quota
+    message); `tasks/cancel` immediately after `createTask` halts
+    cleanly without claiming items.
+  - **`tests/tasks/store.test.ts`** (+1 test): TTL eviction actually
+    fires — task is removed from owner map and SDK store after its
+    ttl elapses.
+  - **`tests/tasks/capability.test.ts`** (+1 test): explicit stdio
+    shape (no opts arg) never advertises tasks, regardless of env.
+  - **`tests/bundle-shape.test.ts`** (new file, +3 tests):
+    `dist/index.js` shebang invariant, `dist/http.js` non-shebang
+    invariant, bundle-size band sanity. Skips gracefully if `dist/`
+    is unbuilt.
+- **`scripts/wire-trace-tasks.sh`** (new): production-write
+  verifier for the augmented MCP Tasks lifecycle. Walks OAuth +
+  initialize + augmented `batch_add_tag` + poll + `tasks/result` +
+  augmented cleanup `batch_remove_tag_by_id`. Mirrors the
+  in-process integration tests against a real deployed instance.
+  Pair with the OAuth-only smoke test on every alpha/beta cut that
+  runs with `MCP_TASKS_ENABLED=1` and `CAPSULE_MCP_READONLY=0`.
+- **Smoke-test extension** (operator-side, in the deployment repo):
+  5 new checks for the tasks surface — capability advertisement,
+  `tasks/list` returning a result array, `tasks/get` /
+  `tasks/result` / `tasks/cancel` on bogus taskIds returning
+  `-32602`. Smoke went from 12 → 17 checks. Tasks endpoints are
+  verified on every deploy without writing to Capsule.
+
+### Known observability gap
+
+When our scoped store throws `McpError(InvalidParams, "Task quota
+exceeded for this client")`, the SDK catches it inside
+`setRequestHandler(CallToolRequestSchema)`, wraps via
+`createToolError(error.message)` into a `CallToolResult { isError:
+true }`, then validates that result against the `CreateTaskResult`
+schema for task-augmented requests. The schema check fails and the
+client sees a `-32602` "Invalid task creation result" error instead
+of our original "Task quota exceeded" text. The quota IS enforced
+(no extra creations land in the store); only the error message is
+obscured. Tracked in `lifecycle.test.ts` so a future SDK fix is
+noticed; ergonomics fix deferred.
+
 ## [1.6.0-beta.1] — 2026-05-19
 
 Graduates the v1.6 line from alpha into beta. The four-alpha
