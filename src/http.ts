@@ -50,8 +50,10 @@
  *                               Cloud Run auto-parses these into
  *                               jsonPayload fields for queryable logs.
  *                               Off by default — flip on briefly to
- *                               measure cache effectiveness, then off.
- *                               batch.complete events emit regardless.
+ *                               measure cache effectiveness / detailed
+ *                               batch failure reasons, then off.
+ *                               batch.complete summaries emit
+ *                               regardless.
  *                               See OPTIMIZATIONS.md and src/log.ts.
  *   CAPSULE_MCP_BATCH_CONCURRENCY  Max parallel HTTP requests when a
  *                                  batch_* tool fans out (default 5;

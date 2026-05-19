@@ -26,11 +26,13 @@
  *
  *   - **One log line per batch.** `batch.complete` event carries
  *     summary fields (total, succeeded, failed, durationMs,
- *     concurrency) plus up to 5 deduplicated failure reasons —
- *     enough to spot patterns without dumping 50 error blobs into
- *     the log stream. See src/log.ts for the broader logging
- *     contract.
+ *     concurrency). Detailed failure reasons are included only when
+ *     `CAPSULE_MCP_LOG_VERBOSE=1`, because Capsule error messages can
+ *     contain CRM data and should not land in default operator logs.
+ *     See src/log.ts for the broader logging contract.
  */
+
+import { logVerbose } from "../log.js";
 
 /**
  * Split an array into fixed-size chunks. Final chunk may be smaller.
@@ -133,15 +135,11 @@ export async function batchExecute<TInput, TOutput>(
   const summary: BatchSummary = { total: results.length, succeeded, failed };
 
   // batch.complete fires on every batch (unlike cache events which
-  // gate on verbose). The summary is low-cardinality, low-volume, and
-  // useful for retroactive analysis of batch failure rates — so we
-  // emit it even when CAPSULE_MCP_LOG_VERBOSE is off. logEvent's
-  // verbose gate is the per-event opt-in for cache.* events; for
-  // batch.complete we use a direct write so it always lands.
-  //
-  // For "where are batches failing", attach up to 5 deduplicated
-  // failure reasons (most common ones first).
-  const failureReasons = topFailureReasons(results, 5);
+  // gate entirely on verbose). The default summary is low-cardinality,
+  // low-volume, and safe for always-on logs. Detailed failure messages
+  // can contain Capsule response text / CRM data, so include them only
+  // when verbose logging is explicitly enabled.
+  const failureReasons = logVerbose() ? topFailureReasons(results, 5) : [];
   logEventAlways("batch.complete", {
     tool,
     total: summary.total,
@@ -201,11 +199,12 @@ function topFailureReasons<T>(
 
 /**
  * Direct stderr write that bypasses CAPSULE_MCP_LOG_VERBOSE. Used by
- * batch.complete because the event is low-volume (one line per batch
- * tool call) and uniformly useful for retroactive analysis —
- * operators shouldn't have to flip verbose on just to confirm a
- * batch ran or to see its failure rate. Same JSON shape as logEvent
- * so it parses into the same jsonPayload structure in Cloud Run.
+ * batch.complete summaries because the event is low-volume (one line
+ * per batch tool call) and uniformly useful for retroactive analysis —
+ * operators shouldn't have to flip verbose on just to confirm a batch
+ * ran or to see its failure rate. Detailed failure reasons are already
+ * stripped unless verbose is on. Same JSON shape as logEvent so it
+ * parses into the same jsonPayload structure in Cloud Run.
  */
 function logEventAlways(event: string, fields: Record<string, unknown>): void {
   process.stderr.write(

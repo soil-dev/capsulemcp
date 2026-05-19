@@ -11,6 +11,19 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Security
+
+- **`batch.complete` no longer logs raw failure messages by default.**
+  The event still emits always-on aggregate fields (`total`,
+  `succeeded`, `failed`, `durationMs`, `concurrency`), but detailed
+  `failureReasons` now require `CAPSULE_MCP_LOG_VERBOSE=1` because
+  Capsule error messages can contain CRM data.
+
+### Fixed
+
+- **Stale tool/test-count docs updated**: 81 → 86 tools in DESIGN.md,
+  DEPLOY.md, and OPTIMIZATIONS.md; 407 → 408 tests in HOWTO.md.
+
 ## [1.5.0-alpha.1] — 2026-05-19
 
 First alpha of the v1.5 line. Three optimisation tracks landed since
@@ -69,12 +82,13 @@ Full feature list below.
   148 → 156 KB. 18 new tests in `tests/batch.test.ts`. Always emits
   a `batch.complete` event to stderr (regardless of
   `CAPSULE_MCP_LOG_VERBOSE`) with low-cardinality summary fields
-  (total, succeeded, failed, durationMs, concurrency,
-  deduplicated `failureReasons`) so operators can retroactively
-  analyse batch hit rates and failure patterns via gcloud — see
-  OPTIMIZATIONS.md "§2 / How to verify" for recipes. Deferred batch
-  variants (`batch_create_*`, `batch_delete_*`, batch task/project/
-  entry/note/track) listed in IDEAS.md.
+  (total, succeeded, failed, durationMs, concurrency). Detailed,
+  deduplicated `failureReasons` are included only when
+  `CAPSULE_MCP_LOG_VERBOSE=1`, because Capsule error messages can
+  contain CRM data. See OPTIMIZATIONS.md "§2 / How to verify" for
+  recipes. Deferred batch variants (`batch_create_*`,
+  `batch_delete_*`, batch task/project/entry/note/track) listed in
+  IDEAS.md.
 
 ### Changed
 
