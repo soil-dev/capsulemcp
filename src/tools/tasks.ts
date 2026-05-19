@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { confirmFlag } from "./confirm-flag.js";
 import { capsuleDelete, capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
-import { batchExecute } from "../capsule/batch.js";
+import { batchExecute, chunk } from "../capsule/batch.js";
 import { idempotent } from "../capsule/idempotent.js";
 
 // ── Read ────────────────────────────────────────────────────────────────────
@@ -57,13 +57,23 @@ export const getTasksSchema = z.object({
   ids: z
     .array(z.number().int().positive())
     .min(1)
-    .max(10)
-    .describe("Array of task IDs (1–10). Capsule caps batch fetches at 10."),
+    .max(50)
+    .describe(
+      "Array of task IDs (1–50). Capsule's native batch-fetch endpoint caps at 10 per request; the connector transparently splits larger sets into 10-id chunks and fans out the Capsule calls in parallel.",
+    ),
 });
 
 export async function getTasks(input: z.infer<typeof getTasksSchema>) {
-  const { data } = await capsuleGet<{ tasks: unknown[] }>(`/tasks/${input.ids.join(",")}`);
-  return data;
+  const { ids } = input;
+  if (ids.length <= 10) {
+    const { data } = await capsuleGet<{ tasks: unknown[] }>(`/tasks/${ids.join(",")}`);
+    return data;
+  }
+  const chunks = chunk(ids, 10);
+  const responses = await Promise.all(
+    chunks.map((chunkIds) => capsuleGet<{ tasks: unknown[] }>(`/tasks/${chunkIds.join(",")}`)),
+  );
+  return { tasks: responses.flatMap((r) => r.data.tasks) };
 }
 
 // ── Write ───────────────────────────────────────────────────────────────────

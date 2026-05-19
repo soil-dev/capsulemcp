@@ -60,6 +60,40 @@ schemas, etc.) are now cached in-process with a 5-min TTL by default.
 
 ---
 
+## Additional batched-read tools (child-list fan-out)
+
+The `get_*` batch-fetch tools already accept up to 50 ids with
+internal split-and-fan-out, and the cache covers all dictionary
+reads. The remaining read-side gap is **"single parent → list of
+children"** tools where N parents means N sequential Capsule calls:
+
+- `batch_list_party_opportunities` — "what deals across these N contacts"
+- `batch_list_party_projects` — "what cases on these N organisations"
+- `batch_list_party_entries` — "timeline summary for these N contacts"
+- `batch_list_opportunity_entries` — "what happened on these N deals"
+- `batch_list_project_entries` — "what's been logged on these N cases"
+- `batch_list_associated_projects` — "projects spawned by these N opps"
+- `batch_list_additional_parties` — "co-deal members on these N opps"
+- `batch_list_entity_tracks` — "active tracks on these N entities"
+
+Each is a `batch_*` variant exactly like the write-side batch tools:
+accept `ids: [...]` (up to 50), fan out at concurrency 5, return
+per-item results with summary, emit `batch.complete` event.
+
+**Cost** per tool: ~30 LOC wrapper + ~5 LOC registration + 3–5 tests.
+The `batchExecute` helper is already in place. ~5× speedup on the
+multi-parent flow.
+
+**Why deferred**: the cache + native batch-GET cover the dominant
+read-cost paths. Adding 8 more tools is real catalogue bloat
+(+10% on the LLM's tool-routing surface) — worth doing when
+`batch.complete` log analytics show specific child-list patterns
+are common enough to justify the surface. My ranking when traffic
+data lands: opportunity_entries → party_entries → project_entries
+(the three highest expected-value), then the rest as needed.
+
+---
+
 ## Additional batched-write tools
 
 The first batched-write pass (v1.0.2) covers the five highest-value

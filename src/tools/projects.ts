@@ -2,6 +2,7 @@ import { z } from "zod";
 import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
 import { confirmFlag } from "./confirm-flag.js";
 import { capsuleDelete, capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
+import { chunk } from "../capsule/batch.js";
 import { idempotent } from "../capsule/idempotent.js";
 import {
   CustomFieldWriteSchema,
@@ -46,22 +47,35 @@ export async function getProject(input: z.infer<typeof getProjectSchema>) {
 //
 // Batch fetch up to 10 projects by id in a single call. Capsule's path
 // uses /kases (its legacy projects naming): GET /kases/<id1>,<id2>,...
-// Capped at 10 per call.
+// capped at 10 per request. For larger sets the connector splits and
+// fans out in parallel; caller-facing shape unchanged.
 
 export const getProjectsSchema = z.object({
   ids: z
     .array(z.number().int().positive())
     .min(1)
-    .max(10)
-    .describe("Array of project IDs (1–10). Capsule caps batch fetches at 10."),
+    .max(50)
+    .describe(
+      "Array of project IDs (1–50). Capsule's native batch-fetch endpoint caps at 10 per request; the connector transparently splits larger sets into 10-id chunks and fans out the Capsule calls in parallel.",
+    ),
   embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
 });
 
 export async function getProjects(input: z.infer<typeof getProjectsSchema>) {
-  const { data } = await capsuleGet<{ kases: unknown[] }>(`/kases/${input.ids.join(",")}`, {
-    embed: input.embed,
-  });
-  return data;
+  const { ids, embed } = input;
+  if (ids.length <= 10) {
+    const { data } = await capsuleGet<{ kases: unknown[] }>(`/kases/${ids.join(",")}`, {
+      embed,
+    });
+    return data;
+  }
+  const chunks = chunk(ids, 10);
+  const responses = await Promise.all(
+    chunks.map((chunkIds) =>
+      capsuleGet<{ kases: unknown[] }>(`/kases/${chunkIds.join(",")}`, { embed }),
+    ),
+  );
+  return { kases: responses.flatMap((r) => r.data.kases) };
 }
 
 // ── Write ───────────────────────────────────────────────────────────────────

@@ -575,6 +575,37 @@ describe("getParties (batch)", () => {
   it("rejects empty or oversize id arrays at the schema layer", async () => {
     const { getPartiesSchema } = await import("../src/tools/parties.js");
     expect(() => getPartiesSchema.parse({ ids: [] })).toThrow();
-    expect(() => getPartiesSchema.parse({ ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] })).toThrow();
+    // Cap is now 50 (was 10 before fan-out support landed). 51 ids
+    // should still trip the .max(50) guard.
+    const oversize = Array.from({ length: 51 }, (_, i) => i + 1);
+    expect(() => getPartiesSchema.parse({ ids: oversize })).toThrow();
+  });
+
+  it("splits >10 ids into parallel 10-id chunks and merges results", async () => {
+    // 25 ids should result in 3 Capsule calls: 1-10, 11-20, 21-25.
+    // Each chunk returns its slice of parties; the tool flattens.
+    mockFetch(200, { parties: Array.from({ length: 10 }, (_, i) => ({ id: i + 1 })) });
+    mockFetch(200, { parties: Array.from({ length: 10 }, (_, i) => ({ id: i + 11 })) });
+    mockFetch(200, { parties: Array.from({ length: 5 }, (_, i) => ({ id: i + 21 })) });
+
+    const { getParties } = await import("../src/tools/parties.js");
+    const ids = Array.from({ length: 25 }, (_, i) => i + 1);
+    const result = (await getParties({ ids })) as { parties: Array<{ id: number }> };
+
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(3);
+    const urls = vi.mocked(fetch).mock.calls.map((c) => String(c[0]));
+    expect(urls[0]).toContain("/parties/1,2,3,4,5,6,7,8,9,10");
+    expect(urls[1]).toContain("/parties/11,12,13,14,15,16,17,18,19,20");
+    expect(urls[2]).toContain("/parties/21,22,23,24,25");
+    // Result shape unchanged: { parties: [...] } with all 25 records.
+    expect(result.parties).toHaveLength(25);
+    expect(result.parties.map((p) => p.id)).toEqual(ids);
+  });
+
+  it("uses a single Capsule call for 1-10 ids (no fan-out overhead)", async () => {
+    mockFetch(200, { parties: [{ id: 1 }, { id: 2 }] });
+    const { getParties } = await import("../src/tools/parties.js");
+    await getParties({ ids: [1, 2] });
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
   });
 });

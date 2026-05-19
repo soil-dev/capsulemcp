@@ -255,7 +255,7 @@ export function createCapsuleMcpServer(): McpServer {
   registerTool(
     server,
     "get_party",
-    "Fetch a single party (person or organisation) by its numeric id. Returns the full record including type, name fields, emails, phones, addresses, websites, and any embedded tags or custom fields. Use embed='tags,fields' to include those in one round-trip. For batch fetches of up to 10 parties at once, use get_parties instead.",
+    "Fetch a single party (person or organisation) by its numeric id. Returns the full record including type, name fields, emails, phones, addresses, websites, and any embedded tags or custom fields. Use embed='tags,fields' to include those in one round-trip. For batch fetches of up to 50 parties at once, use get_parties instead.",
     getPartySchema,
     getParty,
   );
@@ -263,7 +263,7 @@ export function createCapsuleMcpServer(): McpServer {
   registerTool(
     server,
     "get_parties",
-    "Batch-fetch up to 10 parties by ID in a single call. Use this when Claude already knows several party IDs to avoid N round trips of get_party.",
+    "Batch-fetch up to 50 parties by ID. For 1–10 ids this is a single Capsule round trip (native multi-id endpoint); for 11–50 ids the connector transparently splits into 10-id chunks and fans out parallel Capsule requests, so the caller sees a single tool call with all results merged. Use this whenever Claude has several party IDs to avoid N sequential round trips of get_party.",
     getPartiesSchema,
     getParties,
   );
@@ -436,7 +436,7 @@ export function createCapsuleMcpServer(): McpServer {
   registerTool(
     server,
     "get_opportunity",
-    "Fetch a single opportunity by its numeric id. Returns the full record including value, milestone, owner, party, and any embedded tags/custom fields. Use embed='tags,fields' to include those in one round-trip. For batch fetches of up to 10 opportunities at once, use get_opportunities instead.",
+    "Fetch a single opportunity by its numeric id. Returns the full record including value, milestone, owner, party, and any embedded tags/custom fields. Use embed='tags,fields' to include those in one round-trip. For batch fetches of up to 50 opportunities at once, use get_opportunities instead.",
     getOpportunitySchema,
     getOpportunity,
   );
@@ -444,7 +444,7 @@ export function createCapsuleMcpServer(): McpServer {
   registerTool(
     server,
     "get_opportunities",
-    "Batch-fetch up to 10 opportunities by id in a single call. Capsule caps batch fetches at 10 — passing more 422s at the API layer. Returns each opportunity's full record (value, milestone, owner, party). Use this when Claude already knows several ids and wants to avoid N round-trips of get_opportunity. For a single id, use get_opportunity instead.",
+    "Batch-fetch up to 50 opportunities by id. For 1–10 ids this is a single Capsule round trip (native multi-id endpoint); for 11–50 ids the connector transparently splits into 10-id chunks and fans out parallel Capsule requests, so the caller sees a single tool call with all results merged. Returns each opportunity's full record (value, milestone, owner, party). For a single id, use get_opportunity instead.",
     getOpportunitiesSchema,
     getOpportunities,
   );
@@ -536,7 +536,7 @@ export function createCapsuleMcpServer(): McpServer {
   registerTool(
     server,
     "get_projects",
-    "Batch-fetch up to 10 projects (cases) by ID in a single call.",
+    "Batch-fetch up to 50 projects (cases) by ID. For 1–10 ids this is a single Capsule round trip; for 11–50 ids the connector transparently splits into 10-id chunks and fans out parallel Capsule requests, so the caller sees a single tool call with all results merged.",
     getProjectsSchema,
     getProjects,
   );
@@ -630,7 +630,7 @@ export function createCapsuleMcpServer(): McpServer {
   registerTool(
     server,
     "get_task",
-    "Fetch a single task by its numeric id. Returns the task's description, due date, owner, completion state, and the entity it's attached to (party / opportunity / project, if any — standalone tasks not tied to a record are also valid). For batch fetches of up to 10 tasks at once, use get_tasks instead.",
+    "Fetch a single task by its numeric id. Returns the task's description, due date, owner, completion state, and the entity it's attached to (party / opportunity / project, if any — standalone tasks not tied to a record are also valid). For batch fetches of up to 50 tasks at once, use get_tasks instead.",
     getTaskSchema,
     getTask,
   );
@@ -638,7 +638,7 @@ export function createCapsuleMcpServer(): McpServer {
   registerTool(
     server,
     "get_tasks",
-    "Batch-fetch up to 10 tasks by ID in a single call.",
+    "Batch-fetch up to 50 tasks by ID. For 1–10 ids this is a single Capsule round trip; for 11–50 ids the connector transparently splits into 10-id chunks and fans out parallel Capsule requests, so the caller sees a single tool call with all results merged.",
     getTasksSchema,
     getTasks,
   );

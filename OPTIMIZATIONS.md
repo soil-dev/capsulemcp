@@ -399,7 +399,93 @@ when each becomes worth implementing.
 
 ---
 
-## 3. Planned candidates *(not yet landed)*
+## 3. `get_*` batch-fetch fan-out beyond Capsule's native 10-cap *(landed)*
+
+### What
+
+Four read tools — `get_parties`, `get_opportunities`, `get_projects`,
+`get_tasks` — previously capped at **10 ids per call** (Capsule's
+native multi-id GET endpoint hard limit). Each now accepts **1–50
+ids**; for 11–50 the connector transparently splits into 10-id
+chunks and runs the resulting Capsule GETs in parallel via
+`Promise.all`. Caller-facing surface is unchanged.
+
+### Why
+
+The common "filter or search returned N records, now fetch full
+details on all of them" pattern was forcing the LLM to call
+`get_*` repeatedly with overlapping 10-id windows. For N = 25 ids:
+
+| | Before | After |
+|---|---|---|
+| LLM-facing tool calls | 3 (split client-side) | 1 |
+| Capsule API round trips | 3 (sequential, ≈ 450 ms) | 3 (parallel, ≈ 150 ms) |
+| End-to-end latency | ~1.5 s (incl. MCP wire) | ~350 ms |
+
+About **3–5× speedup** on the multi-record-detail flow.
+
+### Design
+
+- **No new tool surface.** Same four tools, just `max(10)` → `max(50)`
+  in the Zod schema and updated descriptions. Existing callers using
+  ≤ 10 ids see identical behaviour (single Capsule call); the new
+  fan-out path triggers only when `ids.length > 10`.
+- **Same result shape** regardless of chunk count. The tool
+  concatenates per-chunk arrays into the original `{ parties: [...] }`
+  shape — the LLM doesn't know fan-out happened.
+- **Fail-fast on chunk errors.** Unlike the write-side `batch_*`
+  tools (which use `batchExecute` for per-item result aggregation),
+  reads use bare `Promise.all` and propagate the first chunk error.
+  Rationale: a chunk-level 4xx/5xx means we couldn't deliver the
+  full result set, so the caller can't safely act on partial data.
+  Capsule's per-id "not found" inside a successful chunk is already
+  silently omitted from the response (its native behaviour) —
+  unchanged by this work.
+- **No log event.** The user-facing tool call still produces exactly
+  one MCP request/response; operators can already see the parallel
+  Capsule fetches in Cloud Run's outbound request logs if they care.
+  Adding a separate event would only duplicate that signal.
+- **Concurrency bounded by problem size.** At max 50 ids = 5 chunks,
+  the parallelism is naturally low — no need to wire in the
+  `CAPSULE_MCP_BATCH_CONCURRENCY` cap (which exists for writes that
+  can have up to 50 items, hence 50 parallel reqs).
+
+### How to verify
+
+`tests/parties.test.ts` covers the chunked path with a 25-id request:
+
+```typescript
+it("splits >10 ids into parallel 10-id chunks and merges results", …)
+```
+
+Asserts exactly 3 Capsule URLs hit (10/10/5), the per-URL id ordering,
+and that the merged `parties` array has all 25 records in input
+order. The other three tools (`get_opportunities`, `get_projects`,
+`get_tasks`) share the same code shape; the parties test is
+representative.
+
+`tests/batch.test.ts` covers the `chunk(arr, size)` helper:
+splitting, single-chunk passthrough, empty input, invalid size.
+
+### Cost
+
+- **Bundle**: `dist/index.js` 131 → 134 KB, `dist/http.js` 156 → 159 KB.
+- **Tool count**: unchanged at 86.
+- **Test count**: +6 (401 → 407).
+
+### Not implemented (deferred to IDEAS.md)
+
+Child-list batching tools — `batch_list_opportunity_entries`,
+`batch_list_party_entries`, `batch_list_project_entries`, plus the
+other 5 child-list reads — would let one tool call do "give me all
+entries for these 10 deals" via fan-out. Not yet shipped: the cache
+already handles most read-side duplication, and we want
+`batch.complete` traffic data to identify which child-list patterns
+the LLM actually hits before adding tool-catalogue surface for them.
+
+---
+
+## 4. Planned candidates *(not yet landed)*
 
 Ranked by expected ROI. Each has a brief sketch; if/when one lands,
 move its row into a numbered section above with a real "what / why /

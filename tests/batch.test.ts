@@ -18,7 +18,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fetch } from "undici";
 import { mockFetch } from "./test-helpers.js";
-import { batchExecute, getBatchConcurrency } from "../src/capsule/batch.js";
+import { batchExecute, chunk, getBatchConcurrency } from "../src/capsule/batch.js";
 
 vi.mock("undici", () => ({ fetch: vi.fn() }));
 
@@ -50,6 +50,31 @@ function emittedEvents(): Array<Record<string, unknown>> {
     .filter((s) => s.length > 0)
     .map((s) => JSON.parse(s) as Record<string, unknown>);
 }
+
+// ── chunk helper ──────────────────────────────────────────────────────────
+
+describe("chunk", () => {
+  it("splits an array into fixed-size groups, last possibly smaller", () => {
+    expect(chunk([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], 5)).toEqual([
+      [1, 2, 3, 4, 5],
+      [6, 7, 8, 9, 10],
+      [11, 12, 13],
+    ]);
+  });
+
+  it("returns one chunk when input fits in a single group", () => {
+    expect(chunk([1, 2, 3], 10)).toEqual([[1, 2, 3]]);
+  });
+
+  it("returns empty array on empty input", () => {
+    expect(chunk([], 10)).toEqual([]);
+  });
+
+  it("throws on non-positive chunk size", () => {
+    expect(() => chunk([1, 2, 3], 0)).toThrow();
+    expect(() => chunk([1, 2, 3], -1)).toThrow();
+  });
+});
 
 // ── concurrency env knob ──────────────────────────────────────────────────
 

@@ -32,6 +32,25 @@
  *     contract.
  */
 
+/**
+ * Split an array into fixed-size chunks. Final chunk may be smaller.
+ * Used by the `get_parties` / `get_opportunities` / `get_projects` /
+ * `get_tasks` tools when called with >10 ids: Capsule's native
+ * multi-id GET caps at 10 per request, so we split larger sets
+ * into 10-id chunks, fan out the resulting Capsule requests in
+ * parallel, and concatenate the responses. The caller-facing shape
+ * (`{ parties: [...] }` etc.) stays identical to the single-chunk
+ * case — fan-out is an internal implementation detail.
+ */
+export function chunk<T>(arr: T[], size: number): T[][] {
+  if (size <= 0) throw new Error("chunk size must be positive");
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) {
+    out.push(arr.slice(i, i + size));
+  }
+  return out;
+}
+
 /** Per-item result shape returned to the tool caller. */
 export type BatchItemResult<TOutput> =
   | { ok: true; result: TOutput }

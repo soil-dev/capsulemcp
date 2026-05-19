@@ -13,6 +13,18 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ### Added
 
+- **`get_*` batch-fetch tools now accept up to 50 ids** (`get_parties`,
+  `get_opportunities`, `get_projects`, `get_tasks`). Capsule's native
+  multi-id GET caps at 10 per request, so for 11–50 ids the
+  connector transparently splits into 10-id chunks and fans out the
+  Capsule calls in parallel using `Promise.all` (max 5 chunks per
+  tool call). Caller-facing tool surface is unchanged — same return
+  shape, same arguments, just a higher `max`. Speeds up the common
+  "filter returned N parties, now fetch their full records" pattern
+  by 3–5× when N > 10. Adds a small `chunk<T>(arr, size)` helper to
+  `src/capsule/batch.ts`; 6 new tests cover the chunk helper plus
+  the >10 fan-out path in `tests/parties.test.ts` (representative
+  for all 4 tools — they share the same code shape). 407 total tests.
 - **Five batched-write tools** (`src/capsule/batch.ts` + per-tool
   wrappers): `batch_update_party`, `batch_update_opportunity`,
   `batch_complete_task`, `batch_add_tag`, `batch_remove_tag_by_id`.

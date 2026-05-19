@@ -2,7 +2,7 @@ import { z } from "zod";
 import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
 import { confirmFlag } from "./confirm-flag.js";
 import { capsuleDelete, capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
-import { batchExecute } from "../capsule/batch.js";
+import { batchExecute, chunk } from "../capsule/batch.js";
 import { idempotent, idempotentWithResult } from "../capsule/idempotent.js";
 import {
   CustomFieldWriteSchema,
@@ -172,23 +172,43 @@ export async function getParty(input: z.infer<typeof getPartySchema>) {
 
 // ───────────────────────────────────────────────────────────────────────────
 //
-// Batch fetch up to 10 parties by id in a single call. Capsule's path
-// syntax: GET /parties/<id1>,<id2>,... — the server caps at 10 per call.
+// Batch fetch up to 50 parties by id. Capsule's native multi-id GET
+// path (`/parties/<id1>,<id2>,...`) caps at 10 ids per request; when
+// the caller asks for more, this tool transparently splits the input
+// into 10-id chunks, fans out the resulting Capsule GETs in parallel,
+// and concatenates the responses. Caller-facing shape is identical to
+// the single-chunk case — fan-out is internal.
 
 export const getPartiesSchema = z.object({
   ids: z
     .array(z.number().int().positive())
     .min(1)
-    .max(10)
-    .describe("Array of party IDs (1–10). Capsule caps batch fetches at 10."),
+    .max(50)
+    .describe(
+      "Array of party IDs (1–50). Capsule's native batch-fetch endpoint caps at 10 per request; the connector transparently splits larger sets into 10-id chunks and fans out the Capsule calls in parallel. Result shape is identical regardless of input size.",
+    ),
   embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
 });
 
 export async function getParties(input: z.infer<typeof getPartiesSchema>) {
-  const { data } = await capsuleGet<{ parties: unknown[] }>(`/parties/${input.ids.join(",")}`, {
-    embed: input.embed,
-  });
-  return data;
+  const { ids, embed } = input;
+  if (ids.length <= 10) {
+    // Single Capsule request — no fan-out needed.
+    const { data } = await capsuleGet<{ parties: unknown[] }>(`/parties/${ids.join(",")}`, {
+      embed,
+    });
+    return data;
+  }
+  // Split into 10-id chunks, run them in parallel, merge.
+  // At max 50 ids this is at most 5 parallel Capsule requests —
+  // well within polite-burst territory for a single tool call.
+  const chunks = chunk(ids, 10);
+  const responses = await Promise.all(
+    chunks.map((chunkIds) =>
+      capsuleGet<{ parties: unknown[] }>(`/parties/${chunkIds.join(",")}`, { embed }),
+    ),
+  );
+  return { parties: responses.flatMap((r) => r.data.parties) };
 }
 
 // ───────────────────────────────────────────────────────────────────────────
