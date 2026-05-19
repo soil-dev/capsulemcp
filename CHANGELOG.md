@@ -11,6 +11,61 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.6.0-beta.1] — 2026-05-19
+
+Graduates the v1.6 line from alpha into beta. The four-alpha
+series shipped MCP Tasks (SEP-1686) support — capability
+advertisement, per-clientId scoped task store, the 5 `batch_*`
+writes opting into `taskSupport: "optional"`, full lifecycle
+(`tasks/get` / `tasks/result` / `tasks/list` / `tasks/cancel`),
+and per-task `AbortController` wiring so cancellation actually
+halts mid-batch. End-to-end verified against the deployed
+service with real Capsule writes. No new tools planned for v1.6;
+beta is for bug fixes and polish.
+
+Distribution tag `beta` on npm (when published) — does NOT move
+the `latest` pointer, which stays on v1.0.1.
+
+### Changed since 1.6.0-alpha.4
+
+- **OPTIMIZATIONS.md placeholder hygiene.** The gcloud recipe
+  examples had hardcoded the operator's specific Cloud Run service
+  name and region; replaced with `<your-service>` and
+  `<your-region>` placeholders matching the existing
+  `<your-gcp-project>` convention. No code or behaviour change.
+
+### Recap of the alpha series (folded into this beta)
+
+For the full feature-by-feature history see the `[1.6.0-alpha.*]`
+entries below. Headline items:
+
+- **alpha.1**: MCP Tasks infrastructure (per-clientId scoped
+  store, capability advertisement, env-gated wiring) — off by
+  default; no tools opted in yet.
+- **alpha.2**: 5 `batch_*` writes migrated to `registerToolTask`
+  with `taskSupport: "optional"`; per-task `AbortController`
+  registry so `tasks/cancel` halts the batch fan-out. Plus a
+  critical hotfix for a process-crashing bug on the augmented
+  path under stateless HTTP POST (notification-on-closed-stream
+  was re-storing the result and tripping the SDK's "terminal
+  status" guard).
+- **alpha.3**: Caller-supplied `task.ttl` is honoured (was
+  silently overwritten by the 5-min default). Several
+  architectural cleanups: collapsed `registerToolTaskWhenEnabled`
+  into a single closure-bound `registerBatchTool`, unified
+  `logEvent` + `logEventAlways` into one with `{ force }`,
+  extracted `BatchOpts` and shared env-readers (`src/env.ts`).
+- **alpha.4**: Two correctness fixes — task augmentation
+  request shape is `params.task` (not `_meta.task` as docs
+  previously claimed), and the `ttl: null` branch in the scoped
+  store is now actually reachable (`??` was converting `null`
+  to the default before the `=== null` check). Operator-set
+  sub-1000ms TTL ceilings are now floored at the polling-safe
+  minimum so the config view matches store behaviour.
+
+436 tests; production-verified end-to-end (augmented
+`batch_add_tag` + augmented `batch_remove_tag_by_id` round-trip).
+
 ## [1.6.0-alpha.4] — 2026-05-19
 
 Post-alpha.3 review found two real correctness bugs and a docs
