@@ -11,6 +11,17 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.6.0-beta.5] — 2026-05-20
+
+CI + docs hygiene release on top of beta.4. No runtime behaviour
+change. The bundle-shape canary tests now actually run in CI
+(they were silently skipping because of build-after-test ordering);
+HOWTO test count and bundle sizes are refreshed; a routine
+dev-dep bump keeps `npm outdated` clean.
+
+Distribution tag `beta` on npm — does NOT move the `latest`
+pointer.
+
 ### Fixed
 
 - Activated the bundle-shape canary in CI by running `npm run build`
