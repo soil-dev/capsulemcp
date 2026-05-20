@@ -11,16 +11,27 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.6.0-rc.2] — 2026-05-20
+
+Second release candidate. Closes four docs/process gaps the rc.1
+audit missed. No runtime behaviour change.
+
+Distribution tag `next` on npm — does NOT move `latest`.
+
 ### Fixed
 
 - Corrected stale docs that still described `get_*` batch-fetch tools
   as 10-id caller-facing tools. v1.6 accepts up to 50 ids and splits
-  internally across Capsule's native 10-id endpoint cap.
+  internally across Capsule's native 10-id endpoint cap. Three files
+  touched: `README.md` (front-page claim), `DESIGN.md`, and
+  `OPTIMIZATIONS.md`.
 - Clarified HOWTO npm pre-release tagging: beta cuts use `--tag beta`;
-  release candidates use `--tag next`.
+  release candidates use `--tag next`. The rc.1 checklist only
+  mentioned `--tag beta`.
 - Added an explicit post-publish `npm view` registry check to the
   release checklist so a GitHub tag/release cannot be mistaken for an
-  installable npm version.
+  installable npm version. (A git tag does not make
+  `npx capsulemcp@X.Y.Z` resolvable — only `npm publish` does.)
 - Refreshed the Vitest dev-dependency lock from 4.1.6 to 4.1.7 so
   `npm outdated` is clean before the final release.
 
