@@ -11,7 +11,56 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
-### Fixed
+## [1.6.0] — 2026-05-20
+
+**v1.6.0 stable — graduates the v1.6 line.** This cut moves the npm
+`latest` pointer from `1.0.1` to `1.6.0`. Identical code to
+`1.6.0-rc.3`; the only diff vs rc.3 is the version string and this
+CHANGELOG entry.
+
+Distribution tag `latest` on npm. `npx capsulemcp` and `claude mcp
+add capsule -- npx -y capsulemcp` now resolve to this release.
+
+### What's in v1.6 vs v1.0.x
+
+Feature highlights, accumulated across the alpha + beta + rc series
+and shipping here:
+
+- **MCP Tasks (SEP-1686)** support — per-clientId scoped store,
+  capability advertisement gated on `MCP_TASKS_ENABLED=1`, the five
+  `batch_*` writes opt into `taskSupport: "optional"` (zero break
+  for existing callers via SDK auto-poll fallback), task
+  cancellation halts the batch fan-out mid-flight, full lifecycle
+  production-verified with augmented write round-trip.
+- **MCP `ToolAnnotations`** inferred from the catalogue naming
+  convention. 49 read tools carry `readOnlyHint: true`; 7 destructive
+  tools carry `destructiveHint: true`; the remaining 30 writes carry
+  no annotation. Clients that honor the hints can auto-approve safe
+  reads while still prompting on writes/destructive calls.
+- **Per-tool / per-Capsule observability events** (`tool.call`,
+  `capsule.request`, `tool.chain`) for retroactive optimization
+  analysis. Gated on `CAPSULE_MCP_LOG_VERBOSE=1`. Numeric IDs and
+  query strings redacted from logged paths; only argument NAMES are
+  logged, never values.
+- **Six new env vars** for Tasks + observability tuning, all
+  default-safe; documented in DEPLOY.md.
+- **Front-page batch fetch cap** raised from 10 → 50 ids per call
+  (`get_*` plural tools), split internally across Capsule's native
+  10-id endpoint cap.
+- **469 tests** (up from 337 on v1.0.1).
+- **Bundle**: `dist/index.js` ~147 KB, `dist/http.js` ~173 KB.
+
+### Compatibility
+
+- **No breaking changes** vs v1.0.1 in the tool surface or env vars.
+  All v1.0.x configs continue to work unchanged.
+- The new env vars (`MCP_TASKS_*`, `CAPSULE_MCP_LOG_VERBOSE`) default
+  to safe values; ignore them and behaviour matches v1.0.x.
+- Tasks capability is advertised only when `MCP_TASKS_ENABLED=1`;
+  clients that don't request it (or don't know about it) get the
+  same response shapes as before.
+
+### Fixed (since rc.3)
 
 - Softened MCP annotation docs to describe `readOnlyHint` /
   `destructiveHint` as client hints, not security guarantees, and
