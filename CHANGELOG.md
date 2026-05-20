@@ -11,7 +11,43 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
-### Fixed
+## [1.6.0-rc.1] — 2026-05-20
+
+First release candidate for the v1.6 line. Collects every fix /
+polish item from the four-beta cycle plus the pre-release audit.
+**No new feature surface vs beta.5** — this RC is about polish,
+metadata, and tool-description quality before flipping the npm
+`latest` pointer.
+
+Distribution tag `next` on npm — does NOT move the `latest`
+pointer, which stays on v1.0.1. Install via
+`npx capsulemcp@1.6.0-rc.1` or `capsulemcp@next`.
+
+Once the RC has soaked in real production traffic with no
+regressions, the next cut is **v1.6.0 stable** (which WILL move the
+`latest` pointer to the v1.6 line).
+
+### What's in v1.6 vs v1.0.x
+
+Feature highlights, accumulated across the alpha + beta series and
+landed here:
+
+- **MCP Tasks (SEP-1686)** support — per-clientId scoped store,
+  capability advertisement gated on `MCP_TASKS_ENABLED=1`, the five
+  `batch_*` writes opt into `taskSupport: "optional"` (zero break
+  for existing callers via SDK auto-poll fallback), task cancellation
+  halts the batch fan-out mid-flight, full lifecycle production-
+  verified with augmented write round-trip
+- **Per-tool / per-Capsule observability events** (`tool.call`,
+  `capsule.request`, `tool.chain`) for retroactive optimization
+  analysis; gated on `CAPSULE_MCP_LOG_VERBOSE=1`; numeric IDs and
+  query strings redacted from logged paths
+- **Six new env vars** for tasks tuning, all default-safe; documented
+  in DEPLOY.md
+- **463 tests** (up from 337 on v1.0.1)
+- **Bundle**: dist/index.js ~147 KB, dist/http.js ~173 KB
+
+### Fixed (since beta.5)
 
 - Hardened `/mcp` rate-limit env parsing: malformed or negative
   `MCP_HTTP_RATE_LIMIT_*` values now fall back to safe defaults, and
