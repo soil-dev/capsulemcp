@@ -7,7 +7,7 @@ A [Model Context Protocol](https://modelcontextprotocol.io) server for [Capsule 
 - **86 tools** across the Capsule resource graph (49 in read-only mode) — full read coverage plus careful, confirm-gated writes; 5 batched-write tools (`batch_*`) for mass-update workflows
 - **Two transports**: stdio for local installs (Claude Desktop / Code), HTTP+OAuth for hosted Custom Connectors
 - **Read-only mode** as a one-env-var flag; works alongside read-scoped Capsule tokens
-- **MCP tool annotations**: 49 read tools carry `readOnlyHint: true`, 7 destructive ones carry `destructiveHint: true` — MCP clients like Claude Desktop and Claude Code use these to auto-approve safe calls without a per-call confirmation prompt
+- **MCP tool annotations**: 49 read tools carry `readOnlyHint: true`, 7 destructive ones carry `destructiveHint: true` — clients that honor these hints can auto-approve safe reads while still prompting for writes/destructive calls
 - **Apache 2.0**
 
 ## Pick your install

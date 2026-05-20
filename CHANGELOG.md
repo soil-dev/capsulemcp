@@ -11,11 +11,17 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Fixed
+
+- Softened MCP annotation docs to describe `readOnlyHint` /
+  `destructiveHint` as client hints, not security guarantees, and
+  refreshed the documented local test count to 469.
+
 ## [1.6.0-rc.3] — 2026-05-20
 
 Third release candidate. **User-visible improvement:** tools now
-carry MCP `ToolAnnotations` so clients can auto-approve safe reads
-instead of prompting before every call.
+carry MCP `ToolAnnotations` so clients that honor these hints can
+auto-approve safe reads instead of prompting before every call.
 
 Distribution tag `next` on npm — does NOT move `latest`.
 
@@ -32,9 +38,10 @@ Distribution tag `next` on npm — does NOT move `latest`.
 
   Client impact (load-bearing):
 
-  - Claude Desktop / Code: auto-approves the 49 read tools, prompts
-    only for writes. No more confirmation prompt for every `list`
-    / `get` / `search` / `filter` call.
+  - Claude Desktop / Code can use these hints to auto-approve the
+    49 read tools while still prompting for writes. No more
+    confirmation prompt for every `list` / `get` / `search` /
+    `filter` call when the client trusts and honors the hints.
   - Glama and other registry-scrape clients see properly tagged
     catalogue entries for quality scoring.
   - Other MCP clients: annotations are hints per spec; defaults
@@ -44,7 +51,7 @@ Distribution tag `next` on npm — does NOT move `latest`.
   `src/server/register-tool.ts`. A new aggregate-counts assertion
   (49 + 7 + 30 = 86) trips CI if a future tool drifts from the
   convention, forcing an explicit annotation decision instead of
-  silent default. 5 new tests, 468 total.
+  silent default. 6 new tests, 469 total.
 
 ## [1.6.0-rc.2] — 2026-05-20
 
@@ -103,7 +110,7 @@ landed here:
   query strings redacted from logged paths
 - **Six new env vars** for tasks tuning, all default-safe; documented
   in DEPLOY.md
-- **463 tests** (up from 337 on v1.0.1)
+- **469 tests** (up from 337 on v1.0.1)
 - **Bundle**: dist/index.js ~147 KB, dist/http.js ~173 KB
 
 ### Fixed (since beta.5)

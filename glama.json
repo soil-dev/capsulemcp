@@ -1,6 +1,6 @@
 {
   "$schema": "https://glama.ai/mcp/schemas/server.json",
-  "description": "MCP server for Capsule CRM. 86 tools across contacts, opportunities, projects, tasks, timeline activity, structured filters with field/operator conditions, saved searches with sort, workflow tracks, file attachments (read + write), audit of deleted records, and batch fetches up to 50 records. Read-only mode supported via CAPSULE_MCP_READONLY=1. Read tools are annotated with readOnlyHint so MCP clients (Claude Desktop, Claude Code, etc.) auto-approve safe calls without prompting.",
+  "description": "MCP server for Capsule CRM. 86 tools across contacts, opportunities, projects, tasks, timeline activity, structured filters with field/operator conditions, saved searches with sort, workflow tracks, file attachments (read + write), audit of deleted records, and batch fetches up to 50 records. Read-only mode supported via CAPSULE_MCP_READONLY=1. Read tools are annotated with readOnlyHint so MCP clients can identify safe calls for auto-approval.",
   "categories": ["crm", "productivity"],
   "maintainers": ["arapov"]
 }
