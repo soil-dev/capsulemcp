@@ -489,8 +489,9 @@ Every Capsule v2 endpoint that returns useful data, modulo the gaps
 listed below. Specifically:
 
 - All read endpoints on Party, Opportunity, Project, Task, Entry
-  (including batch fetches up to 10 ids except for entries — see
-  "Genuinely not in Capsule v2" below)
+  (including connector-level batch fetches up to 50 ids for parties,
+  opportunities, projects, and tasks; entries remain single-fetch
+  only — see "Genuinely not in Capsule v2" below)
 - All structured-filter endpoints (parties / opportunities / kases)
 - Saved-filter list and run
 - Track instances (full CRUD) and track-definition list

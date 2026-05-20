@@ -251,7 +251,9 @@ gh release create vX.Y.Z --latest --title "vX.Y.Z — title" --notes "<release n
 # 6. npm publish — paste-the-tag-first, npm-second so the GitHub tag is canonical
 npm publish --tag latest        # for stable releases (X.Y.Z)
 # or
-npm publish --tag beta          # for pre-releases (X.Y.Z-beta.N)
+npm publish --tag beta          # for beta pre-releases (X.Y.Z-beta.N)
+# or
+npm publish --tag next          # for release candidates (X.Y.Z-rc.N)
 ```
 
 After step 6 lands, `npx capsulemcp` (or `npx capsulemcp@X.Y.Z` to pin) picks up the new version from the npm registry immediately. The GitHub-ref install (`npx -y github:soil-dev/capsulemcp#vX.Y.Z`) also works and is documented as the fallback / development path for users tracking a fork or unreleased branch.
@@ -267,13 +269,14 @@ re-confirm locally because a release commit shouldn't be the one that
 discovers a regression.
 
 - [ ] **(CI)** `npm run typecheck && npm run lint && npm run format:check && npm run build && npm test` all pass on the commit you're about to tag.
-- [ ] `npm publish --dry-run --tag latest` (for stable) or `--tag beta` (for pre-release) runs clean — verifies the tarball contents, package.json shape, and that `bin` / `files` resolve. Catches publish-time regressions before they hit npm.
+- [ ] `npm publish --dry-run --tag latest` (for stable), `--tag beta` (for beta), or `--tag next` (for release candidates) runs clean — verifies the tarball contents, package.json shape, and that `bin` / `files` resolve. Catches publish-time regressions before they hit npm.
 - [ ] **`package-lock.json` root version matches `package.json`.** Bumping the two source-of-truth files (package.json + server.ts) doesn't touch the lockfile root — it drifts silently. `npm install --package-lock-only --ignore-scripts` after the bump keeps it honest.
 - [ ] **Three places all match**: `package.json`, `src/server.ts`, `package-lock.json` (root + `packages[""]`).
 - [ ] **`#vX.Y.Z` pins in `README.md` and `INSTALL.md`** point to the new tag. Three locations in each file (the JSON snippet, the `claude mcp add` line, the export-then-add line in INSTALL).
 - [ ] **CHANGELOG `[Unreleased]` is empty** after the cut — its content should now live under `[vX.Y.Z]`.
 - [ ] **HOWTO test count and bundle sizes** reflect reality (greppable: `npm test 2>&1 | tail -3` and `npm run build 2>&1 | tail -5`).
 - [ ] **README "N tools / N read-only" counts** still match — bumping a tool count without bumping these numbers silently drifts. `grep -c "registerTool(server" src/server.ts` and `awk` over `if (!readOnly)` blocks.
+- [ ] **After npm publish, verify the registry state**: `npm view capsulemcp dist-tags version versions --json` includes the new version and the intended dist-tag (`latest`, `beta`, or `next`). Git tags alone don't make `npx capsulemcp@X.Y.Z` installable.
 - [ ] **Tag exists before triggering downstream builds**: any image-build pipeline that takes a git ref expects the tag to already be on GitHub.
 - [ ] **Verify the image-build workflow's `conclusion`, not just exit status.** Piping `gh run watch --exit-status` through `tail` (or any non-pipefail shell) silently swallows the non-zero exit. Use `gh run view <id> --json conclusion --jq .conclusion` or `gh run list --workflow=... --limit=1 --json conclusion --jq '.[0].conclusion'` after the watch returns, and gate the deploy on the result being `"success"`. The beta.1/beta.2 deploys both shipped because the workflow had `conclusion: failure` but the local `tail` pipe masked the exit code.
 

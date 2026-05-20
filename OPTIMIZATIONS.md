@@ -268,9 +268,11 @@ write is one entity per call:
 Each accepts an `items` array (1–50 entries) shaped identically to
 its single-tool counterpart and returns
 `{ results: [{ ok, ...} per item], summary: { total, succeeded, failed } }`.
-Reads aren't covered — Capsule already supports native multi-id
-batch reads (`get_parties`, `get_opportunities`, `get_projects`,
-`get_tasks`) which take 1–10 ids in a single request.
+Reads aren't covered here — the dedicated `get_parties`,
+`get_opportunities`, `get_projects`, and `get_tasks` tools already
+batch-fetch up to 50 ids. Internally, they still respect Capsule's
+native 10-id GET cap by splitting larger calls into parallel chunks;
+see [§3](#3-get_-batch-fetch-fan-out-beyond-capsules-native-10-cap-landed).
 
 ### Why
 
