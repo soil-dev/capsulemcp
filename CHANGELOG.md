@@ -11,6 +11,47 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Added
+
+- **Per-tool / per-endpoint observability events** — verbose-gated
+  (`CAPSULE_MCP_LOG_VERBOSE=1`). Three new event types make it
+  possible to answer "which tools dominate", "which Capsule
+  endpoints are slowest", "are agents N+1-calling get_party when
+  they should batch", and "what's the cache hit rate by chain":
+  - `tool.call` — fires once per tool invocation. Carries
+    `tool`, `clientId`, `argFields` (the NAMES of populated
+    schema fields — never the values), `durationMs`, `outcome`,
+    and `taskAugmented?` for task-augmented runs.
+  - `capsule.request` — fires once per outbound Capsule API call.
+    `method`, `path` (redacted: numeric IDs → `:id`, query string
+    stripped), `status`, `durationMs`, `responseBytes`,
+    `retriedAfter429?`.
+  - `tool.chain` — fires at the end of each `/mcp` POST. Aggregate
+    summary: `tools` (the sequence in order), `toolCount`,
+    `capsuleCalls`, `cacheHits`, `durationMs`.
+  Per-`/mcp`-request aggregation lives in an `AsyncLocalStorage`
+  frame set up by the HTTP handler; `tool.call` and `capsule.request`
+  events implicitly populate the chain counters via `logEvent` so
+  no context threading is needed at call sites. OPTIMIZATIONS.md §4
+  documents the gcloud recipes that consume these events.
+
+### Privacy / hygiene
+
+- **Tightened `cache.evict` path field.** The evicted key was being
+  logged in its raw form (e.g. `GET /parties/254022621?embed=tags`),
+  which leaked record IDs and (in the case of `/parties/search?q=…`)
+  search terms into operator logs. Now redacted to
+  `GET /parties/:id` shape. Same `redactPath` helper used for all
+  new event types.
+- **`cache.hit` / `cache.miss` `params` field replaced with
+  `paramFields`** — only the parameter NAMES are logged now, not
+  the values. Aligns with the privacy model used by the new
+  `tool.call` argFields.
+
+13 new tests in `tests/log-events.test.ts` cover redactPath,
+context aggregation, and the end-to-end emission shape. 460 total
+tests.
+
 ## [1.6.0-beta.2] — 2026-05-19
 
 Test-plan expansion on top of beta.1. No production-code changes —

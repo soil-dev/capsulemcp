@@ -22,6 +22,7 @@ import { SUPPORTED_PROTOCOL_VERSIONS } from "@modelcontextprotocol/sdk/types.js"
 import type { OAuthProvider } from "../auth/provider.js";
 import { createCapsuleMcpServer } from "../server.js";
 import { ICON_SVG } from "../icon.js";
+import { getRequestContext, logEvent, withRequestContext } from "../log.js";
 
 export interface AppOptions {
   oauthProvider: OAuthProvider;
@@ -283,8 +284,33 @@ export function createApp(opts: AppOptions): express.Express {
           void server.close();
         });
 
-        await server.connect(transport);
-        await transport.handleRequest(req, res, req.body);
+        // Per-request observability frame. `tool.call`,
+        // `capsule.request`, and `cache.hit` events emitted within
+        // implicitly populate the chain accumulator; we emit the
+        // aggregate `tool.chain` event at the end. AsyncLocalStorage
+        // propagates through every await the handler chain spawns,
+        // so this catches the synchronous tool-call path AND the
+        // SDK's auto-poll fallback for task-augmented tools.
+        // Augmented (with `params.task`) callers see a short chain
+        // since the actual handler work runs in a void IIFE that
+        // outlives this frame — that's by design; the IIFE's
+        // standalone `tool.call` event carries the clientId for
+        // post-hoc joining.
+        await withRequestContext({ clientId }, async () => {
+          await server.connect(transport);
+          await transport.handleRequest(req, res, req.body);
+          const ctx = getRequestContext();
+          if (ctx) {
+            logEvent("tool.chain", {
+              ...(ctx.clientId ? { clientId: ctx.clientId } : {}),
+              tools: ctx.tools,
+              toolCount: ctx.tools.length,
+              capsuleCalls: ctx.capsuleCalls,
+              cacheHits: ctx.cacheHits,
+              durationMs: Date.now() - ctx.startedAt,
+            });
+          }
+        });
       } catch (err) {
         // Log a low-cardinality summary to stderr (operator-visible) but
         // return only a generic shape to the caller. The full err.message

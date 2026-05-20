@@ -545,6 +545,146 @@ worth doing once the cache work has bedded in.
 
 ---
 
+## 4. Per-tool / per-endpoint analytics *(landed in v1.6.0-beta.3)*
+
+### What
+
+Three verbose-gated event types that give per-call visibility into
+runtime behaviour, designed for retroactive analytics queries:
+
+| Event | Fires | Fields |
+|---|---|---|
+| `tool.call` | Once per tool invocation | `tool`, `clientId`, `argFields` (field names only — never values), `durationMs`, `outcome` (success/error), `taskAugmented?` |
+| `capsule.request` | Once per outbound Capsule API call | `method`, `path` (redacted: numeric IDs → `:id`, query stripped), `status`, `durationMs`, `responseBytes`, `retriedAfter429?` |
+| `tool.chain` | Once per `/mcp` POST request | `clientId`, `tools` (sequence of tool names), `toolCount`, `capsuleCalls`, `cacheHits`, `durationMs` |
+
+All gated on `CAPSULE_MCP_LOG_VERBOSE=1` — off by default. Flip on
+for an investigation window (a few hours of real traffic is
+usually plenty), then flip off. The retroactive nature of Cloud
+Logging means you can keep querying the gathered data for weeks
+after.
+
+### Privacy invariants (load-bearing)
+
+- Tool **arguments** are never logged — only the field NAMES that
+  were present (`argFields: ["conditions", "page"]`). Search queries,
+  party IDs, custom-field values, etc. stay out of operator logs.
+- Capsule API **paths** are redacted: `/parties/254022621/notes` →
+  `/parties/:id/notes`, `/parties/search?q=Acme` → `/parties/search`.
+  Numeric IDs and query strings never appear. The shape stays for
+  analytics ("top endpoints", "p95 latency per endpoint").
+- **No request / response bodies, ever** — verbose mode does not
+  unlock CRM content.
+
+### Useful queries
+
+#### Top tools by invocation count (last 7 days)
+
+```sh
+gcloud logging read \
+  'jsonPayload.event="tool.call"' \
+  --project=<your-gcp-project> --freshness=7d \
+  --format='value(jsonPayload.tool)' \
+  | sort | uniq -c | sort -rn | head -20
+```
+
+#### Top Capsule endpoints by call count
+
+```sh
+gcloud logging read \
+  'jsonPayload.event="capsule.request"' \
+  --project=<your-gcp-project> --freshness=7d \
+  --format='value(jsonPayload.method, jsonPayload.path)' \
+  | sort | uniq -c | sort -rn | head -20
+```
+
+#### p95 latency per Capsule endpoint
+
+```sh
+gcloud logging read \
+  'jsonPayload.event="capsule.request"' \
+  --project=<your-gcp-project> --freshness=24h \
+  --format='value(jsonPayload.path, jsonPayload.durationMs)' \
+  | python3 -c "
+import sys, statistics
+from collections import defaultdict
+by_path = defaultdict(list)
+for line in sys.stdin:
+    parts = line.strip().split()
+    if len(parts) != 2: continue
+    path, ms = parts[0], int(parts[1])
+    by_path[path].append(ms)
+for path, samples in sorted(by_path.items()):
+    p50 = statistics.median(samples)
+    p95 = statistics.quantiles(samples, n=20)[18] if len(samples) > 5 else max(samples)
+    print(f'{path:40s} n={len(samples):5d} p50={p50:5.0f}ms p95={p95:5.0f}ms')
+"
+```
+
+#### N+1 detector — chains with repeated same-tool calls
+
+A `tool.chain` showing `tools: ["get_party", "get_party", "get_party", ...]`
+is exactly the pattern that should be `get_parties` (batched). Run:
+
+```sh
+gcloud logging read \
+  'jsonPayload.event="tool.chain"' \
+  --project=<your-gcp-project> --freshness=7d \
+  --format='value(jsonPayload.tools)' \
+  | python3 -c "
+import sys, json
+for line in sys.stdin:
+    try:
+        tools = json.loads(line.strip())
+    except Exception:
+        continue
+    # Find consecutive runs of same tool with length > 3.
+    if not tools: continue
+    runs = []
+    cur, n = tools[0], 1
+    for t in tools[1:]:
+        if t == cur: n += 1
+        else:
+            if n > 3: runs.append((cur, n))
+            cur, n = t, 1
+    if n > 3: runs.append((cur, n))
+    for tool, length in runs:
+        print(f'{tool} ×{length}')
+" | sort | uniq -c | sort -rn | head -20
+```
+
+#### Cache effectiveness per chain
+
+```sh
+gcloud logging read \
+  'jsonPayload.event="tool.chain"' \
+  --project=<your-gcp-project> --freshness=24h \
+  --format='value(jsonPayload.capsuleCalls, jsonPayload.cacheHits)' \
+  | python3 -c "
+import sys
+total_calls, total_hits = 0, 0
+for line in sys.stdin:
+    parts = line.strip().split()
+    if len(parts) != 2: continue
+    total_calls += int(parts[0])
+    total_hits += int(parts[1])
+denom = total_calls + total_hits
+if denom:
+    print(f'hit rate: {total_hits/denom:.1%} ({total_hits}/{denom})')
+"
+```
+
+### Why opt-in only
+
+At default-off, zero cost. At verbose-on, each `/mcp` request emits
+roughly 5 events × ~200 bytes = 1 KB. A busy day (~1000 requests)
+adds ~1 MB to log ingest — fractions of a cent on Cloud Logging
+pricing. The reason we keep it off is hygiene, not cost: production
+logs shouldn't be cluttered with per-call detail unless someone is
+actively investigating.
+
+---
+
 ## Methodology — how we measure
 
 Three rules to keep the data trustworthy:

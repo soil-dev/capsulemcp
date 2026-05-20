@@ -41,7 +41,7 @@
  */
 
 import { readBool, readPositiveInt } from "../env.js";
-import { logEvent } from "../log.js";
+import { logEvent, redactPath } from "../log.js";
 import type { PagedResult, QueryParams } from "./client.js";
 
 interface CacheEntry {
@@ -162,7 +162,12 @@ export function cacheSet<T>(key: string, result: PagedResult<T>): void {
     const oldest = cache.keys().next().value;
     if (oldest === undefined) break;
     cache.delete(oldest);
-    logEvent("cache.evict", { evictedKey: oldest, cacheSize: cache.size, reason: "cap" });
+    // `oldest` is the cache key in `GET <path>?<sorted-params>`
+    // form. Redact the path (`/parties/123` → `/parties/:id`) and
+    // drop the query string so we don't leak record IDs or search
+    // terms into operator logs.
+    const evictedKey = `GET ${redactPath(oldest.replace(/^GET /, ""))}`;
+    logEvent("cache.evict", { evictedKey, cacheSize: cache.size, reason: "cap" });
   }
   const now = Date.now();
   cache.set(key, {

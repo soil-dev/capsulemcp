@@ -26,7 +26,19 @@ import type {
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { z, ZodRawShape } from "zod";
 import type { BatchOpts } from "../capsule/batch.js";
+import { getRequestContext, logEvent } from "../log.js";
 import { registerAbortController } from "../tasks/store.js";
+
+/**
+ * Extract the names of fields present on the tool input. Used by the
+ * `tool.call` event so analytics queries can ask "which schema
+ * fields do callers actually populate" without ever logging the
+ * values themselves. Returns `[]` for non-object inputs.
+ */
+function argFieldNames(input: unknown): string[] {
+  if (input === null || typeof input !== "object" || Array.isArray(input)) return [];
+  return Object.keys(input as Record<string, unknown>);
+}
 
 /** Wrap a handler's return value in the MCP `content: [{text}]` shape. */
 function wrapAsText(result: unknown): {
@@ -59,8 +71,29 @@ export function registerTool<Schema extends z.ZodObject<ZodRawShape>>(
   ) => void;
 
   registerWithSchema(name, { description, inputSchema: schema }, async (input) => {
-    const result = await handler(input);
-    return wrapAsText(result);
+    const startedAt = Date.now();
+    const argFields = argFieldNames(input);
+    const ctx = getRequestContext();
+    try {
+      const result = await handler(input);
+      logEvent("tool.call", {
+        tool: name,
+        ...(ctx?.clientId ? { clientId: ctx.clientId } : {}),
+        argFields,
+        durationMs: Date.now() - startedAt,
+        outcome: "success",
+      });
+      return wrapAsText(result);
+    } catch (err) {
+      logEvent("tool.call", {
+        tool: name,
+        ...(ctx?.clientId ? { clientId: ctx.clientId } : {}),
+        argFields,
+        durationMs: Date.now() - startedAt,
+        outcome: "error",
+      });
+      throw err;
+    }
   });
 }
 
@@ -199,6 +232,14 @@ export function registerToolTask<Schema extends z.ZodObject<ZodRawShape>>(
         // The integration test suite uses InMemoryTransport which
         // keeps the channel open, so this codepath was invisible
         // until production verification. See CHANGELOG.
+        // Snapshot the request context's clientId here, while the
+        // ALS frame is still active. The IIFE below runs after the
+        // outer HTTP request has returned, so `getRequestContext()`
+        // would be undefined inside it; capturing eagerly preserves
+        // the clientId on the `tool.call` event the IIFE emits.
+        const requestClientId = getRequestContext()?.clientId;
+        const argFields = argFieldNames(input);
+
         void (async () => {
           if (abortController.signal.aborted) return;
 
@@ -215,7 +256,9 @@ export function registerToolTask<Schema extends z.ZodObject<ZodRawShape>>(
           // Run the handler. Capture its result OR a CallToolResult-
           // shaped error envelope — we always end up storing one
           // payload, never re-entering this branch.
+          const handlerStart = Date.now();
           let payload: CallToolResult;
+          let outcome: "success" | "error" = "success";
           try {
             const result = await handler(input, {
               signal: abortController.signal,
@@ -223,12 +266,28 @@ export function registerToolTask<Schema extends z.ZodObject<ZodRawShape>>(
             payload = wrapAsText(result) as CallToolResult;
           } catch (err) {
             if (abortController.signal.aborted) return;
+            outcome = "error";
             const message = err instanceof Error ? err.message : String(err);
             payload = {
               content: [{ type: "text", text: message }],
               isError: true,
             };
           }
+
+          // Emit tool.call BEFORE storeTaskResult. The
+          // updateTaskStatus → terminal transition would unwind the
+          // request-context-aware path; logging here ensures the
+          // event lands with the captured clientId and a sensible
+          // durationMs even if the store interaction throws on a
+          // closed notification stream.
+          logEvent("tool.call", {
+            tool: name,
+            ...(requestClientId ? { clientId: requestClientId } : {}),
+            argFields,
+            durationMs: Date.now() - handlerStart,
+            outcome,
+            taskAugmented: true,
+          });
 
           // If cancellation fired during execution, the task's
           // status is already `cancelled` (terminal); SEP-1686 §4.3

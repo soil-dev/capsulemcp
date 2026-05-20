@@ -1,6 +1,6 @@
 import { fetch, type Response } from "undici";
 import { readBool } from "../env.js";
-import { logEvent, logVerbose } from "../log.js";
+import { logEvent, logVerbose, redactPath } from "../log.js";
 import { cacheDisabled, cacheKey, cacheLookup, cacheSet } from "./cache.js";
 
 const DEFAULT_BASE_URL = "https://api.capsulecrm.com/api/v2";
@@ -283,6 +283,9 @@ async function fetchWithTimeout(
 }
 
 async function doFetch(url: string, options: Parameters<typeof fetch>[1]): Promise<FetchResult> {
+  const startedAt = Date.now();
+  const method = (options?.method as string | undefined) ?? "GET";
+
   const first = await fetchWithTimeout(url, options);
 
   if (first.res.status === 429) {
@@ -301,10 +304,59 @@ async function doFetch(url: string, options: Parameters<typeof fetch>[1]): Promi
         "Rate limit exceeded after one retry. Please slow down your requests.",
       );
     }
+    emitCapsuleRequest(method, url, retried.res, Date.now() - startedAt, true);
     return retried;
   }
 
+  emitCapsuleRequest(method, url, first.res, Date.now() - startedAt, false);
   return first;
+}
+
+/**
+ * Emit a `capsule.request` event for one outbound Capsule API call.
+ *
+ * Verbose-gated. Path is run through `redactPath` so numeric IDs
+ * become `:id` placeholders and the query string is dropped —
+ * preserves shape for analytical queries (top endpoints, p95
+ * latency per endpoint, error rate per endpoint) without leaking
+ * specific record identifiers or search terms.
+ *
+ * Also updates the per-`/mcp`-request aggregator via `logEvent`'s
+ * RequestContext awareness, so the `tool.chain` event at the end
+ * of the request reports `capsuleCalls` accurately.
+ *
+ * `retriedAfter429: true` means this row counts ONE 429 retry on
+ * top of the underlying request — useful for spotting rate-limit
+ * pressure retroactively. (We never emit on the first 429 itself,
+ * only on its retry; the no-retry success path emits once with
+ * `retried=false`.)
+ */
+function emitCapsuleRequest(
+  method: string,
+  url: string,
+  res: Response,
+  durationMs: number,
+  retriedAfter429: boolean,
+): void {
+  // Extract just the path from the URL; redact IDs.
+  let path = "";
+  try {
+    path = redactPath(new URL(url).pathname);
+  } catch {
+    path = "?";
+  }
+  // Content-Length is usually present on Capsule responses; if not,
+  // fall back to 0 — we don't want to read the body just for size.
+  const lenHeader = res.headers.get("content-length");
+  const responseBytes = lenHeader ? Number.parseInt(lenHeader, 10) : 0;
+  logEvent("capsule.request", {
+    method,
+    path,
+    status: res.status,
+    durationMs,
+    responseBytes: Number.isFinite(responseBytes) ? responseBytes : 0,
+    ...(retriedAfter429 ? { retriedAfter429: true } : {}),
+  });
 }
 
 /**
@@ -373,13 +425,13 @@ export async function capsuleGetCached<T>(
   const key = cacheKey(path, params);
   const lookup = cacheLookup<T>(key);
   if (lookup.hit) {
-    // Skip the JSON.stringify cost on the hot path when verbose
-    // logging is off — logEvent already short-circuits but the
-    // params object construction here is also avoidable.
+    // Skip the work on the hot path when verbose logging is off —
+    // logEvent already short-circuits but param-shape construction
+    // here is also avoidable.
     if (logVerbose()) {
       logEvent("cache.hit", {
-        path,
-        ...(params ? { params } : {}),
+        path: redactPath(path),
+        ...(params ? { paramFields: Object.keys(params) } : {}),
         ageMs: lookup.ageMs,
       });
     }
@@ -391,8 +443,8 @@ export async function capsuleGetCached<T>(
   cacheSet(key, result);
   if (logVerbose()) {
     logEvent("cache.miss", {
-      path,
-      ...(params ? { params } : {}),
+      path: redactPath(path),
+      ...(params ? { paramFields: Object.keys(params) } : {}),
       reason: lookup.reason,
       latencyMs,
     });
