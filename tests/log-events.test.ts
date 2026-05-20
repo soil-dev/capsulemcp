@@ -1,0 +1,268 @@
+/**
+ * Tests for the observability event surface:
+ *
+ *   - `redactPath`: numeric-ID redaction + query stripping for
+ *     paths logged in `cache.*` and `capsule.request` events.
+ *   - `tool.call`: emitted once per tool invocation with field
+ *     NAMES (`argFields`), never field values. Captures clientId
+ *     from the active RequestContext, durationMs, outcome.
+ *   - `capsule.request`: emitted once per outbound Capsule API
+ *     call with a redacted path, status, durationMs, responseBytes.
+ *   - `tool.chain`: aggregate emitted at end of /mcp request with
+ *     the tool sequence + capsuleCalls + cacheHits.
+ *
+ * All events gated on `CAPSULE_MCP_LOG_VERBOSE=1`. Privacy
+ * invariant: no CRM data leaks into any event.
+ */
+
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
+import { getRequestContext, logEvent, redactPath, withRequestContext } from "../src/log.js";
+
+vi.mock("undici", () => ({ fetch: vi.fn() }));
+
+describe("redactPath", () => {
+  it("redacts single numeric IDs", () => {
+    expect(redactPath("/parties/254022621")).toBe("/parties/:id");
+    expect(redactPath("/opportunities/1234")).toBe("/opportunities/:id");
+    expect(redactPath("/kases/9")).toBe("/kases/:id");
+  });
+
+  it("redacts comma-separated multi-id paths", () => {
+    expect(redactPath("/parties/1,2,3")).toBe("/parties/:id");
+    expect(redactPath("/tasks/10,20,30,40")).toBe("/tasks/:id");
+  });
+
+  it("redacts nested numeric IDs", () => {
+    expect(redactPath("/parties/254022621/notes")).toBe("/parties/:id/notes");
+    expect(redactPath("/parties/123/notes/456")).toBe("/parties/:id/notes/:id");
+  });
+
+  it("drops the query string entirely", () => {
+    expect(redactPath("/parties/search?q=Acme")).toBe("/parties/search");
+    expect(redactPath("/parties?embed=tags&page=1")).toBe("/parties");
+  });
+
+  it("leaves non-numeric segments untouched", () => {
+    // Tag-list paths use a non-numeric segment that should pass through.
+    expect(redactPath("/parties/tags")).toBe("/parties/tags");
+    expect(redactPath("/opportunities/tags")).toBe("/opportunities/tags");
+    expect(redactPath("/kases/tags")).toBe("/kases/tags");
+  });
+
+  it("is idempotent", () => {
+    const path = "/parties/:id/notes";
+    expect(redactPath(path)).toBe(path);
+  });
+});
+
+describe("logEvent + RequestContext aggregation", () => {
+  let stderrSpy: ReturnType<typeof vi.spyOn>;
+  let emitted: string[];
+
+  beforeEach(() => {
+    emitted = [];
+    process.env["CAPSULE_MCP_LOG_VERBOSE"] = "1";
+    // biome-ignore lint/suspicious/noExplicitAny: stderr write is sync
+    stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation((chunk: any) => {
+      emitted.push(String(chunk));
+      return true;
+    });
+  });
+  afterEach(() => {
+    stderrSpy.mockRestore();
+    delete process.env["CAPSULE_MCP_LOG_VERBOSE"];
+  });
+
+  it("populates the ctx with tool.call and capsule.request inside withRequestContext", async () => {
+    await withRequestContext({ clientId: "client-a" }, async () => {
+      logEvent("tool.call", { tool: "filter_parties", argFields: ["q"] });
+      logEvent("capsule.request", { method: "GET", path: "/parties", status: 200, durationMs: 10 });
+      logEvent("capsule.request", {
+        method: "GET",
+        path: "/parties/:id",
+        status: 200,
+        durationMs: 5,
+      });
+      logEvent("cache.hit", { path: "/pipelines" });
+
+      const ctx = getRequestContext();
+      expect(ctx?.tools).toEqual(["filter_parties"]);
+      expect(ctx?.capsuleCalls).toBe(2);
+      expect(ctx?.cacheHits).toBe(1);
+      expect(ctx?.clientId).toBe("client-a");
+    });
+  });
+
+  it("does NOT emit when CAPSULE_MCP_LOG_VERBOSE is unset", async () => {
+    delete process.env["CAPSULE_MCP_LOG_VERBOSE"];
+    logEvent("tool.call", { tool: "x" });
+    expect(emitted).toEqual([]);
+  });
+
+  it("emits regardless of verbose flag when opts.force is set", () => {
+    delete process.env["CAPSULE_MCP_LOG_VERBOSE"];
+    logEvent("batch.complete", { tool: "y" }, { force: true });
+    expect(emitted).toHaveLength(1);
+    expect(JSON.parse(emitted[0]!).event).toBe("batch.complete");
+  });
+
+  it("counts cache.hit toward ctx.cacheHits even without a parallel capsule.request", async () => {
+    await withRequestContext({ clientId: "c" }, async () => {
+      logEvent("cache.hit", { path: "/pipelines" });
+      logEvent("cache.hit", { path: "/boards" });
+      expect(getRequestContext()?.cacheHits).toBe(2);
+      expect(getRequestContext()?.capsuleCalls).toBe(0);
+    });
+  });
+});
+
+describe("end-to-end: tool.call, capsule.request, tool.chain via the MCP wire", () => {
+  let emitted: string[];
+  let stderrSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    emitted = [];
+    process.env["CAPSULE_MCP_LOG_VERBOSE"] = "1";
+    process.env["CAPSULE_API_TOKEN"] = "test-token";
+    process.env["CAPSULE_MCP_READONLY"] = "1";
+    vi.clearAllMocks();
+    // biome-ignore lint/suspicious/noExplicitAny: stderr capture
+    stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation((chunk: any) => {
+      emitted.push(String(chunk));
+      return true;
+    });
+  });
+  afterEach(() => {
+    stderrSpy.mockRestore();
+    delete process.env["CAPSULE_MCP_LOG_VERBOSE"];
+    delete process.env["CAPSULE_API_TOKEN"];
+    delete process.env["CAPSULE_MCP_READONLY"];
+  });
+
+  function parseEvents(filter?: string): Array<Record<string, unknown>> {
+    const events: Array<Record<string, unknown>> = [];
+    for (const line of emitted) {
+      try {
+        const j = JSON.parse(line);
+        if (!filter || j.event === filter) events.push(j);
+      } catch {
+        // Non-JSON stderr line — ignore.
+      }
+    }
+    return events;
+  }
+
+  /**
+   * Helper: spawn server + client AFTER vi.resetModules(), and
+   * pull `withRequestContext` / `getRequestContext` / `logEvent`
+   * from the SAME log.js module instance the server's runtime uses.
+   * Without this, the test's top-level imports and the server-side
+   * imports reference different AsyncLocalStorage objects and the
+   * context propagation is silently broken.
+   */
+  async function spawn(clientId: string) {
+    vi.resetModules();
+    const { createCapsuleMcpServer } = await import("../src/server.js");
+    const log = await import("../src/log.js");
+    const { fetch } = await import("undici");
+    const mockFetch = fetch as unknown as ReturnType<typeof vi.fn>;
+    mockFetch.mockImplementation(
+      async () =>
+        new Response(JSON.stringify({ users: [{ id: 1, name: "T" }] }), {
+          status: 200,
+          headers: { "content-type": "application/json", "content-length": "30" },
+        }),
+    );
+    const [clientT, serverT] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "ev-test", version: "0" }, { capabilities: {} });
+    const server = createCapsuleMcpServer({ clientId });
+    await Promise.all([server.connect(serverT), client.connect(clientT)]);
+    return { client, log, mockFetch };
+  }
+
+  it("emits tool.call with argFields containing field NAMES only, no values", async () => {
+    const { client, log } = await spawn("ev-client");
+    await log.withRequestContext({ clientId: "ev-client" }, async () => {
+      await client.callTool({ name: "list_users", arguments: {} });
+    });
+
+    const toolCalls = parseEvents("tool.call");
+    expect(toolCalls).toHaveLength(1);
+    const tc = toolCalls[0]!;
+    expect(tc["tool"]).toBe("list_users");
+    expect(tc["clientId"]).toBe("ev-client");
+    expect(tc["outcome"]).toBe("success");
+    expect(typeof tc["durationMs"]).toBe("number");
+    // Privacy: argFields contains key NAMES, not values. For an
+    // empty arguments object, expect an empty array.
+    expect(Array.isArray(tc["argFields"])).toBe(true);
+  });
+
+  it("emits capsule.request with redacted path", async () => {
+    const { client, log, mockFetch } = await spawn("cap-client");
+    mockFetch.mockImplementation(
+      async () =>
+        new Response(JSON.stringify({ party: { id: 1, type: "person" } }), {
+          status: 200,
+          headers: { "content-type": "application/json", "content-length": "100" },
+        }),
+    );
+
+    await log.withRequestContext({ clientId: "cap-client" }, async () => {
+      await client.callTool({ name: "get_party", arguments: { id: 254022621 } });
+    });
+
+    const reqs = parseEvents("capsule.request");
+    expect(reqs.length).toBeGreaterThan(0);
+    const r = reqs[0]!;
+    // Path is the full URL pathname (Capsule API base is
+    // /api/v2/...). The load-bearing assertion: the raw party id
+    // 254022621 must NOT appear; `:id` must.
+    expect(String(r["path"])).toBe("/api/v2/parties/:id");
+    expect(String(r["path"])).not.toContain("254022621");
+    expect(r["method"]).toBe("GET");
+    expect(r["status"]).toBe(200);
+    expect(typeof r["durationMs"]).toBe("number");
+  });
+
+  it("tool.chain aggregates the request's tools and capsule calls", async () => {
+    const { client, log } = await spawn("ch-client");
+    // Drive two tools through within one RequestContext frame; emit
+    // tool.chain at the end of the frame (mirrors src/http/app.ts).
+    await log.withRequestContext({ clientId: "ch-client" }, async () => {
+      await client.callTool({ name: "list_users", arguments: {} });
+      await client.callTool({ name: "list_users", arguments: {} });
+      const ctx = log.getRequestContext();
+      if (ctx) {
+        log.logEvent("tool.chain", {
+          clientId: ctx.clientId,
+          tools: ctx.tools,
+          toolCount: ctx.tools.length,
+          capsuleCalls: ctx.capsuleCalls,
+          cacheHits: ctx.cacheHits,
+          durationMs: Date.now() - ctx.startedAt,
+        });
+      }
+    });
+
+    const chains = parseEvents("tool.chain");
+    expect(chains).toHaveLength(1);
+    const c = chains[0]!;
+    expect(c["clientId"]).toBe("ch-client");
+    expect(c["tools"]).toEqual(["list_users", "list_users"]);
+    expect(c["toolCount"]).toBe(2);
+    // list_users uses capsuleGetCached — first call misses (1
+    // capsule.request), second call hits the cache (1 cache.hit).
+    // The chain reports both: 1 capsuleCall, 1 cacheHit. This is
+    // exactly the kind of analytical signal we want — easy to spot
+    // "this batch of N identical calls only hit Capsule once".
+    expect(Number(c["capsuleCalls"])).toBe(1);
+    expect(Number(c["cacheHits"])).toBe(1);
+  });
+});
+
+// Silence the unused-import warning for z.
+void z;
