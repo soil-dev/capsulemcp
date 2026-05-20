@@ -20,6 +20,7 @@ import {
 import { requireBearerAuth } from "@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js";
 import { SUPPORTED_PROTOCOL_VERSIONS } from "@modelcontextprotocol/sdk/types.js";
 import type { OAuthProvider } from "../auth/provider.js";
+import { readPositiveInt } from "../env.js";
 import { createCapsuleMcpServer } from "../server.js";
 import { ICON_SVG } from "../icon.js";
 import { withRequestContext } from "../log.js";
@@ -55,6 +56,30 @@ function timingSafeSecretEqual(provided: string, expected: string): boolean {
   // Compare fixed-width digests so the equality check doesn't branch on
   // the raw client_secret length before timingSafeEqual runs.
   return timingSafeEqual(secretDigest(provided), secretDigest(expected));
+}
+
+const DEFAULT_MCP_RATE_LIMIT_WINDOW_MS = 60_000;
+const DEFAULT_MCP_RATE_LIMIT_MAX = 600;
+const MAX_MEMORY_STORE_WINDOW_MS = 2 ** 31 - 1;
+
+export function resolveMcpRateLimitConfig(): {
+  windowMs: number;
+  limit: number;
+  disabled: boolean;
+} {
+  // express-rate-limit's default MemoryStore backs `windowMs` with
+  // setInterval, so over-large or negative values get coerced by Node
+  // timers after only a logged validation error. Parse defensively here
+  // so operator typos fall back or clamp before they reach the store.
+  const windowMs = Math.min(
+    readPositiveInt("MCP_HTTP_RATE_LIMIT_WINDOW_MS", DEFAULT_MCP_RATE_LIMIT_WINDOW_MS),
+    MAX_MEMORY_STORE_WINDOW_MS,
+  );
+  return {
+    windowMs,
+    limit: readPositiveInt("MCP_HTTP_RATE_LIMIT_MAX", DEFAULT_MCP_RATE_LIMIT_MAX),
+    disabled: process.env["MCP_HTTP_RATE_LIMIT_DISABLED"] === "1",
+  };
 }
 
 export function createApp(opts: AppOptions): express.Express {
@@ -212,9 +237,11 @@ export function createApp(opts: AppOptions): express.Express {
   // that a runaway loop trips before the upstream 4000-rph cap.
   // Operators on heavy-tenant deployments can override via env. Tests
   // disable it via MCP_HTTP_RATE_LIMIT_DISABLED.
-  const rateLimitWindowMs = Number(process.env["MCP_HTTP_RATE_LIMIT_WINDOW_MS"]) || 60_000;
-  const rateLimitMax = Number(process.env["MCP_HTTP_RATE_LIMIT_MAX"]) || 600;
-  const rateLimitDisabled = process.env["MCP_HTTP_RATE_LIMIT_DISABLED"] === "1";
+  const {
+    windowMs: rateLimitWindowMs,
+    limit: rateLimitMax,
+    disabled: rateLimitDisabled,
+  } = resolveMcpRateLimitConfig();
   const mcpRateLimit = rateLimit({
     windowMs: rateLimitWindowMs,
     limit: rateLimitMax,

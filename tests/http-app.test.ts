@@ -11,11 +11,11 @@
  * of that or mock undici.fetch.
  */
 
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { createHash } from "node:crypto";
-import { createApp } from "../src/http/app.js";
+import { createApp, resolveMcpRateLimitConfig } from "../src/http/app.js";
 import { OAuthProvider, FixedClientStore, InMemoryClientsStore } from "../src/auth/provider.js";
 
 vi.mock("undici", () => ({ fetch: vi.fn() }));
@@ -560,6 +560,42 @@ describe("/mcp per-client rate limit", () => {
     expect(r3.status).toBe(429);
     const body = (await r3.json()) as { error?: { message?: string } };
     expect(body.error?.message).toBe("Too Many Requests");
+  });
+});
+
+describe("/mcp rate-limit env parsing", () => {
+  const keys = [
+    "MCP_HTTP_RATE_LIMIT_MAX",
+    "MCP_HTTP_RATE_LIMIT_WINDOW_MS",
+    "MCP_HTTP_RATE_LIMIT_DISABLED",
+  ];
+
+  afterEach(() => {
+    for (const key of keys) delete process.env[key];
+  });
+
+  it("falls back on malformed or unsafe values before constructing express-rate-limit", () => {
+    process.env["MCP_HTTP_RATE_LIMIT_MAX"] = "-1";
+    process.env["MCP_HTTP_RATE_LIMIT_WINDOW_MS"] = "-500";
+    const cfg = resolveMcpRateLimitConfig();
+    expect(cfg.limit).toBe(600);
+    expect(cfg.windowMs).toBe(60_000);
+  });
+
+  it("clamps windows above Node's timer ceiling", () => {
+    process.env["MCP_HTTP_RATE_LIMIT_WINDOW_MS"] = String(2 ** 31 + 1000);
+    expect(resolveMcpRateLimitConfig().windowMs).toBe(2 ** 31 - 1);
+  });
+
+  it("honours positive overrides and the explicit test-only disable flag", () => {
+    process.env["MCP_HTTP_RATE_LIMIT_MAX"] = "7";
+    process.env["MCP_HTTP_RATE_LIMIT_WINDOW_MS"] = "12345";
+    process.env["MCP_HTTP_RATE_LIMIT_DISABLED"] = "1";
+    expect(resolveMcpRateLimitConfig()).toEqual({
+      limit: 7,
+      windowMs: 12345,
+      disabled: true,
+    });
   });
 });
 

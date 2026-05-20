@@ -11,6 +11,17 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Fixed
+
+- Hardened `/mcp` rate-limit env parsing: malformed or negative
+  `MCP_HTTP_RATE_LIMIT_*` values now fall back to safe defaults, and
+  over-large windows clamp before reaching express-rate-limit's
+  timer-backed MemoryStore.
+- Made `scripts/wire-trace-tasks.sh` match the documented Cloud Run
+  deployment path: it now accepts `CLIENT_ID` / `CLIENT_SECRET` from
+  env first and falls back to both stack-specific and DEPLOY.md Secret
+  Manager names.
+
 ## [1.6.0-beta.5] — 2026-05-20
 
 CI + docs hygiene release on top of beta.4. No runtime behaviour
