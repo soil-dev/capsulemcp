@@ -83,6 +83,18 @@ describe("inferAnnotations (pure helper)", () => {
     expect(inferAnnotations("xget_party")).toBeUndefined();
     expect(inferAnnotations("create_list")).toBeUndefined();
   });
+
+  it("auto-tags any future delete_* tool as destructive", () => {
+    // Safety net: if someone adds a new delete_X tool, it
+    // inherits destructiveHint without needing to update a list.
+    // Without this, a forgotten Set entry would ship a delete tool
+    // as a routine write (no client confirmation prompt).
+    expect(inferAnnotations("delete_hypothetical_new_tool")).toEqual({
+      destructiveHint: true,
+    });
+    // The aggregate-counts test below would also catch a count
+    // drift, but this is the more direct assertion.
+  });
 });
 
 describe("tools/list response carries inferred annotations", () => {

@@ -37,28 +37,30 @@ import { registerAbortController } from "../tasks/store.js";
 const READ_PREFIXES = ["search_", "filter_", "get_", "list_", "show_", "run_"];
 
 /**
- * Tools whose semantics are destructive (whole-record delete, or
- * unrecoverable detach of a workflow/association). These ALREADY
- * carry a `confirm: true` schema-level gate in their input schemas;
- * the annotation here is a separate, client-facing hint surfacing
- * the same "needs confirmation" signal to MCP clients that respect
+ * Tools whose semantics are destructive (unrecoverable detach of a
+ * workflow / party association). These ALREADY carry a
+ * `confirm: true` schema-level gate in their input schemas; the
+ * annotation here is a separate, client-facing hint surfacing the
+ * same "needs confirmation" signal to MCP clients that respect
  * `destructiveHint` for stronger pre-call prompts (e.g. Claude
  * Desktop / Claude Code auto-approval heuristics).
  *
+ * Whole-record `delete_*` tools are caught by the `delete_` prefix
+ * in `isDestructive` below, so a NEW `delete_X` tool added in the
+ * future auto-inherits the destructive hint without anyone having
+ * to remember to update a list. Only the non-`delete_` destructive
+ * names need to be enumerated here.
+ *
  * "Child remover" tools (`remove_party_email_address_by_id`,
- * `remove_tag_by_id`, etc.) are NOT in this list — they detach a
- * row from a record but the parent record persists, so they're
- * routine writes, not destructive in the spec sense.
+ * `remove_tag_by_id`, etc.) are NOT included — they detach a row
+ * from a record but the parent record persists, so they're routine
+ * writes, not destructive in the spec sense.
  */
-const DESTRUCTIVE_TOOLS = new Set([
-  "delete_party",
-  "delete_opportunity",
-  "delete_project",
-  "delete_task",
-  "delete_entry",
-  "remove_track",
-  "remove_additional_party",
-]);
+const DESTRUCTIVE_NON_DELETE = new Set(["remove_track", "remove_additional_party"]);
+
+function isDestructive(name: string): boolean {
+  return name.startsWith("delete_") || DESTRUCTIVE_NON_DELETE.has(name);
+}
 
 /**
  * Infer MCP `ToolAnnotations` from the tool name.
@@ -96,7 +98,7 @@ export function inferAnnotations(name: string): ToolAnnotations | undefined {
   if (READ_PREFIXES.some((p) => name.startsWith(p))) {
     return { readOnlyHint: true };
   }
-  if (DESTRUCTIVE_TOOLS.has(name)) {
+  if (isDestructive(name)) {
     return { destructiveHint: true };
   }
   return undefined;
