@@ -72,10 +72,9 @@ function isDestructive(name: string): boolean {
  *
  * Returned shapes:
  *
- *   - Read-prefixed tools → `{ readOnlyHint: true }`. Clients like
- *     Claude Desktop / Code use this to auto-approve invocations,
- *     so the user doesn't get a confirmation prompt for every
- *     list/get/search call.
+ *   - Read-prefixed tools → `{ readOnlyHint: true }`. Clients can
+ *     use this to auto-approve invocations, removing per-call
+ *     confirmation prompts for safe reads when they trust the server.
  *
  *   - Destructive tools (whole-record deletes + workflow / party-
  *     association removers) → `{ destructiveHint: true }`. Clients
