@@ -11,7 +11,7 @@ npm install
 npm test
 ```
 
-436 tests, all mocked — no Capsule API calls happen, no token needed. The suite has three layers:
+460 tests, all mocked — no Capsule API calls happen, no token needed. The suite has three layers:
 
 - **Per-tool unit tests** (e.g. `tests/parties.test.ts`): import the tool function, mock `undici.fetch`, assert on the URL, method, body, and response handling. Most tests live here.
 - **MCP-protocol integration tests** (`tests/mcp-integration.test.ts`): drive a real `McpServer` through the wire protocol via the SDK's in-memory transport pair, with `undici.fetch` still mocked. Catches the layer between "tool function works" and "MCP correctly registers and dispatches the tool". Includes the `get_attachment` content-type routing logic (which lives in `server.ts`, not the tool function).
@@ -31,8 +31,8 @@ The full pre-PR gate (everything CI will check) is:
 npm run typecheck      # tsc --noEmit
 npm run lint           # Biome lint
 npm run format:check   # Biome format check (run `npm run format` to fix)
-npm test
 npm run build
+npm test
 ```
 
 All together they take well under a minute on a warm cache.
@@ -46,7 +46,7 @@ for the contributor-facing summary.
 npm run build
 ```
 
-Produces `dist/index.js` (stdio entry, ~142 KB, with `#!/usr/bin/env node` shebang and the executable bit set) and `dist/http.js` (HTTP entry, ~167 KB, no shebang). Each is fully self-contained — tsup runs as two separate configs so the stdio entry can be invoked directly via npx while the HTTP entry isn't a CLI. tsup target is Node 22 (undici 8 requires Node 22+ for the `webidl.util.markAsUncloneable` runtime API).
+Produces `dist/index.js` (stdio entry, ~145 KB, with `#!/usr/bin/env node` shebang and the executable bit set) and `dist/http.js` (HTTP entry, ~171 KB, no shebang). Each is fully self-contained — tsup runs as two separate configs so the stdio entry can be invoked directly via npx while the HTTP entry isn't a CLI. tsup target is Node 22 (undici 8 requires Node 22+ for the `webidl.util.markAsUncloneable` runtime API).
 
 `npm run build` also chains `npm run build:icon` (`scripts/build-icon.mjs`), which regenerates `src/icon.ts` from the canonical `assets/icon.svg`. The TypeScript file is committed (so typecheck works without a build step) but is **generated** — edit the SVG, then run the build. A drift-guard test (`tests/icon-source.test.ts`) fails CI if the two ever fall out of sync.
 
@@ -266,7 +266,7 @@ push, so they should be passing before you even start a release — but
 re-confirm locally because a release commit shouldn't be the one that
 discovers a regression.
 
-- [ ] **(CI)** `npm run typecheck && npm run lint && npm run format:check && npm test && npm run build` all pass on the commit you're about to tag.
+- [ ] **(CI)** `npm run typecheck && npm run lint && npm run format:check && npm run build && npm test` all pass on the commit you're about to tag.
 - [ ] `npm publish --dry-run --tag latest` (for stable) or `--tag beta` (for pre-release) runs clean — verifies the tarball contents, package.json shape, and that `bin` / `files` resolve. Catches publish-time regressions before they hit npm.
 - [ ] **`package-lock.json` root version matches `package.json`.** Bumping the two source-of-truth files (package.json + server.ts) doesn't touch the lockfile root — it drifts silently. `npm install --package-lock-only --ignore-scripts` after the bump keeps it honest.
 - [ ] **Three places all match**: `package.json`, `src/server.ts`, `package-lock.json` (root + `packages[""]`).

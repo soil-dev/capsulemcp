@@ -11,6 +11,16 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Fixed
+
+- Activated the bundle-shape canary in CI by running `npm run build`
+  before `npm test`; previously the new `dist/` assertions skipped
+  on clean checkouts because the workflow tested before building.
+- Refreshed HOWTO test/bundle counts for beta.4 and removed stale
+  smoke-test script references from the task wire-trace helper.
+- Updated direct dev dependency `@types/node` from 25.9.0 to 25.9.1
+  so `npm outdated` is clean.
+
 ## [1.6.0-beta.4] — 2026-05-20
 
 Refactor-only release on top of beta.3. No behaviour change, same

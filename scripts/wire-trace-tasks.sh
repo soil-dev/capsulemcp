@@ -12,18 +12,18 @@
 # script crashes mid-run, search Capsule for `mcp-tasks-trace-` and
 # clean up manually.
 #
-# Counterpart to `smoke-test.sh` (OAuth/read-only verification only).
-# Pair the two: smoke-test for every deploy, wire-trace-tasks for
-# every alpha/beta cut with an OAuth-HTTP deployment running with
-# `MCP_TASKS_ENABLED=1` and `CAPSULE_MCP_READONLY=0`.
+# Counterpart to the HOWTO `smoke.sh` snippet (OAuth/read-only
+# verification only). Pair the two: smoke-test for every deploy,
+# wire-trace-tasks for every alpha/beta cut with an OAuth-HTTP
+# deployment running with `MCP_TASKS_ENABLED=1` and
+# `CAPSULE_MCP_READONLY=0`.
 #
 # Usage:
 #   ./scripts/wire-trace-tasks.sh
 #   STACK=production REGION=europe-west1 PROJECT=<your-gcp-project> \
 #       ./scripts/wire-trace-tasks.sh
 #
-# Reads CLIENT_ID and CLIENT_SECRET from Secret Manager, same shape
-# as smoke-test.sh.
+# Reads CLIENT_ID and CLIENT_SECRET from Secret Manager.
 #
 # Exits 0 if the lifecycle round-trips cleanly, 1 otherwise.
 
@@ -58,7 +58,7 @@ FAIL=0
 ok()   { printf '  \033[32m✓\033[0m %s\n' "$1"; PASS=$((PASS + 1)); }
 bad()  { printf '  \033[31m✗\033[0m %s\n' "$1"; if [ -n "${2:-}" ]; then printf '      %s\n' "$2"; fi; FAIL=$((FAIL + 1)); }
 
-# OAuth dance — same shape as smoke-test.sh.
+# OAuth dance — same shape as the HOWTO smoke.sh snippet.
 VERIFIER=$(python3 -c "import secrets; print(secrets.token_urlsafe(64))")
 CHALLENGE=$(python3 -c "
 import base64, hashlib, sys
