@@ -23,11 +23,84 @@ import type {
   CreateTaskRequestHandlerExtra,
   TaskRequestHandlerExtra,
 } from "@modelcontextprotocol/sdk/experimental/tasks/interfaces.js";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type { CallToolResult, ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import type { z, ZodRawShape } from "zod";
 import type { BatchOpts } from "../capsule/batch.js";
 import { getRequestContext, logEvent } from "../log.js";
 import { registerAbortController } from "../tasks/store.js";
+
+/**
+ * Prefixes that identify a tool as read-only by naming convention.
+ * The catalog uses these strictly — any tool starting with one of
+ * these is guaranteed not to issue a Capsule mutating request.
+ */
+const READ_PREFIXES = ["search_", "filter_", "get_", "list_", "show_", "run_"];
+
+/**
+ * Tools whose semantics are destructive (whole-record delete, or
+ * unrecoverable detach of a workflow/association). These ALREADY
+ * carry a `confirm: true` schema-level gate in their input schemas;
+ * the annotation here is a separate, client-facing hint surfacing
+ * the same "needs confirmation" signal to MCP clients that respect
+ * `destructiveHint` for stronger pre-call prompts (e.g. Claude
+ * Desktop / Claude Code auto-approval heuristics).
+ *
+ * "Child remover" tools (`remove_party_email_address_by_id`,
+ * `remove_tag_by_id`, etc.) are NOT in this list — they detach a
+ * row from a record but the parent record persists, so they're
+ * routine writes, not destructive in the spec sense.
+ */
+const DESTRUCTIVE_TOOLS = new Set([
+  "delete_party",
+  "delete_opportunity",
+  "delete_project",
+  "delete_task",
+  "delete_entry",
+  "remove_track",
+  "remove_additional_party",
+]);
+
+/**
+ * Infer MCP `ToolAnnotations` from the tool name.
+ *
+ * The catalog's naming convention is strict (verified by the
+ * mcp-integration tool-count assertion plus the destructive list
+ * above), so we can derive accurate hints without touching every
+ * registration site.
+ *
+ * Returned shapes:
+ *
+ *   - Read-prefixed tools → `{ readOnlyHint: true }`. Clients like
+ *     Claude Desktop / Code use this to auto-approve invocations,
+ *     so the user doesn't get a confirmation prompt for every
+ *     list/get/search call.
+ *
+ *   - Destructive tools (whole-record deletes + workflow / party-
+ *     association removers) → `{ destructiveHint: true }`. Clients
+ *     can surface a stronger pre-call warning. Our schema-level
+ *     `confirm: true` gate is the actual hard stop; this is the
+ *     hint that travels over the wire to the client UI.
+ *
+ *   - Everything else (creates, updates, additive child writes,
+ *     batches) → `undefined`. No special hint; clients fall back
+ *     to their default (typically: prompt). MCP spec §"Tool
+ *     annotations" deliberately defaults to safe.
+ *
+ * `openWorldHint` is left unset because the default semantics
+ * ("interacts with external entities") already match every Capsule
+ * tool. `idempotentHint` is left unset because idempotency in our
+ * codebase is per-tool runtime behaviour (see `capsule/idempotent.ts`)
+ * rather than a catalog-level property.
+ */
+export function inferAnnotations(name: string): ToolAnnotations | undefined {
+  if (READ_PREFIXES.some((p) => name.startsWith(p))) {
+    return { readOnlyHint: true };
+  }
+  if (DESTRUCTIVE_TOOLS.has(name)) {
+    return { destructiveHint: true };
+  }
+  return undefined;
+}
 
 /**
  * Extract the names of fields present on the tool input. Used by the
@@ -91,23 +164,32 @@ export function registerTool<Schema extends z.ZodObject<ZodRawShape>>(
   // object-level refinements such as superRefine.
   const registerWithSchema = server.registerTool.bind(server) as (
     toolName: string,
-    config: { description: string; inputSchema: Schema },
+    config: {
+      description: string;
+      inputSchema: Schema;
+      annotations?: ToolAnnotations;
+    },
     callback: (input: z.infer<Schema>) => Promise<CallToolResult>,
   ) => void;
 
-  registerWithSchema(name, { description, inputSchema: schema }, async (input) => {
-    const startedAt = Date.now();
-    const argFields = argFieldNames(input);
-    const clientId = getRequestContext()?.clientId;
-    try {
-      const result = await handler(input);
-      emitToolCall({ tool: name, clientId, argFields, startedAt, outcome: "success" });
-      return wrapAsText(result);
-    } catch (err) {
-      emitToolCall({ tool: name, clientId, argFields, startedAt, outcome: "error" });
-      throw err;
-    }
-  });
+  const annotations = inferAnnotations(name);
+  registerWithSchema(
+    name,
+    { description, inputSchema: schema, ...(annotations ? { annotations } : {}) },
+    async (input) => {
+      const startedAt = Date.now();
+      const argFields = argFieldNames(input);
+      const clientId = getRequestContext()?.clientId;
+      try {
+        const result = await handler(input);
+        emitToolCall({ tool: name, clientId, argFields, startedAt, outcome: "success" });
+        return wrapAsText(result);
+      } catch (err) {
+        emitToolCall({ tool: name, clientId, argFields, startedAt, outcome: "error" });
+        throw err;
+      }
+    },
+  );
 }
 
 /**
@@ -170,16 +252,19 @@ export function registerToolTask<Schema extends z.ZodObject<ZodRawShape>>(
       description: string;
       inputSchema: Schema;
       execution: { taskSupport: "optional" | "required" };
+      annotations?: ToolAnnotations;
     },
     handler: TaskHandler,
   ) => void;
 
+  const annotations = inferAnnotations(name);
   registerWithSchema(
     name,
     {
       description,
       inputSchema: schema,
       execution: { taskSupport: "optional" },
+      ...(annotations ? { annotations } : {}),
     },
     {
       createTask: async (input: z.infer<Schema>, extra: CreateTaskRequestHandlerExtra) => {
