@@ -40,6 +40,31 @@ function argFieldNames(input: unknown): string[] {
   return Object.keys(input as Record<string, unknown>);
 }
 
+/**
+ * Single emission point for `tool.call` events. Used by both
+ * `registerTool` (sync path, success + error) and
+ * `registerToolTask`'s background IIFE so the event shape stays
+ * consistent across all three call sites. Builds `durationMs` from
+ * `startedAt` to remove timing-math duplication.
+ */
+function emitToolCall(opts: {
+  tool: string;
+  clientId?: string;
+  argFields: string[];
+  startedAt: number;
+  outcome: "success" | "error";
+  taskAugmented?: boolean;
+}): void {
+  logEvent("tool.call", {
+    tool: opts.tool,
+    ...(opts.clientId ? { clientId: opts.clientId } : {}),
+    argFields: opts.argFields,
+    durationMs: Date.now() - opts.startedAt,
+    outcome: opts.outcome,
+    ...(opts.taskAugmented ? { taskAugmented: true } : {}),
+  });
+}
+
 /** Wrap a handler's return value in the MCP `content: [{text}]` shape. */
 function wrapAsText(result: unknown): {
   content: Array<{ type: "text"; text: string }>;
@@ -73,25 +98,13 @@ export function registerTool<Schema extends z.ZodObject<ZodRawShape>>(
   registerWithSchema(name, { description, inputSchema: schema }, async (input) => {
     const startedAt = Date.now();
     const argFields = argFieldNames(input);
-    const ctx = getRequestContext();
+    const clientId = getRequestContext()?.clientId;
     try {
       const result = await handler(input);
-      logEvent("tool.call", {
-        tool: name,
-        ...(ctx?.clientId ? { clientId: ctx.clientId } : {}),
-        argFields,
-        durationMs: Date.now() - startedAt,
-        outcome: "success",
-      });
+      emitToolCall({ tool: name, clientId, argFields, startedAt, outcome: "success" });
       return wrapAsText(result);
     } catch (err) {
-      logEvent("tool.call", {
-        tool: name,
-        ...(ctx?.clientId ? { clientId: ctx.clientId } : {}),
-        argFields,
-        durationMs: Date.now() - startedAt,
-        outcome: "error",
-      });
+      emitToolCall({ tool: name, clientId, argFields, startedAt, outcome: "error" });
       throw err;
     }
   });
@@ -280,11 +293,11 @@ export function registerToolTask<Schema extends z.ZodObject<ZodRawShape>>(
           // event lands with the captured clientId and a sensible
           // durationMs even if the store interaction throws on a
           // closed notification stream.
-          logEvent("tool.call", {
+          emitToolCall({
             tool: name,
-            ...(requestClientId ? { clientId: requestClientId } : {}),
+            clientId: requestClientId,
             argFields,
-            durationMs: Date.now() - handlerStart,
+            startedAt: handlerStart,
             outcome,
             taskAugmented: true,
           });

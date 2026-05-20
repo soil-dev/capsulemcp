@@ -230,22 +230,13 @@ describe("end-to-end: tool.call, capsule.request, tool.chain via the MCP wire", 
 
   it("tool.chain aggregates the request's tools and capsule calls", async () => {
     const { client, log } = await spawn("ch-client");
-    // Drive two tools through within one RequestContext frame; emit
-    // tool.chain at the end of the frame (mirrors src/http/app.ts).
+    // Drive two tools through within one RequestContext frame.
+    // `withRequestContext` owns the `tool.chain` emission — it
+    // fires automatically on scope exit, so no manual emission
+    // here. Mirrors what src/http/app.ts does today.
     await log.withRequestContext({ clientId: "ch-client" }, async () => {
       await client.callTool({ name: "list_users", arguments: {} });
       await client.callTool({ name: "list_users", arguments: {} });
-      const ctx = log.getRequestContext();
-      if (ctx) {
-        log.logEvent("tool.chain", {
-          clientId: ctx.clientId,
-          tools: ctx.tools,
-          toolCount: ctx.tools.length,
-          capsuleCalls: ctx.capsuleCalls,
-          cacheHits: ctx.cacheHits,
-          durationMs: Date.now() - ctx.startedAt,
-        });
-      }
     });
 
     const chains = parseEvents("tool.chain");
