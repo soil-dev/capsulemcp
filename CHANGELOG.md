@@ -11,6 +11,41 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.6.0-rc.3] — 2026-05-20
+
+Third release candidate. **User-visible improvement:** tools now
+carry MCP `ToolAnnotations` so clients can auto-approve safe reads
+instead of prompting before every call.
+
+Distribution tag `next` on npm — does NOT move `latest`.
+
+### Added
+
+- **MCP `ToolAnnotations` inferred from the catalogue naming
+  convention.** Every tool now carries `readOnlyHint: true` (49
+  tools — `search_*` / `filter_*` / `get_*` / `list_*` / `show_*` /
+  `run_*`) or `destructiveHint: true` (7 whole-record-delete +
+  workflow/party-association removers — same set the existing
+  `confirm: true` schema gate covers). The remaining 30 writes
+  carry no annotation; clients fall back to their default
+  (typically: prompt).
+
+  Client impact (load-bearing):
+
+  - Claude Desktop / Code: auto-approves the 49 read tools, prompts
+    only for writes. No more confirmation prompt for every `list`
+    / `get` / `search` / `filter` call.
+  - Glama and other registry-scrape clients see properly tagged
+    catalogue entries for quality scoring.
+  - Other MCP clients: annotations are hints per spec; defaults
+    unchanged.
+
+  Inference centralised in `inferAnnotations(name)` in
+  `src/server/register-tool.ts`. A new aggregate-counts assertion
+  (49 + 7 + 30 = 86) trips CI if a future tool drifts from the
+  convention, forcing an explicit annotation decision instead of
+  silent default. 5 new tests, 468 total.
+
 ## [1.6.0-rc.2] — 2026-05-20
 
 Second release candidate. Closes four docs/process gaps the rc.1
