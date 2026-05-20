@@ -18,12 +18,11 @@
  * reporting in docs; this test pins the shebang invariant which is
  * checked nowhere else.
  *
- * The build is not run from this test — CI runs `npm run build` before
- * `npm test` (see `.github/workflows/ci.yml`), and locally
- * `package.json`'s test script also chains build via the pre-release
- * gate runner. If `dist/` is missing, this test skips with an
- * actionable message rather than failing — running tests against an
- * unbuilt tree is a developer-experience choice, not an error.
+ * The build is not run from this test — CI and the pre-release gate
+ * run `npm run build` before `npm test`. If `dist/` is missing in a
+ * quick local unit-test loop, this test skips rather than failing;
+ * running tests against an unbuilt tree is a developer-experience
+ * choice, not an error.
  */
 
 import { existsSync, readFileSync, statSync } from "node:fs";
@@ -55,7 +54,7 @@ describe.skipIf(!distExists)("bundle shape (post-build canary)", () => {
     const httpKb = statSync(HTTP_PATH).size / 1024;
     // Floor catches "the bundler produced an empty file"; ceiling
     // catches "we accidentally inlined a giant dependency". The
-    // current values (~142 / ~167 KB) sit comfortably in the band.
+    // current values (~145 / ~171 KB) sit comfortably in the band.
     expect(stdioKb).toBeGreaterThan(MIN_KB);
     expect(stdioKb).toBeLessThan(MAX_KB);
     expect(httpKb).toBeGreaterThan(MIN_KB);

@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   check:
-    name: typecheck · test · build · lint
+    name: typecheck · build · test · lint
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -53,13 +53,14 @@ jobs:
         # failed in the GitHub UI.
         run: npm run format:check
 
-      - name: Test
-        run: npm test
-
       - name: Build
         # Catches regressions where typecheck passes but the bundler
         # chokes — happened once with a tsup config change.
         run: npm run build
+
+      - name: Test
+        # Runs after build so bundle-shape canaries exercise dist/.
+        run: npm test
 
       - name: Audit dependencies
         # `--audit-level=high` because npm flags a steady drip of
