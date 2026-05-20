@@ -23,7 +23,11 @@
 #   STACK=production REGION=europe-west1 PROJECT=<your-gcp-project> \
 #       ./scripts/wire-trace-tasks.sh
 #
-# Reads CLIENT_ID and CLIENT_SECRET from Secret Manager.
+# Reads CLIENT_ID / CLIENT_SECRET from env when provided. If absent,
+# falls back to Secret Manager:
+#   CLIENT_ID_SECRET     (default: capsulemcp-${STACK}-oauth-client-id)
+#   CLIENT_SECRET_SECRET (defaults: capsulemcp-${STACK}-oauth-client-secret,
+#                         then DEPLOY.md's capsulemcp-client-secret)
 #
 # Exits 0 if the lifecycle round-trips cleanly, 1 otherwise.
 
@@ -50,8 +54,36 @@ PROJECT_NUMBER=$(gcloud projects describe "${PROJECT}" --format='value(projectNu
 URL="https://${SERVICE}-${PROJECT_NUMBER}.${REGION}.run.app"
 TAG_NAME="mcp-tasks-trace-$(date +%Y%m%d-%H%M%S)"
 
-CLIENT_ID=$(gcloud secrets versions access latest --secret="capsulemcp-${STACK}-oauth-client-id")
-CLIENT_SECRET=$(gcloud secrets versions access latest --secret="capsulemcp-${STACK}-oauth-client-secret")
+read_secret() {
+    gcloud secrets versions access latest --secret="$1" 2>/dev/null
+}
+
+CLIENT_ID="${CLIENT_ID:-${MCP_OAUTH_CLIENT_ID:-}}"
+CLIENT_SECRET="${CLIENT_SECRET:-${MCP_OAUTH_CLIENT_SECRET:-}}"
+
+if [ -z "$CLIENT_ID" ]; then
+    CLIENT_ID_SECRET="${CLIENT_ID_SECRET:-capsulemcp-${STACK}-oauth-client-id}"
+    if ! CLIENT_ID=$(read_secret "$CLIENT_ID_SECRET"); then
+        echo "error: CLIENT_ID is not set and Secret Manager secret '$CLIENT_ID_SECRET' was not readable" >&2
+        echo "       Set CLIENT_ID=... (DEPLOY.md keeps client_id as a Cloud Run env var, not a secret)." >&2
+        exit 1
+    fi
+fi
+
+if [ -z "$CLIENT_SECRET" ]; then
+    if [ -n "${CLIENT_SECRET_SECRET:-}" ]; then
+        if ! CLIENT_SECRET=$(read_secret "$CLIENT_SECRET_SECRET"); then
+            echo "error: CLIENT_SECRET_SECRET='$CLIENT_SECRET_SECRET' was not readable" >&2
+            exit 1
+        fi
+    elif ! CLIENT_SECRET=$(read_secret "capsulemcp-${STACK}-oauth-client-secret"); then
+        if ! CLIENT_SECRET=$(read_secret "capsulemcp-client-secret"); then
+            echo "error: CLIENT_SECRET is not set and no default Secret Manager secret was readable" >&2
+            echo "       Tried 'capsulemcp-${STACK}-oauth-client-secret' and 'capsulemcp-client-secret'." >&2
+            exit 1
+        fi
+    fi
+fi
 
 PASS=0
 FAIL=0
