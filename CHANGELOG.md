@@ -11,6 +11,32 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.6.0-beta.4] — 2026-05-20
+
+Refactor-only release on top of beta.3. No behaviour change, same
+460 tests pass. Three targeted internal simplifications on the
+observability code:
+
+- Extracted `emitToolCall` helper — collapses the three
+  near-identical `logEvent("tool.call", …)` blocks (registerTool
+  success + error, registerToolTask IIFE) into one-line calls.
+  Single place to evolve the event shape.
+- Moved `tool.chain` emission into `withRequestContext` itself.
+  The chain lifecycle now lives in the helper that creates the
+  context — callers can never forget to emit, and the emission
+  fires via `try/finally` so partial chains stay observable on
+  error paths. `/mcp`'s handler in `src/http/app.ts` shrinks to a
+  clean 3-line wrapper.
+- Replaced the inline if/else in `logEvent`'s ctx-mutation with a
+  declarative `chainHandlers` dispatch table. Adding a new
+  chain-feeding event type is now one row.
+
+Net +26 LOC because of doc comments + the dispatch table being
+slightly more verbose than the inline conditionals — but each
+emission site is dramatically shorter and the contract per helper
+is clearer. Bundle: `dist/index.js` 144.74 KB, `dist/http.js`
+170.83 KB (unchanged).
+
 ## [1.6.0-beta.3] — 2026-05-20
 
 Observability-only release on top of beta.2. No tool surface change,
