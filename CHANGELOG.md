@@ -11,6 +11,18 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.6.0-beta.3] — 2026-05-20
+
+Observability-only release on top of beta.2. No tool surface change,
+no MCP protocol change. Adds three verbose-gated event types so
+retroactive optimization analysis (top tools, top Capsule
+endpoints, p95 latency per endpoint, N+1 detection, cache hit
+rate) is one `gcloud logging read` away. Privacy invariants
+tightened across the board.
+
+Distribution tag `beta` on npm — does NOT move the `latest`
+pointer.
+
 ### Added
 
 - **Per-tool / per-endpoint observability events** — verbose-gated
