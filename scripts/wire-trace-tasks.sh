@@ -19,8 +19,8 @@
 # `CAPSULE_MCP_READONLY=0`.
 #
 # Usage:
-#   ./scripts/wire-trace-tasks.sh
-#   STACK=production REGION=europe-west1 PROJECT=<your-gcp-project> \
+#   REGION=<your-region> ./scripts/wire-trace-tasks.sh
+#   STACK=production REGION=<your-region> PROJECT=<your-gcp-project> \
 #       ./scripts/wire-trace-tasks.sh
 #
 # Reads CLIENT_ID / CLIENT_SECRET from env when provided. If absent,
@@ -35,7 +35,7 @@ set -eu
 
 STACK="${STACK:-production}"
 PROJECT="${PROJECT:-$(gcloud config get-value project 2>/dev/null)}"
-REGION="${REGION:-europe-west1}"
+REGION="${REGION:?set REGION env var to your Cloud Run region (e.g. us-central1)}"
 SERVICE="capsulemcp-${STACK}"
 REDIRECT_URI="https://claude.ai/api/mcp/auth_callback"
 

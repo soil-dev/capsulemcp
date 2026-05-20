@@ -104,7 +104,7 @@ This walks the simplest path: `gcloud run deploy --source=.` from a checkout of 
 # 0. Prerequisites
 PROJECT=<your-gcp-project>
 PROJECT_NUMBER=$(gcloud projects describe $PROJECT --format='value(projectNumber)')
-REGION=europe-west1
+REGION=<your-region>            # e.g. us-central1, europe-west1, asia-northeast1
 SERVICE=capsulemcp
 
 # 1. Generate credentials

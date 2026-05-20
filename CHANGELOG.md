@@ -22,6 +22,35 @@ versions adhere to [Semantic Versioning](https://semver.org).
   env first and falls back to both stack-specific and DEPLOY.md Secret
   Manager names.
 
+### Changed (pre-release polish)
+
+- **Tool descriptions tightened** for 5 entries that were below the
+  catalogue's routing-quality bar: `get_project`, `update_task`,
+  `list_party_entries`, `get_entry`, `list_stages`. Each now matches
+  the depth of its peers — return shape, when to use vs related
+  tools, Capsule quirks called out. Improves LLM routing accuracy
+  and the quality signal for MCP-server registries that scrape tool
+  descriptions.
+- **Placeholder hygiene in public docs.** `DEPLOY.md` worked-example
+  `REGION=europe-west1` → `REGION=<your-region>` (with a brief
+  comment listing common region names). `scripts/wire-trace-tasks.sh`
+  now requires `REGION` to be passed explicitly rather than
+  defaulting to a specific region.
+- **`package.json` metadata for registry listings.** Added
+  `homepage`, `bugs`, and `author` fields. `homepage` points to the
+  README, `bugs` to the issue tracker, `author` matches the LICENSE
+  copyright. No effect on existing installs; improves the package
+  card on npm and discovery surfaces like glama.ai.
+- **`CONTRIBUTING.md` test-count drift fix.** Dropped the stale
+  inline count and reordered the gate snippet so `npm run build`
+  runs before `npm test` (matches CI; needed so the bundle-shape
+  canary tests have `dist/` to inspect).
+- **HOWTO bundle-size figures + bundle-shape test comment** refreshed
+  to reflect the post-description-improvement build (~147 KB stdio,
+  ~173 KB HTTP). The bundle grew ~2 KB because of the tool-description
+  expansion; well within the 50–300 KB sanity band the canary
+  enforces.
+
 ## [1.6.0-beta.5] — 2026-05-20
 
 CI + docs hygiene release on top of beta.4. No runtime behaviour

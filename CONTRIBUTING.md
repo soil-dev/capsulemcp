@@ -13,8 +13,8 @@ Run the same gates CI will run. They're fast (under a minute combined):
 npm run typecheck      # tsc --noEmit
 npm run lint           # Biome lint
 npm run format:check   # Biome format check (run `npm run format` to fix)
-npm test               # vitest (337 tests, all mocked, no token needed)
 npm run build          # tsup — catches bundler-time regressions
+npm test               # vitest (all mocked, no token needed; bundle-shape canaries need dist/)
 ```
 
 `npm run check` runs Biome's combined lint+format check. `npm run format`

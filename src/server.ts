@@ -580,7 +580,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
   registerTool(
     server,
     "get_project",
-    "Fetch a single project (case) by its numeric ID.",
+    "Fetch a single project (Capsule's term: 'case') by its numeric id. Returns the full record including name, description, status (OPEN/CLOSED), owner, stage, board, opportunityId (if linked), and timestamps. Use embed='tags,fields' to include attached tags and custom field values in one round-trip. For batch fetches of up to 50 projects at once, use get_projects instead. For the project's timeline (notes, captured emails, completed-task records) use list_project_entries.",
     getProjectSchema,
     getProject,
   );
@@ -709,7 +709,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
     registerTool(
       server,
       "update_task",
-      "Update fields on an existing task. Only the fields you provide are changed. To mark a task done prefer complete_task.",
+      "Update fields on an existing task: `description`, `dueOn`, `dueTime`, `detail`, `status` (OPEN or COMPLETED), and `ownerId`. Only the fields you provide are changed. To mark a task done, prefer the dedicated `complete_task` tool — it's idempotent (a no-op success on an already-completed task) and semantically clearer than `update_task status=COMPLETED`. Capsule rejects directly setting status=PENDING (which exists only internally for track-driven tasks); use OPEN or COMPLETED. Completed tasks remain fully editable — Capsule does not enforce closed-record immutability.",
       updateTaskSchema,
       updateTask,
     );
@@ -744,7 +744,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
   registerTool(
     server,
     "list_party_entries",
-    "List timeline entries (notes, captured emails, completed-task records) for a party. Use this to read the conversation history with a contact or organisation.",
+    "List timeline entries (notes, captured emails, completed-task records) for a party. Returns entries newest-first. Each entry has a type ('note', 'email', 'task'), free-text content, and timestamps. Use this to read the conversation history with a contact or organisation — answers questions like 'what's the latest with X?' For opportunity or project timelines, use list_opportunity_entries or list_project_entries respectively.",
     listPartyEntriesSchema,
     listPartyEntries,
   );
@@ -768,7 +768,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
   registerTool(
     server,
     "get_entry",
-    "Fetch a single timeline entry by its numeric ID. Returns full content (note body, email subject + body, etc.).",
+    "Fetch a single timeline entry by its numeric id. Returns the full payload — for a note: the body text; for a captured email: subject, body, from/to, and timestamps; for a completed-task record: the original task fields. Useful when you have an entry id from one of the `list_*_entries` calls and want the full content. To modify the body or activity-type of an existing entry use `update_entry`; to delete one use `delete_entry`.",
     getEntrySchema,
     getEntry,
   );
@@ -954,7 +954,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
   registerTool(
     server,
     "list_stages",
-    "List project stages. Without arguments returns every stage across every board (each carries a .board reference). Pass boardId to scope to one specific board.",
+    "List project (case) stages. Without arguments returns every stage across every board (each entry carries a `.board` reference so you can tell them apart). Pass `boardId` to scope the result to one specific board's stages. Use this to discover the numeric `stage.id` that `create_project` / `update_project` consume — stage names alone won't do, Capsule resolves by id. For opportunity (deal) stages, use `list_pipelines` instead — opportunities don't have stages in the project sense.",
     listStagesSchema,
     listStages,
   );

@@ -15,6 +15,11 @@
     "agent"
   ],
   "license": "Apache-2.0",
+  "author": "Anton Arapov",
+  "homepage": "https://github.com/soil-dev/capsulemcp#readme",
+  "bugs": {
+    "url": "https://github.com/soil-dev/capsulemcp/issues"
+  },
   "type": "module",
   "bin": {
     "capsulemcp": "dist/index.js"
