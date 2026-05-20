@@ -70,6 +70,29 @@ export function logVerbose(): boolean {
  * stdio transport never collides with these. The HTTP transport
  * doesn't use stdout, so the same code path works for both.
  */
+/**
+ * Per-event aggregators that mutate the active RequestContext for
+ * the `tool.chain` summary. Declarative table: adding a new event
+ * type that should feed the chain is one row. Events not in this
+ * table are emitted but don't update the chain.
+ */
+const chainHandlers: Record<
+  string,
+  (ctx: RequestContext, fields: Record<string, unknown>) => void
+> = {
+  "tool.call": (ctx, f) => {
+    if (typeof f["tool"] === "string") ctx.tools.push(f["tool"] as string);
+  },
+  "capsule.request": (ctx) => {
+    ctx.capsuleCalls += 1;
+  },
+  // Cache-hit events feed the aggregate so the chain stat is right
+  // even on tools whose Capsule calls all hit the cache.
+  "cache.hit": (ctx) => {
+    ctx.cacheHits += 1;
+  },
+};
+
 export function logEvent(
   event: string,
   fields: Record<string, unknown>,
@@ -81,18 +104,7 @@ export function logEvent(
   // gets emitted by an always-on path. (Today there's none, but the
   // discipline keeps future force:true callers honest.)
   const ctx = requestContext.getStore();
-  if (ctx) {
-    if (event === "tool.call" && typeof fields["tool"] === "string") {
-      ctx.tools.push(fields["tool"] as string);
-    } else if (event === "capsule.request") {
-      ctx.capsuleCalls += 1;
-      if (fields["cached"] === true) ctx.cacheHits += 1;
-    } else if (event === "cache.hit") {
-      // Pre-cache.* events also feed the aggregate so the chain stat
-      // is right even on tools whose Capsule calls all hit the cache.
-      ctx.cacheHits += 1;
-    }
-  }
+  if (ctx) chainHandlers[event]?.(ctx, fields);
 
   if (!opts.force && !logVerbose()) return;
   process.stderr.write(
@@ -149,6 +161,13 @@ const requestContext = new AsyncLocalStorage<RequestContext>();
  * async work it spawns) sees the same context via
  * `getRequestContext()`. The accumulator is populated implicitly by
  * `logEvent` based on event type.
+ *
+ * On scope exit (resolved or rejected), emits the `tool.chain`
+ * aggregate event with the collected stats. Owning the emission
+ * here — rather than at the caller — keeps the chain lifecycle in
+ * one place and means a caller can never forget to emit. The event
+ * fires even if `fn` throws, because partial chains are still
+ * useful for diagnosing tool errors.
  */
 export function withRequestContext<T>(
   initial: Omit<RequestContext, "tools" | "capsuleCalls" | "cacheHits" | "startedAt">,
@@ -161,7 +180,20 @@ export function withRequestContext<T>(
     cacheHits: 0,
     startedAt: Date.now(),
   };
-  return requestContext.run(ctx, fn);
+  return requestContext.run(ctx, async () => {
+    try {
+      return await fn();
+    } finally {
+      logEvent("tool.chain", {
+        ...(ctx.clientId ? { clientId: ctx.clientId } : {}),
+        tools: ctx.tools,
+        toolCount: ctx.tools.length,
+        capsuleCalls: ctx.capsuleCalls,
+        cacheHits: ctx.cacheHits,
+        durationMs: Date.now() - ctx.startedAt,
+      });
+    }
+  });
 }
 
 /** Read the active request context, if any. */
