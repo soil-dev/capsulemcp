@@ -282,7 +282,27 @@ async function fetchWithTimeout(
   }
 }
 
-async function doFetch(url: string, options: Parameters<typeof fetch>[1]): Promise<FetchResult> {
+/**
+ * Result of `doFetch` — adds the bookkeeping that `consumeBody` needs
+ * to fire the `capsule.request` event AFTER the body has been read.
+ *
+ * Keeping the emit *after* body consumption is load-bearing: pre-v1.6.1
+ * we measured only TTFB (Date.now() − startedAt at the point fetch()
+ * returned headers), which silently undercounted endpoints that send
+ * large response bodies (`list_entries` global feed was 542 ms by the
+ * old metric vs 2720 ms wall-clock end-to-end — the gap was body
+ * stream + JSON parse, invisible to the dashboard). See `consumeBody`.
+ */
+interface RequestStart {
+  res: Response;
+  cleanup: () => void;
+  startedAt: number;
+  method: string;
+  url: string;
+  retriedAfter429: boolean;
+}
+
+async function doFetch(url: string, options: Parameters<typeof fetch>[1]): Promise<RequestStart> {
   const startedAt = Date.now();
   const method = (options?.method as string | undefined) ?? "GET";
 
@@ -304,12 +324,32 @@ async function doFetch(url: string, options: Parameters<typeof fetch>[1]): Promi
         "Rate limit exceeded after one retry. Please slow down your requests.",
       );
     }
-    emitCapsuleRequest(method, url, retried.res, Date.now() - startedAt, true);
-    return retried;
+    return { ...retried, startedAt, method, url, retriedAfter429: true };
   }
 
-  emitCapsuleRequest(method, url, first.res, Date.now() - startedAt, false);
-  return first;
+  return { ...first, startedAt, method, url, retriedAfter429: false };
+}
+
+/**
+ * Wrap body consumption in the `capsule.request` emit boundary so that
+ * `durationMs` reflects the FULL request lifecycle (request issued →
+ * body fully read), not just headers received. Fires on success and
+ * on error during body parsing (4xx/5xx that read the error body,
+ * malformed JSON, mid-stream timeouts, etc.) — analytics see every
+ * outbound call, including the slow ones.
+ */
+async function consumeBody<T>(start: RequestStart, body: () => Promise<T>): Promise<T> {
+  try {
+    return await body();
+  } finally {
+    emitCapsuleRequest(
+      start.method,
+      start.url,
+      start.res,
+      Date.now() - start.startedAt,
+      start.retriedAfter429,
+    );
+  }
 }
 
 /**
@@ -399,13 +439,15 @@ function buildUrl(path: string, params?: QueryParams): string {
 export async function capsuleGet<T>(path: string, params?: QueryParams): Promise<PagedResult<T>> {
   const token = getToken();
   const url = buildUrl(path, params);
-  const { res, cleanup } = await doFetch(url, { headers: baseHeaders(token) });
+  const start = await doFetch(url, { headers: baseHeaders(token) });
   try {
-    const data = await handleResponse<T>(res);
-    const nextPage = parseNextPage(res.headers.get("Link"));
-    return { data, nextPage };
+    return await consumeBody(start, async () => {
+      const data = await handleResponse<T>(start.res);
+      const nextPage = parseNextPage(start.res.headers.get("Link"));
+      return { data, nextPage };
+    });
   } finally {
-    cleanup();
+    start.cleanup();
   }
 }
 
@@ -456,15 +498,15 @@ export async function capsulePost<T>(path: string, body: unknown): Promise<T> {
   if (isReadOnly()) throw new CapsuleReadOnlyError("POST");
   const token = getToken();
   const url = buildUrl(path);
-  const { res, cleanup } = await doFetch(url, {
+  const start = await doFetch(url, {
     method: "POST",
     headers: { ...baseHeaders(token), "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   try {
-    return await handleResponse<T>(res);
+    return await consumeBody(start, () => handleResponse<T>(start.res));
   } finally {
-    cleanup();
+    start.cleanup();
   }
 }
 
@@ -479,17 +521,19 @@ export async function capsulePostNoContent(path: string): Promise<void> {
   if (isReadOnly()) throw new CapsuleReadOnlyError("POST");
   const token = getToken();
   const url = buildUrl(path);
-  const { res, cleanup } = await doFetch(url, {
+  const start = await doFetch(url, {
     method: "POST",
     headers: baseHeaders(token),
   });
   try {
-    if (res.status === 204) return;
-    await throwForStatus(res);
-    // 2xx-but-not-204: drain the body so the connection can be reused.
-    await mapAbort(res.text());
+    await consumeBody(start, async () => {
+      if (start.res.status === 204) return;
+      await throwForStatus(start.res);
+      // 2xx-but-not-204: drain the body so the connection can be reused.
+      await mapAbort(start.res.text());
+    });
   } finally {
-    cleanup();
+    start.cleanup();
   }
 }
 
@@ -508,17 +552,19 @@ export async function capsuleSearch<T>(
 ): Promise<PagedResult<T>> {
   const token = getToken();
   const url = buildUrl(path, params);
-  const { res, cleanup } = await doFetch(url, {
+  const start = await doFetch(url, {
     method: "POST",
     headers: { ...baseHeaders(token), "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   try {
-    const data = await handleResponse<T>(res);
-    const nextPage = parseNextPage(res.headers.get("Link"));
-    return { data, nextPage };
+    return await consumeBody(start, async () => {
+      const data = await handleResponse<T>(start.res);
+      const nextPage = parseNextPage(start.res.headers.get("Link"));
+      return { data, nextPage };
+    });
   } finally {
-    cleanup();
+    start.cleanup();
   }
 }
 
@@ -526,15 +572,15 @@ export async function capsulePut<T>(path: string, body: unknown): Promise<T> {
   if (isReadOnly()) throw new CapsuleReadOnlyError("PUT");
   const token = getToken();
   const url = buildUrl(path);
-  const { res, cleanup } = await doFetch(url, {
+  const start = await doFetch(url, {
     method: "PUT",
     headers: { ...baseHeaders(token), "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   try {
-    return await handleResponse<T>(res);
+    return await consumeBody(start, () => handleResponse<T>(start.res));
   } finally {
-    cleanup();
+    start.cleanup();
   }
 }
 
@@ -563,63 +609,66 @@ export interface BinaryResult {
 export async function capsuleGetBinary(path: string, maxBytes?: number): Promise<BinaryResult> {
   const token = getToken();
   const url = buildUrl(path);
-  const { res, cleanup } = await doFetch(url, { headers: baseHeaders(token) });
+  const start = await doFetch(url, { headers: baseHeaders(token) });
   try {
-    await throwForStatus(res);
-    const contentType = res.headers.get("Content-Type") ?? "application/octet-stream";
+    return await consumeBody(start, async (): Promise<BinaryResult> => {
+      const res = start.res;
+      await throwForStatus(res);
+      const contentType = res.headers.get("Content-Type") ?? "application/octet-stream";
 
-    // Pre-buffer cap check. If Content-Length is advertised and exceeds
-    // the cap, refuse to read the body at all.
-    const declared = res.headers.get("Content-Length");
-    const declaredBytes = declared ? Number(declared) : NaN;
-    if (maxBytes !== undefined && Number.isFinite(declaredBytes) && declaredBytes > maxBytes) {
-      // Drain (cancel) the body so the connection can be released.
-      if (res.body) await res.body.cancel().catch(() => {});
-      return {
-        contentType,
-        buffer: Buffer.alloc(0),
-        truncated: true,
-        sizeBytes: declaredBytes,
-      };
-    }
-
-    // Streaming cap check. Even when Content-Length is absent or honest,
-    // abort the read once we've accumulated more than the cap. The
-    // per-chunk read is wrapped in mapAbort so a mid-stream timeout
-    // surfaces as the same clean 504 a fetch-stage timeout does.
-    if (maxBytes !== undefined && res.body) {
-      const reader = res.body.getReader();
-      const chunks: Uint8Array[] = [];
-      let total = 0;
-      let truncated = false;
-      while (true) {
-        const { done, value } = await mapAbort(reader.read());
-        if (done) break;
-        total += value.byteLength;
-        if (total > maxBytes) {
-          truncated = true;
-          await reader.cancel().catch(() => {});
-          break;
-        }
-        chunks.push(value);
-      }
-      if (truncated) {
+      // Pre-buffer cap check. If Content-Length is advertised and exceeds
+      // the cap, refuse to read the body at all.
+      const declared = res.headers.get("Content-Length");
+      const declaredBytes = declared ? Number(declared) : NaN;
+      if (maxBytes !== undefined && Number.isFinite(declaredBytes) && declaredBytes > maxBytes) {
+        // Drain (cancel) the body so the connection can be released.
+        if (res.body) await res.body.cancel().catch(() => {});
         return {
           contentType,
           buffer: Buffer.alloc(0),
           truncated: true,
-          sizeBytes: total,
+          sizeBytes: declaredBytes,
         };
       }
-      const buffer = Buffer.concat(chunks.map((c) => Buffer.from(c)));
-      return { contentType, buffer, sizeBytes: buffer.length };
-    }
 
-    const arrayBuffer = await mapAbort(res.arrayBuffer());
-    const buffer = Buffer.from(arrayBuffer);
-    return { contentType, buffer, sizeBytes: buffer.length };
+      // Streaming cap check. Even when Content-Length is absent or honest,
+      // abort the read once we've accumulated more than the cap. The
+      // per-chunk read is wrapped in mapAbort so a mid-stream timeout
+      // surfaces as the same clean 504 a fetch-stage timeout does.
+      if (maxBytes !== undefined && res.body) {
+        const reader = res.body.getReader();
+        const chunks: Uint8Array[] = [];
+        let total = 0;
+        let truncated = false;
+        while (true) {
+          const { done, value } = await mapAbort(reader.read());
+          if (done) break;
+          total += value.byteLength;
+          if (total > maxBytes) {
+            truncated = true;
+            await reader.cancel().catch(() => {});
+            break;
+          }
+          chunks.push(value);
+        }
+        if (truncated) {
+          return {
+            contentType,
+            buffer: Buffer.alloc(0),
+            truncated: true,
+            sizeBytes: total,
+          };
+        }
+        const buffer = Buffer.concat(chunks.map((c) => Buffer.from(c)));
+        return { contentType, buffer, sizeBytes: buffer.length };
+      }
+
+      const arrayBuffer = await mapAbort(res.arrayBuffer());
+      const buffer = Buffer.from(arrayBuffer);
+      return { contentType, buffer, sizeBytes: buffer.length };
+    });
   } finally {
-    cleanup();
+    start.cleanup();
   }
 }
 
@@ -640,7 +689,7 @@ export async function capsulePostBinary<T>(
   if (isReadOnly()) throw new CapsuleReadOnlyError("POST");
   const token = getToken();
   const url = buildUrl(path);
-  const { res, cleanup } = await doFetch(url, {
+  const start = await doFetch(url, {
     method: "POST",
     headers: {
       ...baseHeaders(token),
@@ -651,9 +700,9 @@ export async function capsulePostBinary<T>(
     body,
   });
   try {
-    return await handleResponse<T>(res);
+    return await consumeBody(start, () => handleResponse<T>(start.res));
   } finally {
-    cleanup();
+    start.cleanup();
   }
 }
 
@@ -666,17 +715,19 @@ export async function capsuleDelete(path: string): Promise<void> {
   if (isReadOnly()) throw new CapsuleReadOnlyError("DELETE");
   const token = getToken();
   const url = buildUrl(path);
-  const { res, cleanup } = await doFetch(url, {
+  const start = await doFetch(url, {
     method: "DELETE",
     headers: baseHeaders(token),
   });
   try {
-    if (res.status === 204) return;
-    await throwForStatus(res);
+    await consumeBody(start, async () => {
+      if (start.res.status === 204) return;
+      await throwForStatus(start.res);
 
-    // 2xx-but-not-204: drain the body so the connection can be reused.
-    await mapAbort(res.text());
+      // 2xx-but-not-204: drain the body so the connection can be reused.
+      await mapAbort(start.res.text());
+    });
   } finally {
-    cleanup();
+    start.cleanup();
   }
 }

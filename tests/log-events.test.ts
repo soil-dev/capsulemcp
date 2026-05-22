@@ -228,6 +228,50 @@ describe("end-to-end: tool.call, capsule.request, tool.chain via the MCP wire", 
     expect(typeof r["durationMs"]).toBe("number");
   });
 
+  it("capsule.request.durationMs includes body-read time (not just TTFB)", async () => {
+    // Regression for the v1.6.0 metric-fidelity bug: the emit used to
+    // fire from inside doFetch() right after headers came back, so the
+    // duration only measured TTFB. Endpoints that streamed large
+    // bodies (e.g. /entries global feed — 2720 ms wall-clock vs 542 ms
+    // in the dashboard) silently underreported. v1.6.1 moves the emit
+    // past body consumption; this test pins the new contract by making
+    // body-read take measurably longer than the fetch() return.
+    const { client, log, mockFetch } = await spawn("body-time");
+    const BODY_READ_DELAY_MS = 60;
+    mockFetch.mockImplementation(async () => {
+      // Hand-rolled stream: headers are "instant", but the single chunk
+      // doesn't enqueue for BODY_READ_DELAY_MS, so res.json() blocks
+      // for at least that long. fetch() resolves immediately with the
+      // Response — only body consumption hits the delay.
+      const body = new ReadableStream({
+        async start(controller) {
+          await new Promise((r) => setTimeout(r, BODY_READ_DELAY_MS));
+          controller.enqueue(
+            new TextEncoder().encode(JSON.stringify({ party: { id: 1, type: "person" } })),
+          );
+          controller.close();
+        },
+      });
+      return new Response(body, {
+        status: 200,
+        headers: { "content-type": "application/json", "content-length": "40" },
+      });
+    });
+
+    await log.withRequestContext({ clientId: "body-time" }, async () => {
+      await client.callTool({ name: "get_party", arguments: { id: 1 } });
+    });
+
+    const reqs = parseEvents("capsule.request");
+    expect(reqs).toHaveLength(1);
+    const dur = Number(reqs[0]!["durationMs"]);
+    // Generous lower bound — Date.now() is millisecond-resolution and
+    // event-loop jitter can shave ~10 ms off setTimeout. The old TTFB
+    // metric would report a number near 0 here regardless of the
+    // body-stream delay, so any value >= ~50 ms confirms the fix.
+    expect(dur).toBeGreaterThanOrEqual(BODY_READ_DELAY_MS - 10);
+  });
+
   it("tool.chain aggregates the request's tools and capsule calls", async () => {
     const { client, log } = await spawn("ch-client");
     // Drive two tools through within one RequestContext frame.
