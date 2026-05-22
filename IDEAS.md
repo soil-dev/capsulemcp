@@ -92,6 +92,18 @@ are common enough to justify the surface. My ranking when traffic
 data lands: opportunity_entries → party_entries → project_entries
 (the three highest expected-value), then the rest as needed.
 
+**Updated ranking from v1.6.0 production observability (48 h
+sample):** `list_party_entries` accounted for **40 of 62 tool calls
+(65%)** with a clean 1:1 ratio to `/api/v2/parties/:id/entries`
+Capsule calls — the textbook N+1 fan-out from Claude iterating
+parties to pull recent activity. Each Capsule call averages 233 ms,
+so a 10-party fan-out costs ~2.3 s sequential vs ~0.5 s parallelised
+at concurrency 5. This promotes `batch_list_party_entries` to the
+top of the queue ahead of opportunity/project variants. Track this
+in production: `jsonPayload.path="/api/v2/parties/:id/entries"`
+volume per `tool.chain`. If a single chain ever logs >3 of these,
+the batch wrapper pays for itself.
+
 ---
 
 ## Additional batched-write tools

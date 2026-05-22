@@ -11,6 +11,29 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`capsule.request.durationMs` now reflects full request lifecycle,
+  not just TTFB.** v1.6.0 emitted the event from inside `doFetch()`
+  immediately after `fetch()` returned headers, so the metric measured
+  only time-to-first-byte. Endpoints with large response bodies
+  silently undercounted: 48 h of v1.6.0 production data showed
+  `list_entries` (tenant-wide entries feed) at 542 ms in the dashboard
+  vs 2720 ms in `tool.call.durationMs` — the 2178 ms gap was body
+  stream + JSON parse, which the metric missed. Other endpoints
+  weren't visibly wrong because their bodies were small (<10 ms read
+  time). Moved the emit past body consumption so `durationMs` now
+  spans request issued → body fully read; body-stream cost is now
+  attributed correctly. No event-shape change; existing analytics
+  queries continue to work with more accurate numbers.
+
+  Affects all six write/read helpers in `src/capsule/client.ts`:
+  `capsuleGet`, `capsuleGetCached`, `capsulePost`, `capsulePostNoContent`,
+  `capsulePut`, `capsuleSearch`, `capsuleDelete`, `capsuleGetBinary`,
+  `capsulePostBinary`. New `consumeBody` helper centralises the
+  emit-after-body-read pattern; one new test pins the contract.
+  470 tests total.
+
 ## [1.6.0] — 2026-05-20
 
 **v1.6.0 stable — graduates the v1.6 line.** This cut moves the npm
