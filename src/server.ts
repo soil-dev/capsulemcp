@@ -70,6 +70,8 @@ import {
   createProject,
   updateProjectSchema,
   updateProject,
+  batchUpdateProjectSchema,
+  batchUpdateProject,
   deleteProjectSchema,
   deleteProject,
 } from "./tools/projects.js";
@@ -537,7 +539,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
     registerTool(
       server,
       "update_opportunity",
-      "Update fields on an existing opportunity, including the parent-reference field `partyId` to reassign the opp to a different primary party. Only the fields you provide are changed. Closed (Won/Lost) opportunities ARE editable — Capsule does not enforce closed-record immutability, so `value`, `description`, etc. can be changed on a Won opp without warning. If the workflow needs historical revenue numbers to be stable, enforce that caller-side. Capsule requires every opportunity to have a party — passing `partyId: null` is rejected with 422 'party is required'.",
+      "Update fields on an existing opportunity, including the parent-reference field `partyId` to reassign the opp to a different primary party. `ownerId` and `teamId` both accept `null` to unassign (verified empirically in v1.6.5 wire-trace — brings update_opportunity into parity with update_party and update_project). The combination `{ownerId: null, teamId: <id>}` puts an opportunity into 'team-owned, no specific user' state, matching the pattern available on parties and projects. Only the fields you provide are changed. Closed (Won/Lost) opportunities ARE editable — Capsule does not enforce closed-record immutability, so `value`, `description`, etc. can be changed on a Won opp without warning. If the workflow needs historical revenue numbers to be stable, enforce that caller-side. Capsule requires every opportunity to have a party — passing `partyId: null` is rejected with 422 'party is required' (Unlike `update_task.partyId` which IS nullable — tasks can be orphaned in Capsule's model).",
       updateOpportunitySchema,
       updateOpportunity,
     );
@@ -613,9 +615,17 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
     registerTool(
       server,
       "update_project",
-      "Update fields on an existing project, including the parent-reference field `partyId` to reassign the project to a different primary party. Only the fields you provide are changed. Use status='CLOSED' to close a project. CLOSED projects remain fully editable — Capsule does not enforce closed-record immutability. Stage moves and description edits on a CLOSED project are accepted without warning. Capsule requires every project to have a party — passing `partyId: null` is rejected with 422 'party is required'.",
+      "Update fields on an existing project, including the parent-reference field `partyId` to reassign the project to a different primary party. `ownerId`, `teamId`, and `stageId` all accept `null` to unassign (the latter removes the project from all stages — verified empirically in v1.6.5 wire-trace). Constraint: a project must always have at least one of {owner, team} set, so `teamId: null` on a project with no owner returns 422. Only the fields you provide are changed. Use status='CLOSED' to close a project. CLOSED projects remain fully editable — Capsule does not enforce closed-record immutability. Stage moves and description edits on a CLOSED project are accepted without warning. Capsule requires every project to have a party — passing `partyId: null` is rejected with 422 'party is required' (Unlike `update_task.partyId` which IS nullable — tasks can be orphaned in Capsule's model).",
       updateProjectSchema,
       updateProject,
+    );
+
+    registerBatchTool(
+      server,
+      "batch_update_project",
+      "Update 1–50 projects in parallel. Same input shape as update_project but wrapped in an `items` array. Use this — not N sequential update_project calls — for mass stage transitions (e.g. move a board column of projects to a new stage), bulk owner reassignments after a personnel change, or batch closures. Mirrors batch_update_party and batch_update_opportunity — identical fan-out shape across the three entity types. Connector fans out parallel HTTP requests, default cap 5 (CAPSULE_MCP_BATCH_CONCURRENCY). Returns { results: [{ok, ...} per item], summary: {total, succeeded, failed} }. Partial failures possible; Capsule has no rollback.",
+      batchUpdateProjectSchema,
+      batchUpdateProject,
     );
 
     registerTool(

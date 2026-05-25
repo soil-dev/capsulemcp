@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { setNullableRef, setRef } from "./body-helpers.js";
+import { defineBatch } from "./define-batch.js";
 import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
 import { defineDelete } from "./define-delete.js";
 import { readEntityRefs } from "./preserve-refs.js";
@@ -111,10 +112,17 @@ export const createProjectSchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional()
     .describe("YYYY-MM-DD"),
+  fields: z
+    .array(CustomFieldWriteSchema)
+    .optional()
+    .describe(
+      fieldsArrayDescriptor("get_project") +
+        " Verified empirically in v1.6.5 wire-trace: Capsule's POST /kases accepts the same `fields[]` shape as PUT, so callers can set custom field values on creation without a follow-up update. Project-specific: setting a field whose definition lives under a 'data tag' populates the row's internal tagId but does NOT auto-add the data tag to the project's tags array — use add_tag explicitly if you want it visible via embed=tags.",
+    ),
 });
 
 export async function createProject(input: z.infer<typeof createProjectSchema>) {
-  const { partyId, ownerId, teamId, status, stageId, ...rest } = input;
+  const { partyId, ownerId, teamId, status, stageId, fields, ...rest } = input;
 
   // Default applied here (not via zod's .default()) so the inferred
   // input type keeps `status` optional. Same pattern as listTasks.
@@ -130,6 +138,8 @@ export async function createProject(input: z.infer<typeof createProjectSchema>) 
   // but we follow the documented request shape on the way in. So we
   // set the value directly (not via setRef which wraps in {id:...}).
   if (stageId) body["stage"] = stageId;
+  const mappedFields = mapFieldsForBody(fields);
+  if (mappedFields !== undefined) body["fields"] = mappedFields;
 
   return capsulePost<{ kase: unknown }>("/kases", { kase: body });
 }
@@ -144,7 +154,8 @@ export const updateProjectSchema = z.object({
   partyId: positiveId
     .optional()
     .describe(
-      "Reassign the project to a different primary party. Capsule requires every project to have a party — passing `null` is rejected with 422 'party is required' (verified empirically in v1.6.3 wire-trace). Discover ids via search_parties / filter_parties.",
+      "Reassign the project to a different primary party. Capsule requires every project to have a party — passing `null` is rejected with 422 'party is required' (verified empirically in v1.6.3 wire-trace). Discover ids via search_parties / filter_parties. " +
+        "NOTE: parent-ref nullability differs by entity — `update_task.partyId` IS nullable (orphan task), but opportunities and projects must always have a parent party. The same applies to `update_opportunity.partyId`.",
     ),
   ownerId: positiveId
     .nullable()
@@ -165,9 +176,10 @@ export const updateProjectSchema = z.object({
         "A project must always have at least one of {owner, team} set — `teamId: null` on a project whose owner is already null returns 422 'owner or team is required'.",
     ),
   stageId: positiveId
+    .nullable()
     .optional()
     .describe(
-      "Move the project to this stage (board column). Discover IDs via list_stages. Owner and team are preserved across stage-only updates (Capsule's PUT semantic). " +
+      "Move the project to this stage (board column), or `null` to remove from all stages (verified empirically in v1.6.5 wire-trace — Capsule accepts `stage: null` on PUT /kases/:id and the project no longer appears on any board). Discover IDs via list_stages. Owner and team are preserved across stage-only updates (Capsule's PUT semantic). " +
         "WARNING (cross-board): Capsule does NOT validate that the new stage belongs to the project's current board — passing a stageId from a different board silently relocates the project across boards. Team and other board-derived defaults are NOT updated to match the new board. Verify against the project's current board (read the project first, list its board's stages) before passing a cross-board id.",
     ),
   expectedCloseOn: z
@@ -199,8 +211,11 @@ export async function updateProject(input: z.infer<typeof updateProjectSchema>) 
   // carry them forward. Stage carry is defensive (alpha.20-era
   // verification didn't directly probe the symmetric clear, but a
   // redundant stage in body is cheaper than risking a silent clear).
+  // `stageId: null` is an explicit clear and bypasses the carry-forward
+  // path — `undefined` means "don't touch", `null` means "remove from
+  // all stages" (verified accepted in v1.6.5 wire-trace).
   let resolvedTeamId: number | null | undefined = teamId;
-  let resolvedStageId: number | undefined = stageId;
+  let resolvedStageId: number | null | undefined = stageId;
   if (ownerId !== undefined && (teamId === undefined || stageId === undefined)) {
     const current = await readEntityRefs(`/kases/${id}`, "kase");
     if (teamId === undefined) resolvedTeamId = current.teamId;
@@ -209,12 +224,25 @@ export async function updateProject(input: z.infer<typeof updateProjectSchema>) 
 
   setNullableRef(body, "owner", ownerId);
   setNullableRef(body, "team", resolvedTeamId);
-  if (resolvedStageId) body["stage"] = resolvedStageId;
+  // Capsule's stage uses a bare integer on the wire (not `{id: ...}`).
+  // `null` clears the stage; `undefined` leaves it untouched.
+  if (resolvedStageId === null) body["stage"] = null;
+  else if (resolvedStageId !== undefined) body["stage"] = resolvedStageId;
   const mappedFields = mapFieldsForBody(fields);
   if (mappedFields !== undefined) body["fields"] = mappedFields;
 
   return capsulePut<{ kase: unknown }>(`/kases/${id}`, { kase: body });
 }
+
+// ── batch_update_project (write, fan-out) ──────────────────────────────────
+
+export const { schema: batchUpdateProjectSchema, handler: batchUpdateProject } = defineBatch({
+  toolName: "batch_update_project",
+  itemSchema: updateProjectSchema,
+  itemDescription:
+    "Array of 1–50 update_project inputs. Each item is the same shape as a single update_project call — id is required, every other field is optional. Capped at 50 so a single tool call can't burn an outsized share of Capsule's hourly per-token rate budget (~4000 req/h). Mirrors batch_update_party and batch_update_opportunity — same shape across the three entity types.",
+  itemHandler: updateProject,
+});
 
 // ───────────────────────────────────────────────────────────────────────────
 

@@ -137,10 +137,17 @@ export const createOpportunitySchema = z.object({
     .describe(
       "Assign to team ID (discover via list_teams). Independent from `ownerId` — setting one does NOT clear the other on create. Three ownership shapes are valid: owner alone, team alone, or owner+team (the owner must be a member of the team; users can belong to multiple teams — 422 'owner is not a member of the team' otherwise).",
     ),
+  fields: z
+    .array(CustomFieldWriteSchema)
+    .optional()
+    .describe(
+      fieldsArrayDescriptor("get_opportunity") +
+        " Capsule's POST /opportunities accepts the same `fields[]` shape as PUT (inferred by symmetry with the v1.6.5 wire-trace findings on POST /parties and POST /kases — the tenant probed had no opportunity custom fields configured, so this is unverified empirically). Setting custom fields on creation removes the create-then-update ritual.",
+    ),
 });
 
 export async function createOpportunity(input: z.infer<typeof createOpportunitySchema>) {
-  const { partyId, milestoneId, ownerId, teamId, ...rest } = input;
+  const { partyId, milestoneId, ownerId, teamId, fields, ...rest } = input;
 
   const body: Record<string, unknown> = {
     ...rest,
@@ -149,6 +156,8 @@ export async function createOpportunity(input: z.infer<typeof createOpportunityS
   };
   setRef(body, "owner", ownerId);
   setRef(body, "team", teamId);
+  const mappedFields = mapFieldsForBody(fields);
+  if (mappedFields !== undefined) body["fields"] = mappedFields;
 
   return capsulePost<{ opportunity: unknown }>("/opportunities", { opportunity: body });
 }
@@ -162,7 +171,8 @@ export const updateOpportunitySchema = z.object({
     .optional()
     .describe(
       "Reassign the opportunity to a different primary party. Capsule requires every opportunity to have a party — passing `null` is rejected with 422 'party is required' (use Capsule's web UI if you need to dissolve the link entirely). Discover ids via search_parties / filter_parties. " +
-        "No defensive read-modify-write needed: this connector verified empirically (v1.6.3 wire-trace) that `party` is a standalone PUT field on /opportunities and does not interact with the asymmetric owner/team semantic from NOTES-ON-CAPSULE-API.md §27.",
+        "No defensive read-modify-write needed: this connector verified empirically (v1.6.3 wire-trace) that `party` is a standalone PUT field on /opportunities and does not interact with the asymmetric owner/team semantic from NOTES-ON-CAPSULE-API.md §27. " +
+        "NOTE: parent-ref nullability differs by entity — `update_task.partyId` IS nullable (orphan task), but opportunities and projects must always have a parent party. The same applies to `update_project.partyId`.",
     ),
   milestoneId: positiveId
     .optional()
@@ -193,10 +203,12 @@ export const updateOpportunitySchema = z.object({
       "Reason the opportunity was lost. Only meaningful when transitioning to a Lost milestone — Capsule silently drops it for other milestones. Without this set, a connector-driven Lost-close leaves `lostReason: null`. Discover IDs via list_lostreasons.",
     ),
   ownerId: positiveId
+    .nullable()
     .optional()
     .describe(
-      "Reassign owner to user ID. Once set, this connector cannot clear an owner back to null — use Capsule's web UI for that. " +
-        "When you supply `ownerId` and omit `teamId`, the connector fetches the opportunity's current team and includes it in the PUT body to preserve it across the owner change. Without this defensive read, Capsule's PUT would clear the existing team (see NOTES-ON-CAPSULE-API.md §27 — same asymmetric semantic as /kases). Supply `teamId` explicitly on the same call to change the team instead.",
+      "Reassign owner: pass a user ID to set, or `null` to unassign (verified empirically in v1.6.5 wire-trace — Capsule accepts `owner: null` on PUT /opportunities/:id, mirroring the v1.6.4 finding on /parties; brings update_opportunity into parity with update_party and update_project). " +
+        "When you supply `ownerId` and omit `teamId`, the connector fetches the opportunity's current team and includes it in the PUT body to preserve it across the owner change. Without this defensive read, Capsule's PUT would clear the existing team (see NOTES-ON-CAPSULE-API.md §27 — same asymmetric semantic as /kases). Supply `teamId` explicitly on the same call to change the team instead. " +
+        "Combine `ownerId: null` + `teamId: <T>` in one call to transfer an opportunity to team-ownership with no specific user (verified empirically in v1.6.5; the owner-clears-team semantic doesn't fire when owner is being cleared to null).",
     ),
   teamId: positiveId
     .nullable()
@@ -232,7 +244,7 @@ export async function updateOpportunity(input: z.infer<typeof updateOpportunityS
     ({ teamId: resolvedTeamId } = await readEntityRefs(`/opportunities/${id}`, "opportunity"));
   }
 
-  setRef(body, "owner", ownerId);
+  setNullableRef(body, "owner", ownerId);
   setNullableRef(body, "team", resolvedTeamId);
   // Capsule's body field is `lostReason: {id}`. Only meaningful when
   // closing to Lost; for other milestones Capsule drops it silently.
