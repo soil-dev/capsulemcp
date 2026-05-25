@@ -11,6 +11,22 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.6.5] — 2026-05-25
+
+Patch release on top of v1.6.3. Combines two waves of consistency
+work: a gap-driven fix for parties (teamId + nullable ownerId,
+matching what was already shipping for opportunities and projects
+in v1.6.3) followed by a tool-surface consistency audit that
+extended the same nullability and create-time conveniences across
+all entity types — opportunity owner-clear, project stage-clear,
+custom `fields[]` accepted on `create_*`, and a new
+`batch_update_project` to complete the batch-update trio. Net
+effect: callers who learn one `update_*` / `create_*` tool can
+transfer that mental model to the others without surprises. All
+behavioural changes empirically verified via
+`scripts/wire-trace-v164.ts` and `scripts/wire-trace-v165.ts`
+against a live Capsule tenant.
+
 ### Added
 
 - **`teamId` on `create_party` / `update_party` /
