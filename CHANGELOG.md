@@ -34,6 +34,33 @@ versions adhere to [Semantic Versioning](https://semver.org).
   emit-after-body-read pattern; one new test pins the contract.
   470 tests total.
 
+- **`update_opportunity` and `batch_update_opportunity` no longer
+  silently clear `team` when only `ownerId` is supplied.** Capsule's
+  PUT `/opportunities/:id` mirrors the asymmetric owner/team semantic
+  documented for `/kases` in NOTES-ON-CAPSULE-API.md §27: setting
+  `owner` in the body clears `team` unless `team` is also supplied;
+  setting `team` alone preserves the existing `owner`. Production
+  bug report: bulk-assigning ownership to a user stripped team
+  affiliation across 30 opportunities. Applied the same defensive
+  read-modify-write pattern that `update_project` already uses —
+  when `ownerId` is touched and `teamId` is omitted, the connector
+  fetches the opportunity's current team and includes it in the PUT
+  body so the team is preserved. One extra `GET /opportunities/:id`
+  on the owner-touched code path; no overhead when `teamId` is also
+  explicit. 477 tests total (6 new for opportunity-team coverage).
+
+### Added
+
+- **`teamId` on `create_opportunity`, `update_opportunity`, and
+  (via the shared schema) `batch_update_opportunity`.** Capsule
+  opportunities carry both `owner` (a user) and `team` independently,
+  but the connector previously only exposed `ownerId` — the team
+  field could only be set via Capsule's web UI. The new `teamId`
+  parameter takes a positive integer (discover IDs via `list_teams`)
+  to assign a team, or `null` on update to clear it. Same ownership
+  shapes as projects: owner alone, team alone, or owner+team (the
+  owner must be a member of the team or Capsule returns 422).
+
 ## [1.6.0] — 2026-05-20
 
 **v1.6.0 stable — graduates the v1.6 line.** This cut moves the npm
