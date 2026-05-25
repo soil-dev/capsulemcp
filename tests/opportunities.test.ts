@@ -67,6 +67,41 @@ describe("createOpportunity", () => {
     expect(body.opportunity.party).toEqual({ id: 1 });
     expect(body.opportunity.milestone).toEqual({ id: 3 });
   });
+
+  it("maps teamId → team:{id} in the request body", async () => {
+    mockFetch(201, { opportunity: { id: 20, team: { id: 88, name: "Sales" } } });
+
+    const { createOpportunity } = await import("../src/tools/opportunities.js");
+    await createOpportunity({ name: "New Deal", partyId: 1, milestoneId: 3, teamId: 88 });
+
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.opportunity.team).toEqual({ id: 88 });
+    // user-facing field name doesn't leak into the API body
+    expect(body.opportunity.teamId).toBeUndefined();
+  });
+
+  it("sends both owner and team when ownerId+teamId supplied (USER+TEAM ownership shape)", async () => {
+    // Production workflow: assign opportunity to a specific user AND
+    // make it visible to a team. Capsule supports this shape natively
+    // — owner must be a member of the team or returns 422, but the API
+    // accepts both fields on create.
+    mockFetch(201, { opportunity: { id: 20 } });
+
+    const { createOpportunity } = await import("../src/tools/opportunities.js");
+    await createOpportunity({
+      name: "Joint Deal",
+      partyId: 1,
+      milestoneId: 3,
+      ownerId: 7,
+      teamId: 88,
+    });
+
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.opportunity.owner).toEqual({ id: 7 });
+    expect(body.opportunity.team).toEqual({ id: 88 });
+  });
 });
 
 describe("deleteOpportunity", () => {
@@ -130,6 +165,90 @@ describe("updateOpportunity", () => {
     expect(body.opportunity.lostReason).toEqual({ id: 42 });
     // user-facing field name doesn't leak into the API body
     expect(body.opportunity.lostReasonId).toBeUndefined();
+  });
+
+  it("maps teamId → team:{id} in the request body (no defensive read when teamId is explicit)", async () => {
+    mockFetch(200, { opportunity: { id: 20 } });
+    const { updateOpportunity } = await import("../src/tools/opportunities.js");
+    await updateOpportunity({ id: 20, teamId: 88 });
+
+    // One call: PUT only. No GET because ownerId is undefined.
+    expect(vi.mocked(fetch).mock.calls).toHaveLength(1);
+    const [url, options] = vi.mocked(fetch).mock.calls[0]!;
+    expect(String(url)).toContain("/opportunities/20");
+    expect((options as RequestInit).method).toBe("PUT");
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.opportunity.team).toEqual({ id: 88 });
+    expect(body.opportunity.teamId).toBeUndefined();
+  });
+
+  it("teamId: null clears the team", async () => {
+    mockFetch(200, { opportunity: { id: 20 } });
+    const { updateOpportunity } = await import("../src/tools/opportunities.js");
+    await updateOpportunity({ id: 20, teamId: null });
+
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.opportunity).toHaveProperty("team", null);
+  });
+
+  it("ownerId alone preserves the existing team via read-modify-write (regression for §27 asymmetric PUT)", async () => {
+    // Capsule's PUT on /opportunities mirrors /kases: setting `owner`
+    // alone clears `team` server-side. Reported as a production bug:
+    // a bulk owner-reassignment stripped team affiliation across
+    // multiple opportunities. The fix is the same defensive read
+    // used by update_project: when ownerId is touched and teamId is
+    // omitted, fetch the current team and carry it forward in the
+    // PUT body.
+    mockFetch(200, { opportunity: { id: 20, team: { id: 42, name: "Ops" } } }); // GET
+    mockFetch(200, { opportunity: { id: 20 } }); // PUT
+
+    const { updateOpportunity } = await import("../src/tools/opportunities.js");
+    await updateOpportunity({ id: 20, ownerId: 7 });
+
+    expect(vi.mocked(fetch).mock.calls).toHaveLength(2);
+    const [getUrl, getOptions] = vi.mocked(fetch).mock.calls[0]!;
+    expect(String(getUrl)).toMatch(/\/opportunities\/20($|\?)/);
+    expect((getOptions as RequestInit).method ?? "GET").toBe("GET");
+
+    const [putUrl, putOptions] = vi.mocked(fetch).mock.calls[1]!;
+    expect(String(putUrl)).toContain("/opportunities/20");
+    expect((putOptions as RequestInit).method).toBe("PUT");
+    const body = JSON.parse((putOptions as RequestInit).body as string);
+    expect(body.opportunity.owner).toEqual({ id: 7 });
+    // Team preserved from the GET — without this, Capsule would clear it.
+    expect(body.opportunity.team).toEqual({ id: 42 });
+  });
+
+  it("ownerId alone with currentTeam=null: PUT body omits team (no spurious clear)", async () => {
+    // When the opp has no team to begin with, the read still happens
+    // but no team is carried forward — sending team: null would be a
+    // redundant clear.
+    mockFetch(200, { opportunity: { id: 20, team: null } }); // GET
+    mockFetch(200, { opportunity: { id: 20 } }); // PUT
+
+    const { updateOpportunity } = await import("../src/tools/opportunities.js");
+    await updateOpportunity({ id: 20, ownerId: 7 });
+
+    const [, putOptions] = vi.mocked(fetch).mock.calls[1]!;
+    const body = JSON.parse((putOptions as RequestInit).body as string);
+    expect(body.opportunity.owner).toEqual({ id: 7 });
+    expect(body.opportunity).not.toHaveProperty("team");
+  });
+
+  it("ownerId + explicit teamId: explicit teamId wins, no defensive GET", async () => {
+    // Both fields explicit → no need to fetch current state.
+    mockFetch(200, { opportunity: { id: 20 } });
+
+    const { updateOpportunity } = await import("../src/tools/opportunities.js");
+    await updateOpportunity({ id: 20, ownerId: 7, teamId: 88 });
+
+    expect(vi.mocked(fetch).mock.calls).toHaveLength(1);
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    expect((options as RequestInit).method).toBe("PUT");
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.opportunity.owner).toEqual({ id: 7 });
+    expect(body.opportunity.team).toEqual({ id: 88 });
   });
 });
 
