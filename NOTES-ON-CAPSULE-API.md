@@ -884,6 +884,9 @@ The owner/team half of the PUT semantic is **asymmetric**:
   `stage`) → owner and team both preserved.
 
 This is the only owner/team-related rule the API itself imposes.
+For the orthogonal `party` / `organisation` parent-reference PUT
+rules (when re-parenting an entity to a different party, linking a
+person to an org, etc.), see §31.
 
 ### Opportunity owner/team updates mirror Rule A
 

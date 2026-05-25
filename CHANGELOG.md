@@ -37,7 +37,7 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
   All wire-trace verified (`scripts/wire-trace-v163.ts`) against a
   live tenant before exposing. Findings documented in
-  NOTES-ON-CAPSULE-API.md §31. 10 new tests, 495 total.
+  NOTES-ON-CAPSULE-API.md §31. 10 new tests, 496 total.
 
   `batch_update_opportunity` / `batch_update_party` inherit the
   new fields via the shared item schemas — no code change for batch.
