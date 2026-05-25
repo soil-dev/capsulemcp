@@ -11,6 +11,81 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Fixed
+
+- **All Capsule entity ID fields now accept integer-shaped strings**
+  via `z.coerce.number()`. Production data surfaced a class of
+  intermittent `Input validation error: expected number, received
+  string` rejections that traced to LLM-driven MCP clients
+  serializing IDs as JSON strings on some calls and integers on
+  others (non-deterministic across calls — same logical input,
+  different wire type). Coercion is safe: `Number("123")` → 123
+  passes `.int().positive()`; `Number("abc")` → NaN still rejects.
+  Applied uniformly across `id`, `partyId`, `opportunityId`,
+  `projectId`, `milestoneId`, `ownerId`, `teamId`, `stageId`,
+  `lostReasonId`, `entityId`, `trackId`, `definitionId`,
+  `fieldId`, `pipelineId`, `boardId`, `addressId`, `emailAddressId`,
+  `phoneNumberId`, `websiteId`, `organisationId`, `tagId`,
+  `trackDefinitionId`, and the `ids` array on every batch-fetch tool.
+  Centralised in `src/tools/shared-schemas.ts` so future ID schemas
+  pick the contract up automatically. Non-ID positive integers
+  (`page`, `perPage`, `probability`, monetary `amount`) remain
+  strict — coercion there would mask legitimate caller-side bugs.
+  8 new tests in `tests/shared-schemas.test.ts`, 485 total.
+
+### Documentation
+
+- **`create_opportunity.milestoneId`** and **`update_opportunity.milestoneId`**
+  descriptions now document that tenants can configure
+  pipeline/milestone-reached automation rules in Capsule (Settings
+  → Sales Pipeline → Automation) that mutate `owner` and/or `team`
+  immediately after creation or milestone transition. The "Assign to
+  a Team" automation action in particular inherits the asymmetric
+  write semantic from NOTES-ON-CAPSULE-API.md §27 and will clear
+  `owner` as a side-effect even when the caller passed `ownerId`.
+  Symmetric to the board-automation note already on
+  `create_project.ownerId`. Documented workaround: chain a
+  `batch_update_opportunity` PUT carrying both `ownerId` and
+  `teamId` — PUT does not re-fire milestone-reached triggers.
+
+- **`list_teams`** description extends the team-membership probe
+  pattern to include `batch_update_opportunity` alongside
+  `update_project`, since v1.6.1 surfaced `teamId` on opportunity
+  updates with the same 422-on-non-member semantic.
+
+### Refactor (no behaviour change)
+
+- **`defineDelete` helper** (`src/tools/define-delete.ts`)
+  centralises the schema + handler pair for the five `delete_*`
+  tools. Each whole-record delete now reads as a 5-line config
+  block instead of a 12-line near-duplicate. Single place to
+  evolve the confirm-gate enforcement, the idempotency wrapping,
+  and the `{deleted, alreadyDeleted, id}` envelope.
+
+- **`setRef` / `setNullableRef` helpers** (`src/tools/body-helpers.ts`)
+  replace the `if (X) body["x"] = { id: X }` pattern repeated
+  ~30 times across opportunities / projects / parties / tasks /
+  entries. The null-aware variant handles the explicit-unassign
+  case used by `update_project { ownerId: null }` /
+  `update_opportunity { teamId: null }` in one line.
+
+- **`readEntityRefs` helper** (`src/tools/preserve-refs.ts`)
+  centralises the defensive read used by `update_project` and
+  `update_opportunity` to carry `team` / `stage` across an
+  owner-only PUT (defeats the §27 asymmetric clear). Both update
+  handlers now share one definition of the GET shape.
+
+- **`defineBatch` helper** (`src/tools/define-batch.ts`) builds
+  the schema + fan-out handler for the four `items`-shaped batch
+  tools (`batch_update_party`, `batch_update_opportunity`,
+  `batch_add_tag`, `batch_remove_tag_by_id`). Each batch tool
+  reduces to a 6-line config block. `batch_complete_task` stays
+  inline by design (uses `ids` shape, not `items`).
+
+  **Net bundle impact**: `dist/index.js` 149.36 KB / `dist/http.js`
+  175.85 KB — bundle SHRANK ~0.6 KB despite added helper code, as
+  the deduplication outweighs the helper overhead.
+
 ## [1.6.1] — 2026-05-25
 
 Patch release on top of v1.6.0. Two production-driven fixes (one

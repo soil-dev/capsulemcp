@@ -30,8 +30,9 @@
  */
 
 import { z } from "zod";
+import { defineBatch } from "./define-batch.js";
+import { positiveId } from "./shared-schemas.js";
 import { capsuleGetCached, capsulePut } from "../capsule/client.js";
-import { type BatchOpts, batchExecute } from "../capsule/batch.js";
 import { invalidateByPrefix } from "../capsule/cache.js";
 import { idempotentWithResult, isCapsuleTagNotFound } from "../capsule/idempotent.js";
 
@@ -76,7 +77,7 @@ export async function listTags(input: z.infer<typeof listTagsSchema>) {
 
 export const addTagSchema = z.object({
   entity: TagEntity,
-  entityId: z.number().int().positive().describe("The party/opportunity/kase id."),
+  entityId: positiveId.describe("The party/opportunity/kase id."),
   tagName: z
     .string()
     .min(1)
@@ -102,14 +103,10 @@ export async function addTag(input: z.infer<typeof addTagSchema>) {
 
 export const removeTagByIdSchema = z.object({
   entity: TagEntity,
-  entityId: z.number().int().positive().describe("The party/opportunity/kase id."),
-  tagId: z
-    .number()
-    .int()
-    .positive()
-    .describe(
-      "The tag's id. Read via get_party / get_opportunity / get_project with embed='tags' — each tag entry in the response has an `id` field. list_tags returns the same ids for the same tags, so either source works; reading via embed first is the safer pattern because it confirms the tag is actually attached to this entity before you try to remove it (otherwise Capsule returns 422 'tag not found to delete'). Removing detaches the tag from this entity only; the tag definition itself persists in the tenant for other entities that share it.",
-    ),
+  entityId: positiveId.describe("The party/opportunity/kase id."),
+  tagId: positiveId.describe(
+    "The tag's id. Read via get_party / get_opportunity / get_project with embed='tags' — each tag entry in the response has an `id` field. list_tags returns the same ids for the same tags, so either source works; reading via embed first is the safer pattern because it confirms the tag is actually attached to this entity before you try to remove it (otherwise Capsule returns 422 'tag not found to delete'). Removing detaches the tag from this entity only; the tag definition itself persists in the tenant for other entities that share it.",
+  ),
 });
 
 export async function removeTagById(input: z.infer<typeof removeTagByIdSchema>) {
@@ -143,35 +140,20 @@ export async function removeTagById(input: z.infer<typeof removeTagByIdSchema>) 
 
 // ── batch_add_tag (write, fan-out) ────────────────────────────────────────
 
-export const batchAddTagSchema = z.object({
-  items: z
-    .array(addTagSchema)
-    .min(1)
-    .max(50)
-    .describe(
-      "Array of 1–50 add_tag inputs. Useful for mass-tagging — e.g. 'tag these 20 contacts as RSAC26'. Each item is the same shape as a single add_tag call. The list_tags cache is invalidated for each affected entity type. Capped at 50.",
-    ),
+export const { schema: batchAddTagSchema, handler: batchAddTag } = defineBatch({
+  toolName: "batch_add_tag",
+  itemSchema: addTagSchema,
+  itemDescription:
+    "Array of 1–50 add_tag inputs. Useful for mass-tagging — e.g. 'tag these 20 contacts as RSAC26'. Each item is the same shape as a single add_tag call. The list_tags cache is invalidated for each affected entity type. Capped at 50.",
+  itemHandler: addTag,
 });
-
-export async function batchAddTag(input: z.infer<typeof batchAddTagSchema>, opts: BatchOpts = {}) {
-  return batchExecute("batch_add_tag", input.items, (item) => addTag(item), opts);
-}
 
 // ── batch_remove_tag_by_id (write, fan-out) ───────────────────────────────
 
-export const batchRemoveTagByIdSchema = z.object({
-  items: z
-    .array(removeTagByIdSchema)
-    .min(1)
-    .max(50)
-    .describe(
-      "Array of 1–50 remove_tag_by_id inputs. Each item is the same shape as a single remove_tag_by_id call. Detaches the tag from each specified entity; the tag definition itself persists in the tenant. Capped at 50.",
-    ),
+export const { schema: batchRemoveTagByIdSchema, handler: batchRemoveTagById } = defineBatch({
+  toolName: "batch_remove_tag_by_id",
+  itemSchema: removeTagByIdSchema,
+  itemDescription:
+    "Array of 1–50 remove_tag_by_id inputs. Each item is the same shape as a single remove_tag_by_id call. Detaches the tag from each specified entity; the tag definition itself persists in the tenant. Capped at 50.",
+  itemHandler: removeTagById,
 });
-
-export async function batchRemoveTagById(
-  input: z.infer<typeof batchRemoveTagByIdSchema>,
-  opts: BatchOpts = {},
-) {
-  return batchExecute("batch_remove_tag_by_id", input.items, (item) => removeTagById(item), opts);
-}

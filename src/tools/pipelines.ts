@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { positiveId } from "./shared-schemas.js";
 import { capsuleGetCached } from "../capsule/client.js";
 
 const paginationFields = {
@@ -19,7 +20,7 @@ export async function listPipelines(input: z.infer<typeof listPipelinesSchema>) 
 // ───────────────────────────────────────────────────────────────────────────
 
 export const listMilestonesSchema = z.object({
-  pipelineId: z.number().int().positive(),
+  pipelineId: positiveId,
   ...paginationFields,
 });
 

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { positiveId } from "./shared-schemas.js";
 import { capsuleGetCached } from "../capsule/client.js";
 
 // Boards and stages are the project (kase) equivalents of pipelines and
@@ -31,10 +32,7 @@ export async function listBoards(input: z.infer<typeof listBoardsSchema>) {
 // optional `boardId` to filter to a single board (uses /boards/{id}/stages).
 
 export const listStagesSchema = z.object({
-  boardId: z
-    .number()
-    .int()
-    .positive()
+  boardId: positiveId
     .optional()
     .describe(
       "Optional. If provided, returns only the stages defined on that specific board (uses /boards/{id}/stages). Omit to get all stages across all boards in one call.",

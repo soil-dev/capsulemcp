@@ -1,8 +1,9 @@
 import { z } from "zod";
+import { positiveId } from "./shared-schemas.js";
+import { setRef } from "./body-helpers.js";
 import { EMBED_ATTACHMENTS_PARTICIPANTS_DESCRIPTION } from "./descriptions.js";
-import { confirmFlag } from "./confirm-flag.js";
-import { idempotent } from "../capsule/idempotent.js";
-import { capsuleDelete, capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
+import { defineDelete } from "./define-delete.js";
+import { capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
 
 // ── Read ────────────────────────────────────────────────────────────────────
 
@@ -13,7 +14,7 @@ const listEntriesPagination = {
 };
 
 export const listPartyEntriesSchema = z.object({
-  partyId: z.number().int().positive(),
+  partyId: positiveId,
   ...listEntriesPagination,
 });
 
@@ -26,7 +27,7 @@ export async function listPartyEntries(input: z.infer<typeof listPartyEntriesSch
 }
 
 export const listOpportunityEntriesSchema = z.object({
-  opportunityId: z.number().int().positive(),
+  opportunityId: positiveId,
   ...listEntriesPagination,
 });
 
@@ -39,7 +40,7 @@ export async function listOpportunityEntries(input: z.infer<typeof listOpportuni
 }
 
 export const listProjectEntriesSchema = z.object({
-  projectId: z.number().int().positive(),
+  projectId: positiveId,
   ...listEntriesPagination,
 });
 
@@ -52,7 +53,7 @@ export async function listProjectEntries(input: z.infer<typeof listProjectEntrie
 }
 
 export const getEntrySchema = z.object({
-  id: z.number().int().positive(),
+  id: positiveId,
   embed: z.string().optional().describe(EMBED_ATTACHMENTS_PARTICIPANTS_DESCRIPTION),
 });
 
@@ -93,22 +94,13 @@ export const addNoteSchema = z.object({
     .describe(
       "Note body text. Stored verbatim and treated as MARKDOWN — Capsule's web UI renders the markdown when displaying. Pass markdown source ('# Heading', '**bold**', '- bullet'), not HTML.",
     ),
-  partyId: z
-    .number()
-    .int()
-    .positive()
+  partyId: positiveId
     .optional()
     .describe("Link note to a party (mutually exclusive with opportunityId/projectId)"),
-  opportunityId: z
-    .number()
-    .int()
-    .positive()
+  opportunityId: positiveId
     .optional()
     .describe("Link note to an opportunity (mutually exclusive with partyId/projectId)"),
-  projectId: z
-    .number()
-    .int()
-    .positive()
+  projectId: positiveId
     .optional()
     .describe("Link note to a project (mutually exclusive with partyId/opportunityId)"),
   entryAt: z
@@ -129,9 +121,9 @@ export async function addNote(input: z.infer<typeof addNoteSchema>) {
   }
 
   const body: Record<string, unknown> = { type: "note", content };
-  if (partyId) body["party"] = { id: partyId };
-  if (opportunityId) body["opportunity"] = { id: opportunityId };
-  if (projectId) body["kase"] = { id: projectId };
+  setRef(body, "party", partyId);
+  setRef(body, "opportunity", opportunityId);
+  setRef(body, "kase", projectId);
   if (entryAt !== undefined) body["entryAt"] = entryAt;
 
   return capsulePost<{ entry: unknown }>("/entries", { entry: body });
@@ -146,7 +138,7 @@ export async function addNote(input: z.infer<typeof addNoteSchema>) {
 // can't be changed via this endpoint.
 
 export const updateEntrySchema = z.object({
-  id: z.number().int().positive().describe("Entry ID to update"),
+  id: positiveId.describe("Entry ID to update"),
   content: z
     .string()
     .min(1)
@@ -177,20 +169,10 @@ export async function updateEntry(input: z.infer<typeof updateEntrySchema>) {
 
 // ───────────────────────────────────────────────────────────────────────────
 
-export const deleteEntrySchema = z.object({
-  id: z.number().int().positive().describe("Entry (note/email/task-record) ID"),
-  confirm: confirmFlag().describe(
+export const { schema: deleteEntrySchema, handler: deleteEntry } = defineDelete({
+  toolName: "delete_entry",
+  pathPrefix: "/entries",
+  confirmHint:
     "Must be set to true. Permanently deletes the entry — use this to remove a note from a party/opportunity/project. Irreversible.",
-  ),
+  idDescription: "Entry (note/email/task-record) ID",
 });
-
-export async function deleteEntry(input: z.infer<typeof deleteEntrySchema>) {
-  if (input.confirm !== true) {
-    throw new Error("delete_entry requires confirm: true");
-  }
-  return idempotent(
-    () => capsuleDelete(`/entries/${input.id}`),
-    () => ({ deleted: true, alreadyDeleted: false, id: input.id }),
-    () => ({ deleted: true, alreadyDeleted: true, id: input.id }),
-  );
-}

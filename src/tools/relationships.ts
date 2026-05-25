@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { positiveId } from "./shared-schemas.js";
 import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
 import { confirmFlag } from "./confirm-flag.js";
 import {
@@ -37,7 +38,7 @@ const RelationshipEntity = z
 
 export const listAdditionalPartiesSchema = z.object({
   entity: RelationshipEntity,
-  entityId: z.number().int().positive().describe("ID of the opportunity or project."),
+  entityId: positiveId.describe("ID of the opportunity or project."),
   embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
   page: z.number().int().positive().optional().default(1),
   perPage: z.number().int().min(1).max(100).optional().default(25),
@@ -55,12 +56,10 @@ export async function listAdditionalParties(input: z.infer<typeof listAdditional
 
 export const addAdditionalPartySchema = z.object({
   entity: RelationshipEntity,
-  entityId: z.number().int().positive(),
-  partyId: z
-    .number()
-    .int()
-    .positive()
-    .describe("ID of the party (person or organisation) to link as an additional party."),
+  entityId: positiveId,
+  partyId: positiveId.describe(
+    "ID of the party (person or organisation) to link as an additional party.",
+  ),
 });
 
 export async function addAdditionalParty(input: z.infer<typeof addAdditionalPartySchema>) {
@@ -108,8 +107,8 @@ export async function addAdditionalParty(input: z.infer<typeof addAdditionalPart
 
 export const removeAdditionalPartySchema = z.object({
   entity: RelationshipEntity,
-  entityId: z.number().int().positive(),
-  partyId: z.number().int().positive(),
+  entityId: positiveId,
+  partyId: positiveId,
   confirm: confirmFlag().describe(
     "Must be set to true. Removes the link between the entity and the additional party. The party itself is not deleted. Reversible by re-adding the link.",
   ),
@@ -144,7 +143,7 @@ export async function removeAdditionalParty(input: z.infer<typeof removeAddition
 // ── List associated projects (opportunity → projects) ───────────────────────
 
 export const listAssociatedProjectsSchema = z.object({
-  opportunityId: z.number().int().positive(),
+  opportunityId: positiveId,
   embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
   page: z.number().int().positive().optional().default(1),
   perPage: z.number().int().min(1).max(100).optional().default(25),

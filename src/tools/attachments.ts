@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { positiveId } from "./shared-schemas.js";
 import { capsuleGetBinary, capsulePost, capsulePostBinary } from "../capsule/client.js";
 
 // Attachments — the only tool surface in capsulemcp that handles binary
@@ -38,11 +39,8 @@ const HARD_MAX_SIZE_BYTES = 25 * 1024 * 1024;
 const HARD_MAX_BASE64_CHARS = Math.ceil(HARD_MAX_SIZE_BYTES / 3) * 4;
 
 export const getAttachmentSchema = z.object({
-  id: z.number().int().positive().describe("Attachment ID."),
-  maxSizeBytes: z
-    .number()
-    .int()
-    .positive()
+  id: positiveId.describe("Attachment ID."),
+  maxSizeBytes: positiveId
     .max(HARD_MAX_SIZE_BYTES)
     .optional()
     .describe(
@@ -105,14 +103,11 @@ export const uploadAttachmentSchema = z.object({
     .describe(
       "Body text for the note that will hold the attachment. Defaults to '[attachment]' if omitted.",
     ),
-  partyId: z
-    .number()
-    .int()
-    .positive()
+  partyId: positiveId
     .optional()
     .describe("Link the new note to a party (mutually exclusive with opportunityId / projectId)."),
-  opportunityId: z.number().int().positive().optional(),
-  projectId: z.number().int().positive().optional(),
+  opportunityId: positiveId.optional(),
+  projectId: positiveId.optional(),
 });
 
 // Capsule's API decodes whatever bytes we send. If the caller passes
