@@ -21,15 +21,12 @@
  */
 
 import { z } from "zod";
+import { positiveId } from "./shared-schemas.js";
 
 export const CustomFieldWriteSchema = z.object({
-  definitionId: z
-    .number()
-    .int()
-    .positive()
-    .describe(
-      "The custom-field definition id from list_custom_fields. Identifies which field on the entity to set.",
-    ),
+  definitionId: positiveId.describe(
+    "The custom-field definition id from list_custom_fields. Identifies which field on the entity to set.",
+  ),
   value: z
     .union([z.string(), z.number(), z.boolean(), z.null()])
     .describe(

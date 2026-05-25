@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { positiveId } from "./shared-schemas.js";
 import { confirmFlag } from "./confirm-flag.js";
 import { capsuleDelete, capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
 import { type BatchOpts, batchExecute, chunk } from "../capsule/batch.js";
@@ -19,7 +20,7 @@ export const listTasksSchema = z.object({
     .describe(
       "Defaults to OPEN when omitted. Pass COMPLETED to filter to completed tasks, or 'OPEN' explicitly.",
     ),
-  ownerId: z.number().int().positive().optional().describe("Filter to tasks owned by this user ID"),
+  ownerId: positiveId.optional().describe("Filter to tasks owned by this user ID"),
   page: z.number().int().positive().optional().default(1),
   perPage: z.number().int().min(1).max(100).optional().default(25),
 });
@@ -40,7 +41,7 @@ export async function listTasks(input: z.infer<typeof listTasksSchema>) {
 // ───────────────────────────────────────────────────────────────────────────
 
 export const getTaskSchema = z.object({
-  id: z.number().int().positive().describe("Task ID"),
+  id: positiveId.describe("Task ID"),
 });
 
 export async function getTask(input: z.infer<typeof getTaskSchema>) {
@@ -55,7 +56,7 @@ export async function getTask(input: z.infer<typeof getTaskSchema>) {
 
 export const getTasksSchema = z.object({
   ids: z
-    .array(z.number().int().positive())
+    .array(positiveId)
     .min(1)
     .max(50)
     .describe(
@@ -91,30 +92,18 @@ export const createTaskSchema = z.object({
     .optional()
     .describe("HH:MM in user's timezone"),
   detail: z.string().optional(),
-  ownerId: z
-    .number()
-    .int()
-    .positive()
+  ownerId: positiveId
     .optional()
     .describe(
       "Assign to user ID. Defaults to the API-token owner when omitted. Once set, this connector cannot clear the owner back to null — use Capsule's web UI for that.",
     ),
-  partyId: z
-    .number()
-    .int()
-    .positive()
+  partyId: positiveId
     .optional()
     .describe("Link task to a party (mutually exclusive with opportunityId/projectId)"),
-  opportunityId: z
-    .number()
-    .int()
-    .positive()
+  opportunityId: positiveId
     .optional()
     .describe("Link task to an opportunity (mutually exclusive with partyId/projectId)"),
-  projectId: z
-    .number()
-    .int()
-    .positive()
+  projectId: positiveId
     .optional()
     .describe("Link task to a project (mutually exclusive with partyId/opportunityId)"),
 });
@@ -138,7 +127,7 @@ export async function createTask(input: z.infer<typeof createTaskSchema>) {
 // ───────────────────────────────────────────────────────────────────────────
 
 export const updateTaskSchema = z.object({
-  id: z.number().int().positive(),
+  id: positiveId,
   description: z.string().min(1).optional(),
   dueOn: z
     .string()
@@ -160,10 +149,7 @@ export const updateTaskSchema = z.object({
     .describe(
       "Set to OPEN or COMPLETED. (PENDING exists internally for track-driven tasks but cannot be set directly via this tool — Capsule rejects it.) Setting status: OPEN on an already-open task is a true no-op (does not advance updatedAt).",
     ),
-  ownerId: z
-    .number()
-    .int()
-    .positive()
+  ownerId: positiveId
     .optional()
     .describe(
       "Reassign owner to user ID. Once set, this connector cannot clear an owner back to null — use Capsule's web UI for that.",
@@ -185,7 +171,7 @@ export async function updateTask(input: z.infer<typeof updateTaskSchema>) {
 // ───────────────────────────────────────────────────────────────────────────
 
 export const completeTaskSchema = z.object({
-  id: z.number().int().positive(),
+  id: positiveId,
 });
 
 export async function completeTask(input: z.infer<typeof completeTaskSchema>) {
@@ -199,7 +185,7 @@ export async function completeTask(input: z.infer<typeof completeTaskSchema>) {
 
 export const batchCompleteTaskSchema = z.object({
   ids: z
-    .array(z.number().int().positive())
+    .array(positiveId)
     .min(1)
     .max(50)
     .describe(
@@ -217,7 +203,7 @@ export async function batchCompleteTask(
 // ───────────────────────────────────────────────────────────────────────────
 
 export const deleteTaskSchema = z.object({
-  id: z.number().int().positive(),
+  id: positiveId,
   confirm: confirmFlag().describe(
     "Must be set to true. Permanently deletes the task. To mark done without losing history use complete_task. Irreversible.",
   ),

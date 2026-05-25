@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { positiveId } from "./shared-schemas.js";
 import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
 import { capsuleGet } from "../capsule/client.js";
 
@@ -18,13 +19,9 @@ import { capsuleGet } from "../capsule/client.js";
 // ── Employees of an organisation ────────────────────────────────────────────
 
 export const listEmployeesSchema = z.object({
-  partyId: z
-    .number()
-    .int()
-    .positive()
-    .describe(
-      "The organisation's party id. Returns the people whose `organisation` field links to this party.",
-    ),
+  partyId: positiveId.describe(
+    "The organisation's party id. Returns the people whose `organisation` field links to this party.",
+  ),
   page: z.number().int().positive().optional().default(1),
   perPage: z.number().int().min(1).max(100).optional().default(25),
   embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),

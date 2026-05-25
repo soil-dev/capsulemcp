@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { positiveId } from "./shared-schemas.js";
 import { confirmFlag } from "./confirm-flag.js";
 import { idempotent } from "../capsule/idempotent.js";
 import { capsuleDelete, capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
@@ -36,7 +37,7 @@ const TrackEntity = z
 
 export const listEntityTracksSchema = z.object({
   entity: TrackEntity,
-  entityId: z.number().int().positive(),
+  entityId: positiveId,
 });
 
 export async function listEntityTracks(input: z.infer<typeof listEntityTracksSchema>) {
@@ -49,7 +50,7 @@ export async function listEntityTracks(input: z.infer<typeof listEntityTracksSch
 // ── Show one track instance ─────────────────────────────────────────────────
 
 export const showTrackSchema = z.object({
-  trackId: z.number().int().positive(),
+  trackId: positiveId,
 });
 
 export async function showTrack(input: z.infer<typeof showTrackSchema>) {
@@ -63,14 +64,10 @@ export const applyTrackSchema = z.object({
   entity: z
     .enum(["opportunities", "kases"])
     .describe("Which entity to apply the track to. Use 'kases' for projects."),
-  entityId: z.number().int().positive(),
-  trackDefinitionId: z
-    .number()
-    .int()
-    .positive()
-    .describe(
-      "The trackDefinition to apply (from list_track_definitions). Auto-creates task definitions on the target entity per the track's rules.",
-    ),
+  entityId: positiveId,
+  trackDefinitionId: positiveId.describe(
+    "The trackDefinition to apply (from list_track_definitions). Auto-creates task definitions on the target entity per the track's rules.",
+  ),
   startDate: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -106,7 +103,7 @@ export async function applyTrack(input: z.infer<typeof applyTrackSchema>) {
 // ── Update a track instance ─────────────────────────────────────────────────
 
 export const updateTrackSchema = z.object({
-  trackId: z.number().int().positive(),
+  trackId: positiveId,
   fields: z
     // zod 4: z.record requires an explicit key schema (was implicit
     // string in zod 3). Capsule field names are strings.
@@ -128,7 +125,7 @@ export async function updateTrack(input: z.infer<typeof updateTrackSchema>) {
 // ── Remove a track instance ─────────────────────────────────────────────────
 
 export const removeTrackSchema = z.object({
-  trackId: z.number().int().positive(),
+  trackId: positiveId,
   confirm: confirmFlag().describe(
     "Must be set to true. Removes the track instance from its entity. **Capsule also deletes the auto-tasks the track created when it was applied** — they go with the track and become unreachable (404 on GET /tasks/{id}, gone from list_tasks on the parent entity). If you need any of those tasks to outlive the track, copy their content into fresh tasks (or use the web UI) before calling remove_track.",
   ),

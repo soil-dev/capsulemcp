@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
 import { confirmFlag } from "./confirm-flag.js";
+import { positiveId } from "./shared-schemas.js";
 import { capsuleDelete, capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
 import { chunk } from "../capsule/batch.js";
 import { idempotent } from "../capsule/idempotent.js";
@@ -32,7 +33,7 @@ export async function listProjects(input: z.infer<typeof listProjectsSchema>) {
 // ───────────────────────────────────────────────────────────────────────────
 
 export const getProjectSchema = z.object({
-  id: z.number().int().positive(),
+  id: positiveId,
   embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
 });
 
@@ -52,7 +53,7 @@ export async function getProject(input: z.infer<typeof getProjectSchema>) {
 
 export const getProjectsSchema = z.object({
   ids: z
-    .array(z.number().int().positive())
+    .array(positiveId)
     .min(1)
     .max(50)
     .describe(
@@ -82,32 +83,23 @@ export async function getProjects(input: z.infer<typeof getProjectsSchema>) {
 
 export const createProjectSchema = z.object({
   name: z.string().min(1),
-  partyId: z.number().int().positive().describe("ID of the party linked to this project"),
+  partyId: positiveId.describe("ID of the party linked to this project"),
   description: z.string().optional(),
   status: z.enum(["OPEN", "CLOSED"]).optional().describe("Defaults to OPEN when omitted."),
-  ownerId: z
-    .number()
-    .int()
-    .positive()
+  ownerId: positiveId
     .optional()
     .describe(
       "Assign to user ID. Defaults to the API-token owner when omitted, same as create_party / create_opportunity / create_task. " +
         "NOTE: some Capsule tenants configure board-level **automation rules** that mutate `owner` (and `team`) on project creation — e.g. an automation that clears `owner` when a project enters a particular board. If you observe a project landing with unexpected `owner: null` after a create_project with `ownerId`, check the target board's automation configuration. Capsule's API itself does not drop `ownerId` when `stageId` is also supplied.",
     ),
-  teamId: z
-    .number()
-    .int()
-    .positive()
+  teamId: positiveId
     .optional()
     .describe(
       "Assign to team ID (discover via list_teams). Capsule projects must always have at least one of {owner, team} set — Capsule returns 422 'owner or team is required' otherwise. " +
         "Three ownership shapes are valid: owner alone, team alone, or owner+team (the user must be a member of the team — users can belong to multiple teams; 422 'owner is not a member of the team' otherwise). " +
         "Tenant-specific board automations may set the team field on project creation (e.g. 'when project enters board X, set team to T'). If you observe a team set despite omitting `teamId`, check the target board's automation rules.",
     ),
-  stageId: z
-    .number()
-    .int()
-    .positive()
+  stageId: positiveId
     .optional()
     .describe(
       "Stage (board column) to place the project on. Discover IDs via list_stages — each stage belongs to one Board, so picking a stageId implicitly picks the board. If omitted, the project is created with no stage assignment (and won't appear on any board). " +
@@ -143,14 +135,11 @@ export async function createProject(input: z.infer<typeof createProjectSchema>) 
 // ───────────────────────────────────────────────────────────────────────────
 
 export const updateProjectSchema = z.object({
-  id: z.number().int().positive(),
+  id: positiveId,
   name: z.string().min(1).optional(),
   description: z.string().optional(),
   status: z.enum(["OPEN", "CLOSED"]).optional(),
-  ownerId: z
-    .number()
-    .int()
-    .positive()
+  ownerId: positiveId
     .nullable()
     .optional()
     .describe(
@@ -159,10 +148,7 @@ export const updateProjectSchema = z.object({
         "Supply `teamId` and/or `stageId` explicitly on the same call to change them instead. `teamId: null` clears the team as part of an owner change. " +
         "Constraints (Capsule enforces, 422 on violation): owner must be a member of the team if both are set; a project must always have at least one of {owner, team} set (cannot clear both).",
     ),
-  teamId: z
-    .number()
-    .int()
-    .positive()
+  teamId: positiveId
     .nullable()
     .optional()
     .describe(
@@ -171,10 +157,7 @@ export const updateProjectSchema = z.object({
         "Owner must be a member of the new team or Capsule returns 422 'owner is not a member of the team'. " +
         "A project must always have at least one of {owner, team} set — `teamId: null` on a project whose owner is already null returns 422 'owner or team is required'.",
     ),
-  stageId: z
-    .number()
-    .int()
-    .positive()
+  stageId: positiveId
     .optional()
     .describe(
       "Move the project to this stage (board column). Discover IDs via list_stages. Owner and team are preserved across stage-only updates (Capsule's PUT semantic). " +
@@ -250,7 +233,7 @@ export async function updateProject(input: z.infer<typeof updateProjectSchema>) 
 // ───────────────────────────────────────────────────────────────────────────
 
 export const deleteProjectSchema = z.object({
-  id: z.number().int().positive(),
+  id: positiveId,
   confirm: confirmFlag().describe(
     "Must be set to true. Permanently deletes the project (case). Consider update_project status='CLOSED' instead. Irreversible.",
   ),

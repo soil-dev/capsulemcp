@@ -30,6 +30,7 @@
  */
 
 import { z } from "zod";
+import { positiveId } from "./shared-schemas.js";
 import { capsuleGetCached, capsulePut } from "../capsule/client.js";
 import { type BatchOpts, batchExecute } from "../capsule/batch.js";
 import { invalidateByPrefix } from "../capsule/cache.js";
@@ -76,7 +77,7 @@ export async function listTags(input: z.infer<typeof listTagsSchema>) {
 
 export const addTagSchema = z.object({
   entity: TagEntity,
-  entityId: z.number().int().positive().describe("The party/opportunity/kase id."),
+  entityId: positiveId.describe("The party/opportunity/kase id."),
   tagName: z
     .string()
     .min(1)
@@ -102,14 +103,10 @@ export async function addTag(input: z.infer<typeof addTagSchema>) {
 
 export const removeTagByIdSchema = z.object({
   entity: TagEntity,
-  entityId: z.number().int().positive().describe("The party/opportunity/kase id."),
-  tagId: z
-    .number()
-    .int()
-    .positive()
-    .describe(
-      "The tag's id. Read via get_party / get_opportunity / get_project with embed='tags' — each tag entry in the response has an `id` field. list_tags returns the same ids for the same tags, so either source works; reading via embed first is the safer pattern because it confirms the tag is actually attached to this entity before you try to remove it (otherwise Capsule returns 422 'tag not found to delete'). Removing detaches the tag from this entity only; the tag definition itself persists in the tenant for other entities that share it.",
-    ),
+  entityId: positiveId.describe("The party/opportunity/kase id."),
+  tagId: positiveId.describe(
+    "The tag's id. Read via get_party / get_opportunity / get_project with embed='tags' — each tag entry in the response has an `id` field. list_tags returns the same ids for the same tags, so either source works; reading via embed first is the safer pattern because it confirms the tag is actually attached to this entity before you try to remove it (otherwise Capsule returns 422 'tag not found to delete'). Removing detaches the tag from this entity only; the tag definition itself persists in the tenant for other entities that share it.",
+  ),
 });
 
 export async function removeTagById(input: z.infer<typeof removeTagByIdSchema>) {

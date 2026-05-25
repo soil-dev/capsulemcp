@@ -11,6 +11,48 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Fixed
+
+- **All Capsule entity ID fields now accept integer-shaped strings**
+  via `z.coerce.number()`. Production data surfaced a class of
+  intermittent `Input validation error: expected number, received
+  string` rejections that traced to LLM-driven MCP clients
+  serializing IDs as JSON strings on some calls and integers on
+  others (non-deterministic across calls — same logical input,
+  different wire type). Coercion is safe: `Number("123")` → 123
+  passes `.int().positive()`; `Number("abc")` → NaN still rejects.
+  Applied uniformly across `id`, `partyId`, `opportunityId`,
+  `projectId`, `milestoneId`, `ownerId`, `teamId`, `stageId`,
+  `lostReasonId`, `entityId`, `trackId`, `definitionId`,
+  `fieldId`, `pipelineId`, `boardId`, `addressId`, `emailAddressId`,
+  `phoneNumberId`, `websiteId`, `organisationId`, `tagId`,
+  `trackDefinitionId`, and the `ids` array on every batch-fetch tool.
+  Centralised in `src/tools/shared-schemas.ts` so future ID schemas
+  pick the contract up automatically. Non-ID positive integers
+  (`page`, `perPage`, `probability`, monetary `amount`) remain
+  strict — coercion there would mask legitimate caller-side bugs.
+  8 new tests in `tests/shared-schemas.test.ts`, 485 total.
+
+### Documentation
+
+- **`create_opportunity.milestoneId`** and **`update_opportunity.milestoneId`**
+  descriptions now document that tenants can configure
+  pipeline/milestone-reached automation rules in Capsule (Settings
+  → Sales Pipeline → Automation) that mutate `owner` and/or `team`
+  immediately after creation or milestone transition. The "Assign to
+  a Team" automation action in particular inherits the asymmetric
+  write semantic from NOTES-ON-CAPSULE-API.md §27 and will clear
+  `owner` as a side-effect even when the caller passed `ownerId`.
+  Symmetric to the board-automation note already on
+  `create_project.ownerId`. Documented workaround: chain a
+  `batch_update_opportunity` PUT carrying both `ownerId` and
+  `teamId` — PUT does not re-fire milestone-reached triggers.
+
+- **`list_teams`** description extends the team-membership probe
+  pattern to include `batch_update_opportunity` alongside
+  `update_project`, since v1.6.1 surfaced `teamId` on opportunity
+  updates with the same 422-on-non-member semantic.
+
 ## [1.6.1] — 2026-05-25
 
 Patch release on top of v1.6.0. Two production-driven fixes (one

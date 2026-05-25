@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
 import { confirmFlag } from "./confirm-flag.js";
+import { positiveId } from "./shared-schemas.js";
 import { capsuleDelete, capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
 import { type BatchOpts, batchExecute, chunk } from "../capsule/batch.js";
 import { idempotent } from "../capsule/idempotent.js";
@@ -57,7 +58,7 @@ export async function searchOpportunities(input: z.infer<typeof searchOpportunit
 // ───────────────────────────────────────────────────────────────────────────
 
 export const getOpportunitySchema = z.object({
-  id: z.number().int().positive(),
+  id: positiveId,
   embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
 });
 
@@ -77,7 +78,7 @@ export async function getOpportunity(input: z.infer<typeof getOpportunitySchema>
 
 export const getOpportunitiesSchema = z.object({
   ids: z
-    .array(z.number().int().positive())
+    .array(positiveId)
     .min(1)
     .max(50)
     .describe(
@@ -110,14 +111,11 @@ export async function getOpportunities(input: z.infer<typeof getOpportunitiesSch
 
 export const createOpportunitySchema = z.object({
   name: z.string().min(1),
-  partyId: z.number().int().positive().describe("ID of the party this opportunity belongs to"),
-  milestoneId: z
-    .number()
-    .int()
-    .positive()
-    .describe(
-      "ID of the pipeline milestone to place this opportunity at. The milestone implicitly determines the pipeline — there is no separate pipelineId parameter. Discover via list_pipelines / list_milestones.",
-    ),
+  partyId: positiveId.describe("ID of the party this opportunity belongs to"),
+  milestoneId: positiveId.describe(
+    "ID of the pipeline milestone to place this opportunity at. The milestone implicitly determines the pipeline — there is no separate pipelineId parameter. Discover via list_pipelines / list_milestones. " +
+      "NOTE: some Capsule tenants configure **pipeline / milestone-reached automation rules** that mutate `owner` and/or `team` immediately after creation — e.g. an 'Assign to a Team' action that fires on entry to a specific milestone and inherits the asymmetric write semantic documented in NOTES-ON-CAPSULE-API.md §27 (setting `team` server-side clears `owner` as a side-effect). If you observe a newly-created opp landing with `owner: null` despite passing `ownerId`, the cause is almost certainly a milestone automation on the destination pipeline rather than the connector. Documented workaround: follow `create_opportunity` with an immediate `batch_update_opportunity({items: [{id, ownerId, teamId}]})` carrying both fields — PUT does not re-fire milestone-reached triggers, so the owner sticks.",
+  ),
   description: z.string().optional(),
   value: OpportunityValueSchema.optional(),
   expectedCloseOn: z
@@ -126,18 +124,13 @@ export const createOpportunitySchema = z.object({
     .optional()
     .describe("YYYY-MM-DD"),
   probability: z.number().int().min(0).max(100).optional(),
-  ownerId: z
-    .number()
-    .int()
-    .positive()
+  ownerId: positiveId
     .optional()
     .describe(
-      "Assign to user ID. Defaults to the API-token owner when omitted — note that opportunities do NOT inherit owner from the linked party, even though one might expect it. Once set, this connector cannot clear the owner back to null (use Capsule's web UI). Discover IDs via list_users.",
+      "Assign to user ID. Defaults to the API-token owner when omitted — note that opportunities do NOT inherit owner from the linked party, even though one might expect it. Once set, this connector cannot clear the owner back to null (use Capsule's web UI). Discover IDs via list_users. " +
+        "WARNING: tenant pipeline / milestone-reached automation can mutate this field post-create — see the `milestoneId` description for details and the chained-PUT workaround.",
     ),
-  teamId: z
-    .number()
-    .int()
-    .positive()
+  teamId: positiveId
     .optional()
     .describe(
       "Assign to team ID (discover via list_teams). Independent from `ownerId` — setting one does NOT clear the other on create. Three ownership shapes are valid: owner alone, team alone, or owner+team (the owner must be a member of the team; users can belong to multiple teams — 422 'owner is not a member of the team' otherwise).",
@@ -161,17 +154,15 @@ export async function createOpportunity(input: z.infer<typeof createOpportunityS
 // ───────────────────────────────────────────────────────────────────────────
 
 export const updateOpportunitySchema = z.object({
-  id: z.number().int().positive(),
+  id: positiveId,
   name: z.string().min(1).optional(),
-  milestoneId: z
-    .number()
-    .int()
-    .positive()
+  milestoneId: positiveId
     .optional()
     .describe(
       "Move the opportunity to this milestone. Side effects depend on the target: " +
         "closing milestones (Won/Lost) auto-set `closedOn` to today and `probability` to the milestone default (100/0), preserving `lastOpenMilestone` as the previous open stage; moving back to an open milestone clears `closedOn` and re-applies the milestone's default probability (Won/Lost is reversible — no separate reopen tool). " +
-        "WARNING: Capsule does NOT validate that the new milestone belongs to the opportunity's current pipeline. Passing a milestoneId from a different pipeline silently relocates the opportunity across pipelines, and `lastOpenMilestone` may then reference a milestone in the previous pipeline. Verify against the opportunity's current pipeline (read the opp first, list its pipeline's milestones via list_milestones) before passing a cross-pipeline id.",
+        "WARNING: Capsule does NOT validate that the new milestone belongs to the opportunity's current pipeline. Passing a milestoneId from a different pipeline silently relocates the opportunity across pipelines, and `lastOpenMilestone` may then reference a milestone in the previous pipeline. Verify against the opportunity's current pipeline (read the opp first, list its pipeline's milestones via list_milestones) before passing a cross-pipeline id. " +
+        "NOTE: changing `milestoneId` can fire **pipeline / milestone-reached automations** that mutate `owner` / `team` on the destination milestone (same shape as `create_opportunity` — see its `milestoneId` description for the asymmetric-write semantic that can clear `owner` as a side-effect). If a milestone-change-and-owner-set in the same call lands with `owner: null`, follow up with a second `update_opportunity` (or `batch_update_opportunity`) carrying both `ownerId` and `teamId` — milestone-reached triggers only fire on the transition, so a subsequent PUT preserves your values.",
     ),
   description: z.string().optional(),
   value: OpportunityValueSchema.optional(),
@@ -188,27 +179,18 @@ export const updateOpportunitySchema = z.object({
     .describe(
       "Win probability 0–100. On an open milestone this overrides the milestone's default probability. CANNOT be set in the same call as a closing milestone (Won/Lost) — Capsule processes the milestone change first, the opportunity becomes closed, then the probability update is rejected as edit-on-closed-opp with 422 'probability can be updated only for open opportunity'. To close an opportunity, leave probability out of the call: it auto-snaps to 100% (Won) or 0% (Lost).",
     ),
-  lostReasonId: z
-    .number()
-    .int()
-    .positive()
+  lostReasonId: positiveId
     .optional()
     .describe(
       "Reason the opportunity was lost. Only meaningful when transitioning to a Lost milestone — Capsule silently drops it for other milestones. Without this set, a connector-driven Lost-close leaves `lostReason: null`. Discover IDs via list_lostreasons.",
     ),
-  ownerId: z
-    .number()
-    .int()
-    .positive()
+  ownerId: positiveId
     .optional()
     .describe(
       "Reassign owner to user ID. Once set, this connector cannot clear an owner back to null — use Capsule's web UI for that. " +
         "When you supply `ownerId` and omit `teamId`, the connector fetches the opportunity's current team and includes it in the PUT body to preserve it across the owner change. Without this defensive read, Capsule's PUT would clear the existing team (see NOTES-ON-CAPSULE-API.md §27 — same asymmetric semantic as /kases). Supply `teamId` explicitly on the same call to change the team instead.",
     ),
-  teamId: z
-    .number()
-    .int()
-    .positive()
+  teamId: positiveId
     .nullable()
     .optional()
     .describe(
@@ -299,7 +281,7 @@ export async function batchUpdateOpportunity(
 // ───────────────────────────────────────────────────────────────────────────
 
 export const deleteOpportunitySchema = z.object({
-  id: z.number().int().positive(),
+  id: positiveId,
   confirm: confirmFlag().describe(
     "Must be set to true. Permanently deletes the opportunity. Irreversible.",
   ),

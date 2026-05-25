@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { positiveId } from "./shared-schemas.js";
 import { capsuleGetCached } from "../capsule/client.js";
 
 // Custom field SCHEMA endpoints (read-only here). Each entity type
@@ -36,7 +37,7 @@ export async function listCustomFields(input: z.infer<typeof listCustomFieldsSch
 
 export const getCustomFieldSchema = z.object({
   entity: CustomFieldEntity,
-  fieldId: z.number().int().positive().describe("Custom field definition id."),
+  fieldId: positiveId.describe("Custom field definition id."),
 });
 
 export async function getCustomField(input: z.infer<typeof getCustomFieldSchema>) {

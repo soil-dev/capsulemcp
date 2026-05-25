@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { positiveId } from "./shared-schemas.js";
 import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
 import { capsuleGet, capsuleGetCached } from "../capsule/client.js";
 
@@ -39,7 +40,7 @@ export async function listSavedFilters(input: z.infer<typeof listSavedFiltersSch
 
 export const runSavedFilterSchema = z.object({
   entity: EntitySchema,
-  id: z.number().int().positive().describe("The saved filter id (from list_saved_filters)."),
+  id: positiveId.describe("The saved filter id (from list_saved_filters)."),
   embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
   page: z.number().int().positive().optional().default(1),
   perPage: z.number().int().min(1).max(100).optional().default(25),

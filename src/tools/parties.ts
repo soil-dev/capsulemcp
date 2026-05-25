@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
 import { confirmFlag } from "./confirm-flag.js";
+import { positiveId } from "./shared-schemas.js";
 import { capsuleDelete, capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
 import { type BatchOpts, batchExecute, chunk } from "../capsule/batch.js";
 import { idempotent, idempotentWithResult } from "../capsule/idempotent.js";
@@ -159,7 +160,7 @@ export async function searchParties(input: z.infer<typeof searchPartiesSchema>) 
 // ───────────────────────────────────────────────────────────────────────────
 
 export const getPartySchema = z.object({
-  id: z.number().int().positive().describe("Party ID"),
+  id: positiveId.describe("Party ID"),
   embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
 });
 
@@ -181,7 +182,7 @@ export async function getParty(input: z.infer<typeof getPartySchema>) {
 
 export const getPartiesSchema = z.object({
   ids: z
-    .array(z.number().int().positive())
+    .array(positiveId)
     .min(1)
     .max(50)
     .describe(
@@ -214,7 +215,7 @@ export async function getParties(input: z.infer<typeof getPartiesSchema>) {
 // ───────────────────────────────────────────────────────────────────────────
 
 export const listPartyOpportunitiesSchema = z.object({
-  partyId: z.number().int().positive(),
+  partyId: positiveId,
   page: z.number().int().positive().optional().default(1),
   perPage: z.number().int().min(1).max(100).optional().default(25),
 });
@@ -230,7 +231,7 @@ export async function listPartyOpportunities(input: z.infer<typeof listPartyOppo
 // ───────────────────────────────────────────────────────────────────────────
 
 export const listPartyProjectsSchema = z.object({
-  partyId: z.number().int().positive(),
+  partyId: positiveId,
   page: z.number().int().positive().optional().default(1),
   perPage: z.number().int().min(1).max(100).optional().default(25),
 });
@@ -280,10 +281,7 @@ const PartyWriteBaseSchema = {
     .describe(
       "APPEND-ONLY: items are merged into the existing list, never replaced. For atomic add/remove/replace use add_party_website and remove_party_website_by_id.",
     ),
-  ownerId: z
-    .number()
-    .int()
-    .positive()
+  ownerId: positiveId
     .optional()
     .describe(
       "Assign to user ID. On create_party, defaults to the API-token owner when omitted. Once set, this connector cannot clear the owner back to null — use Capsule's web UI for that. Discover IDs via list_users.",
@@ -297,12 +295,7 @@ export const createPartySchema = z.object({
   lastName: z.string().optional(),
   title: z.string().optional(),
   jobTitle: z.string().optional(),
-  organisationId: z
-    .number()
-    .int()
-    .positive()
-    .optional()
-    .describe("Link person to an existing organisation ID"),
+  organisationId: positiveId.optional().describe("Link person to an existing organisation ID"),
   // organisation
   name: z.string().optional(),
   ...PartyWriteBaseSchema,
@@ -325,7 +318,7 @@ export async function createParty(input: z.infer<typeof createPartySchema>) {
 // update_opportunity / update_project).
 
 export const updatePartySchema = z.object({
-  id: z.number().int().positive(),
+  id: positiveId,
   firstName: z.string().optional(),
   lastName: z.string().optional(),
   title: z.string().optional(),
@@ -371,7 +364,7 @@ export async function batchUpdateParty(
 // ───────────────────────────────────────────────────────────────────────────
 
 export const deletePartySchema = z.object({
-  id: z.number().int().positive(),
+  id: positiveId,
   confirm: confirmFlag().describe(
     "Must be set to true. Deletes the party AND all linked notes, tasks, opportunities, and projects (kases). " +
       "Deleting an ORGANISATION does NOT delete people linked to it via organisationId — their `organisation` field is silently cleared to null and they survive as standalone records. " +
@@ -415,7 +408,7 @@ export async function deleteParty(input: z.infer<typeof deletePartySchema>) {
 // emailAddresses ─────────────────────────────────────────────────────
 
 export const addPartyEmailAddressSchema = z.object({
-  partyId: z.number().int().positive(),
+  partyId: positiveId,
   address: z.string().email(),
   type: z.string().optional().describe("Free-form label, e.g. 'Work', 'Home'."),
 });
@@ -430,14 +423,10 @@ export async function addPartyEmailAddress(input: z.infer<typeof addPartyEmailAd
 }
 
 export const removePartyEmailAddressByIdSchema = z.object({
-  partyId: z.number().int().positive(),
-  emailAddressId: z
-    .number()
-    .int()
-    .positive()
-    .describe(
-      "Capsule's id for the email-address row. Read it from get_party (each entry in emailAddresses carries an id).",
-    ),
+  partyId: positiveId,
+  emailAddressId: positiveId.describe(
+    "Capsule's id for the email-address row. Read it from get_party (each entry in emailAddresses carries an id).",
+  ),
 });
 
 export async function removePartyEmailAddressById(
@@ -463,7 +452,7 @@ export async function removePartyEmailAddressById(
 // phoneNumbers ───────────────────────────────────────────────────────
 
 export const addPartyPhoneNumberSchema = z.object({
-  partyId: z.number().int().positive(),
+  partyId: positiveId,
   number: z.string().min(1),
   type: z.string().optional().describe("Free-form label, e.g. 'Work', 'Mobile'."),
 });
@@ -478,14 +467,10 @@ export async function addPartyPhoneNumber(input: z.infer<typeof addPartyPhoneNum
 }
 
 export const removePartyPhoneNumberByIdSchema = z.object({
-  partyId: z.number().int().positive(),
-  phoneNumberId: z
-    .number()
-    .int()
-    .positive()
-    .describe(
-      "Capsule's id for the phone-number row. Read it from get_party (each entry in phoneNumbers carries an id).",
-    ),
+  partyId: positiveId,
+  phoneNumberId: positiveId.describe(
+    "Capsule's id for the phone-number row. Read it from get_party (each entry in phoneNumbers carries an id).",
+  ),
 });
 
 export async function removePartyPhoneNumberById(
@@ -511,7 +496,7 @@ export async function removePartyPhoneNumberById(
 // addresses ──────────────────────────────────────────────────────────
 
 export const addPartyAddressSchema = z.object({
-  partyId: z.number().int().positive(),
+  partyId: positiveId,
   street: z.string().optional(),
   city: z.string().optional(),
   state: z.string().optional(),
@@ -532,14 +517,10 @@ export async function addPartyAddress(input: z.infer<typeof addPartyAddressSchem
 }
 
 export const removePartyAddressByIdSchema = z.object({
-  partyId: z.number().int().positive(),
-  addressId: z
-    .number()
-    .int()
-    .positive()
-    .describe(
-      "Capsule's id for the address row. Read it from get_party (each entry in addresses carries an id).",
-    ),
+  partyId: positiveId,
+  addressId: positiveId.describe(
+    "Capsule's id for the address row. Read it from get_party (each entry in addresses carries an id).",
+  ),
 });
 
 export async function removePartyAddressById(input: z.infer<typeof removePartyAddressByIdSchema>) {
@@ -564,7 +545,7 @@ export async function removePartyAddressById(input: z.infer<typeof removePartyAd
 
 export const addPartyWebsiteSchema = z
   .object({
-    partyId: z.number().int().positive(),
+    partyId: positiveId,
     address: z
       .string()
       .min(1)
@@ -585,14 +566,10 @@ export async function addPartyWebsite(input: z.infer<typeof addPartyWebsiteSchem
 }
 
 export const removePartyWebsiteByIdSchema = z.object({
-  partyId: z.number().int().positive(),
-  websiteId: z
-    .number()
-    .int()
-    .positive()
-    .describe(
-      "Capsule's id for the website row. Read it from get_party (each entry in websites carries an id).",
-    ),
+  partyId: positiveId,
+  websiteId: positiveId.describe(
+    "Capsule's id for the website row. Read it from get_party (each entry in websites carries an id).",
+  ),
 });
 
 export async function removePartyWebsiteById(input: z.infer<typeof removePartyWebsiteByIdSchema>) {
