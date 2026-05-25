@@ -1,10 +1,12 @@
 import { z } from "zod";
+import { setRef } from "./body-helpers.js";
+import { defineBatch } from "./define-batch.js";
 import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
-import { confirmFlag } from "./confirm-flag.js";
+import { defineDelete } from "./define-delete.js";
 import { positiveId } from "./shared-schemas.js";
-import { capsuleDelete, capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
-import { type BatchOpts, batchExecute, chunk } from "../capsule/batch.js";
-import { idempotent, idempotentWithResult } from "../capsule/idempotent.js";
+import { capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
+import { chunk } from "../capsule/batch.js";
+import { idempotentWithResult } from "../capsule/idempotent.js";
 import {
   CustomFieldWriteSchema,
   fieldsArrayDescriptor,
@@ -305,8 +307,8 @@ export async function createParty(input: z.infer<typeof createPartySchema>) {
   const { ownerId, organisationId, ...rest } = input;
 
   const body: Record<string, unknown> = { ...rest };
-  if (ownerId) body["owner"] = { id: ownerId };
-  if (organisationId) body["organisation"] = { id: organisationId };
+  setRef(body, "owner", ownerId);
+  setRef(body, "organisation", organisationId);
 
   return capsulePost<{ party: unknown }>("/parties", { party: body });
 }
@@ -335,7 +337,7 @@ export async function updateParty(input: z.infer<typeof updatePartySchema>) {
   for (const [k, v] of Object.entries(rest)) {
     if (v !== undefined) body[k] = v;
   }
-  if (ownerId) body["owner"] = { id: ownerId };
+  setRef(body, "owner", ownerId);
   const mappedFields = mapFieldsForBody(fields);
   if (mappedFields !== undefined) body["fields"] = mappedFields;
 
@@ -344,44 +346,24 @@ export async function updateParty(input: z.infer<typeof updatePartySchema>) {
 
 // ── batch_update_party (write, fan-out) ────────────────────────────────────
 
-export const batchUpdatePartySchema = z.object({
-  items: z
-    .array(updatePartySchema)
-    .min(1)
-    .max(50)
-    .describe(
-      "Array of 1–50 update_party inputs. Each item is the same shape as a single update_party call — id is required, every other field is optional. Capped at 50 so a single tool call can't burn an outsized share of Capsule's hourly per-token rate budget (~4000 req/h).",
-    ),
+export const { schema: batchUpdatePartySchema, handler: batchUpdateParty } = defineBatch({
+  toolName: "batch_update_party",
+  itemSchema: updatePartySchema,
+  itemDescription:
+    "Array of 1–50 update_party inputs. Each item is the same shape as a single update_party call — id is required, every other field is optional. Capped at 50 so a single tool call can't burn an outsized share of Capsule's hourly per-token rate budget (~4000 req/h).",
+  itemHandler: updateParty,
 });
-
-export async function batchUpdateParty(
-  input: z.infer<typeof batchUpdatePartySchema>,
-  opts: BatchOpts = {},
-) {
-  return batchExecute("batch_update_party", input.items, (item) => updateParty(item), opts);
-}
 
 // ───────────────────────────────────────────────────────────────────────────
 
-export const deletePartySchema = z.object({
-  id: positiveId,
-  confirm: confirmFlag().describe(
+export const { schema: deletePartySchema, handler: deleteParty } = defineDelete({
+  toolName: "delete_party",
+  pathPrefix: "/parties",
+  confirmHint:
     "Must be set to true. Deletes the party AND all linked notes, tasks, opportunities, and projects (kases). " +
-      "Deleting an ORGANISATION does NOT delete people linked to it via organisationId — their `organisation` field is silently cleared to null and they survive as standalone records. " +
-      "Irreversible.",
-  ),
+    "Deleting an ORGANISATION does NOT delete people linked to it via organisationId — their `organisation` field is silently cleared to null and they survive as standalone records. " +
+    "Irreversible.",
 });
-
-export async function deleteParty(input: z.infer<typeof deletePartySchema>) {
-  if (input.confirm !== true) {
-    throw new Error("delete_party requires confirm: true");
-  }
-  return idempotent(
-    () => capsuleDelete(`/parties/${input.id}`),
-    () => ({ deleted: true, alreadyDeleted: false, id: input.id }),
-    () => ({ deleted: true, alreadyDeleted: true, id: input.id }),
-  );
-}
 
 // ── Atomic child-array operations ──────────────────────────────────────────
 //

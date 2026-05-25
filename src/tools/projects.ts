@@ -1,10 +1,11 @@
 import { z } from "zod";
+import { setNullableRef, setRef } from "./body-helpers.js";
 import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
-import { confirmFlag } from "./confirm-flag.js";
+import { defineDelete } from "./define-delete.js";
+import { readEntityRefs } from "./preserve-refs.js";
 import { positiveId } from "./shared-schemas.js";
-import { capsuleDelete, capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
+import { capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
 import { chunk } from "../capsule/batch.js";
-import { idempotent } from "../capsule/idempotent.js";
 import {
   CustomFieldWriteSchema,
   fieldsArrayDescriptor,
@@ -122,11 +123,12 @@ export async function createProject(input: z.infer<typeof createProjectSchema>) 
     status: status ?? "OPEN",
     party: { id: partyId },
   };
-  if (ownerId) body["owner"] = { id: ownerId };
-  if (teamId) body["team"] = { id: teamId };
+  setRef(body, "owner", ownerId);
+  setRef(body, "team", teamId);
   // Capsule's create-case body uses `stage: <integer>` per the docs
   // example. The GET response uses the object form `stage: {id, name}`,
-  // but we follow the documented request shape on the way in.
+  // but we follow the documented request shape on the way in. So we
+  // set the value directly (not via setRef which wraps in {id:...}).
   if (stageId) body["stage"] = stageId;
 
   return capsulePost<{ kase: unknown }>("/kases", { kase: body });
@@ -204,25 +206,18 @@ export async function updateProject(input: z.infer<typeof updateProjectSchema>) 
   let resolvedTeamId: number | null | undefined = teamId;
   let resolvedStageId: number | undefined = stageId;
   if (ownerId !== undefined && (teamId === undefined || stageId === undefined)) {
-    const { data } = await capsuleGet<{
-      kase: { team?: { id: number } | null; stage?: { id: number } | null };
-    }>(`/kases/${id}`);
     // Only carry forward when the project actually has a value; if
-    // current team/stage is null, leave the field out of the body entirely
-    // (sending `team: null` would be a redundant clear and could surprise
-    // on the owner-or-team-required 422 path; same idea for stage).
-    if (teamId === undefined) {
-      resolvedTeamId = data.kase?.team?.id ?? undefined;
-    }
-    if (stageId === undefined) {
-      resolvedStageId = data.kase?.stage?.id ?? undefined;
-    }
+    // current team/stage is null, leave the field out of the body
+    // entirely (sending `team: null` would be a redundant clear and
+    // could surprise on the owner-or-team-required 422 path; same
+    // idea for stage).
+    const current = await readEntityRefs(`/kases/${id}`, "kase");
+    if (teamId === undefined) resolvedTeamId = current.teamId;
+    if (stageId === undefined) resolvedStageId = current.stageId;
   }
 
-  if (ownerId === null) body["owner"] = null;
-  else if (ownerId !== undefined) body["owner"] = { id: ownerId };
-  if (resolvedTeamId === null) body["team"] = null;
-  else if (resolvedTeamId !== undefined) body["team"] = { id: resolvedTeamId };
+  setNullableRef(body, "owner", ownerId);
+  setNullableRef(body, "team", resolvedTeamId);
   if (resolvedStageId) body["stage"] = resolvedStageId;
   const mappedFields = mapFieldsForBody(fields);
   if (mappedFields !== undefined) body["fields"] = mappedFields;
@@ -232,20 +227,9 @@ export async function updateProject(input: z.infer<typeof updateProjectSchema>) 
 
 // ───────────────────────────────────────────────────────────────────────────
 
-export const deleteProjectSchema = z.object({
-  id: positiveId,
-  confirm: confirmFlag().describe(
+export const { schema: deleteProjectSchema, handler: deleteProject } = defineDelete({
+  toolName: "delete_project",
+  pathPrefix: "/kases",
+  confirmHint:
     "Must be set to true. Permanently deletes the project (case). Consider update_project status='CLOSED' instead. Irreversible.",
-  ),
 });
-
-export async function deleteProject(input: z.infer<typeof deleteProjectSchema>) {
-  if (input.confirm !== true) {
-    throw new Error("delete_project requires confirm: true");
-  }
-  return idempotent(
-    () => capsuleDelete(`/kases/${input.id}`),
-    () => ({ deleted: true, alreadyDeleted: false, id: input.id }),
-    () => ({ deleted: true, alreadyDeleted: true, id: input.id }),
-  );
-}

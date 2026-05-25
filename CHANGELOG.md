@@ -53,6 +53,39 @@ versions adhere to [Semantic Versioning](https://semver.org).
   `update_project`, since v1.6.1 surfaced `teamId` on opportunity
   updates with the same 422-on-non-member semantic.
 
+### Refactor (no behaviour change)
+
+- **`defineDelete` helper** (`src/tools/define-delete.ts`)
+  centralises the schema + handler pair for the five `delete_*`
+  tools. Each whole-record delete now reads as a 5-line config
+  block instead of a 12-line near-duplicate. Single place to
+  evolve the confirm-gate enforcement, the idempotency wrapping,
+  and the `{deleted, alreadyDeleted, id}` envelope.
+
+- **`setRef` / `setNullableRef` helpers** (`src/tools/body-helpers.ts`)
+  replace the `if (X) body["x"] = { id: X }` pattern repeated
+  ~30 times across opportunities / projects / parties / tasks /
+  entries. The null-aware variant handles the explicit-unassign
+  case used by `update_project { ownerId: null }` /
+  `update_opportunity { teamId: null }` in one line.
+
+- **`readEntityRefs` helper** (`src/tools/preserve-refs.ts`)
+  centralises the defensive read used by `update_project` and
+  `update_opportunity` to carry `team` / `stage` across an
+  owner-only PUT (defeats the §27 asymmetric clear). Both update
+  handlers now share one definition of the GET shape.
+
+- **`defineBatch` helper** (`src/tools/define-batch.ts`) builds
+  the schema + fan-out handler for the four `items`-shaped batch
+  tools (`batch_update_party`, `batch_update_opportunity`,
+  `batch_add_tag`, `batch_remove_tag_by_id`). Each batch tool
+  reduces to a 6-line config block. `batch_complete_task` stays
+  inline by design (uses `ids` shape, not `items`).
+
+  **Net bundle impact**: `dist/index.js` 149.36 KB / `dist/http.js`
+  175.85 KB — bundle SHRANK ~0.6 KB despite added helper code, as
+  the deduplication outweighs the helper overhead.
+
 ## [1.6.1] — 2026-05-25
 
 Patch release on top of v1.6.0. Two production-driven fixes (one

@@ -1,10 +1,12 @@
 import { z } from "zod";
+import { setNullableRef, setRef } from "./body-helpers.js";
+import { defineBatch } from "./define-batch.js";
 import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
-import { confirmFlag } from "./confirm-flag.js";
+import { defineDelete } from "./define-delete.js";
+import { readEntityRefs } from "./preserve-refs.js";
 import { positiveId } from "./shared-schemas.js";
-import { capsuleDelete, capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
-import { type BatchOpts, batchExecute, chunk } from "../capsule/batch.js";
-import { idempotent } from "../capsule/idempotent.js";
+import { capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
+import { chunk } from "../capsule/batch.js";
 import {
   CustomFieldWriteSchema,
   fieldsArrayDescriptor,
@@ -145,8 +147,8 @@ export async function createOpportunity(input: z.infer<typeof createOpportunityS
     party: { id: partyId },
     milestone: { id: milestoneId },
   };
-  if (ownerId) body["owner"] = { id: ownerId };
-  if (teamId) body["team"] = { id: teamId };
+  setRef(body, "owner", ownerId);
+  setRef(body, "team", teamId);
 
   return capsulePost<{ opportunity: unknown }>("/opportunities", { opportunity: body });
 }
@@ -212,7 +214,7 @@ export async function updateOpportunity(input: z.infer<typeof updateOpportunityS
   for (const [k, v] of Object.entries(rest)) {
     if (v !== undefined) body[k] = v;
   }
-  if (milestoneId) body["milestone"] = { id: milestoneId };
+  setRef(body, "milestone", milestoneId);
 
   // Capsule's PUT on /opportunities has the same asymmetric owner/team
   // semantic as /kases (see NOTES-ON-CAPSULE-API.md §27):
@@ -231,21 +233,17 @@ export async function updateOpportunity(input: z.infer<typeof updateOpportunityS
   // "Unassign" option); `undefined` means "don't touch this field".
   let resolvedTeamId: number | null | undefined = teamId;
   if (ownerId !== undefined && teamId === undefined) {
-    const { data } = await capsuleGet<{
-      opportunity: { team?: { id: number } | null };
-    }>(`/opportunities/${id}`);
     // Only carry forward when the opp actually has a team; if current
     // team is null, leave the field out entirely (sending team: null
     // would be a redundant clear).
-    resolvedTeamId = data.opportunity?.team?.id ?? undefined;
+    ({ teamId: resolvedTeamId } = await readEntityRefs(`/opportunities/${id}`, "opportunity"));
   }
 
-  if (ownerId) body["owner"] = { id: ownerId };
-  if (resolvedTeamId === null) body["team"] = null;
-  else if (resolvedTeamId !== undefined) body["team"] = { id: resolvedTeamId };
+  setRef(body, "owner", ownerId);
+  setNullableRef(body, "team", resolvedTeamId);
   // Capsule's body field is `lostReason: {id}`. Only meaningful when
   // closing to Lost; for other milestones Capsule drops it silently.
-  if (lostReasonId) body["lostReason"] = { id: lostReasonId };
+  setRef(body, "lostReason", lostReasonId);
   const mappedFields = mapFieldsForBody(fields);
   if (mappedFields !== undefined) body["fields"] = mappedFields;
 
@@ -256,44 +254,19 @@ export async function updateOpportunity(input: z.infer<typeof updateOpportunityS
 
 // ── batch_update_opportunity (write, fan-out) ─────────────────────────────
 
-export const batchUpdateOpportunitySchema = z.object({
-  items: z
-    .array(updateOpportunitySchema)
-    .min(1)
-    .max(50)
-    .describe(
+export const { schema: batchUpdateOpportunitySchema, handler: batchUpdateOpportunity } =
+  defineBatch({
+    toolName: "batch_update_opportunity",
+    itemSchema: updateOpportunitySchema,
+    itemDescription:
       "Array of 1–50 update_opportunity inputs. Each item is the same shape as a single update_opportunity call — id is required, every other field is optional. Capped at 50 so a single tool call can't burn an outsized share of Capsule's hourly per-token rate budget.",
-    ),
-});
-
-export async function batchUpdateOpportunity(
-  input: z.infer<typeof batchUpdateOpportunitySchema>,
-  opts: BatchOpts = {},
-) {
-  return batchExecute(
-    "batch_update_opportunity",
-    input.items,
-    (item) => updateOpportunity(item),
-    opts,
-  );
-}
+    itemHandler: updateOpportunity,
+  });
 
 // ───────────────────────────────────────────────────────────────────────────
 
-export const deleteOpportunitySchema = z.object({
-  id: positiveId,
-  confirm: confirmFlag().describe(
-    "Must be set to true. Permanently deletes the opportunity. Irreversible.",
-  ),
+export const { schema: deleteOpportunitySchema, handler: deleteOpportunity } = defineDelete({
+  toolName: "delete_opportunity",
+  pathPrefix: "/opportunities",
+  confirmHint: "Must be set to true. Permanently deletes the opportunity. Irreversible.",
 });
-
-export async function deleteOpportunity(input: z.infer<typeof deleteOpportunitySchema>) {
-  if (input.confirm !== true) {
-    throw new Error("delete_opportunity requires confirm: true");
-  }
-  return idempotent(
-    () => capsuleDelete(`/opportunities/${input.id}`),
-    () => ({ deleted: true, alreadyDeleted: false, id: input.id }),
-    () => ({ deleted: true, alreadyDeleted: true, id: input.id }),
-  );
-}

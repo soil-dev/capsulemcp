@@ -1,9 +1,9 @@
 import { z } from "zod";
+import { setRef } from "./body-helpers.js";
+import { defineDelete } from "./define-delete.js";
 import { positiveId } from "./shared-schemas.js";
-import { confirmFlag } from "./confirm-flag.js";
-import { capsuleDelete, capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
+import { capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
 import { type BatchOpts, batchExecute, chunk } from "../capsule/batch.js";
-import { idempotent } from "../capsule/idempotent.js";
 
 // ── Read ────────────────────────────────────────────────────────────────────
 
@@ -116,10 +116,10 @@ export async function createTask(input: z.infer<typeof createTaskSchema>) {
   const { ownerId, partyId, opportunityId, projectId, ...rest } = input;
 
   const body: Record<string, unknown> = { ...rest };
-  if (ownerId) body["owner"] = { id: ownerId };
-  if (partyId) body["party"] = { id: partyId };
-  if (opportunityId) body["opportunity"] = { id: opportunityId };
-  if (projectId) body["kase"] = { id: projectId };
+  setRef(body, "owner", ownerId);
+  setRef(body, "party", partyId);
+  setRef(body, "opportunity", opportunityId);
+  setRef(body, "kase", projectId);
 
   return capsulePost<{ task: unknown }>("/tasks", { task: body });
 }
@@ -163,7 +163,7 @@ export async function updateTask(input: z.infer<typeof updateTaskSchema>) {
   for (const [k, v] of Object.entries(rest)) {
     if (v !== undefined) body[k] = v;
   }
-  if (ownerId) body["owner"] = { id: ownerId };
+  setRef(body, "owner", ownerId);
 
   return capsulePut<{ task: unknown }>(`/tasks/${id}`, { task: body });
 }
@@ -202,20 +202,9 @@ export async function batchCompleteTask(
 
 // ───────────────────────────────────────────────────────────────────────────
 
-export const deleteTaskSchema = z.object({
-  id: positiveId,
-  confirm: confirmFlag().describe(
+export const { schema: deleteTaskSchema, handler: deleteTask } = defineDelete({
+  toolName: "delete_task",
+  pathPrefix: "/tasks",
+  confirmHint:
     "Must be set to true. Permanently deletes the task. To mark done without losing history use complete_task. Irreversible.",
-  ),
 });
-
-export async function deleteTask(input: z.infer<typeof deleteTaskSchema>) {
-  if (input.confirm !== true) {
-    throw new Error("delete_task requires confirm: true");
-  }
-  return idempotent(
-    () => capsuleDelete(`/tasks/${input.id}`),
-    () => ({ deleted: true, alreadyDeleted: false, id: input.id }),
-    () => ({ deleted: true, alreadyDeleted: true, id: input.id }),
-  );
-}

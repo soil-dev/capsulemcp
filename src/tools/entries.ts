@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { positiveId } from "./shared-schemas.js";
+import { setRef } from "./body-helpers.js";
 import { EMBED_ATTACHMENTS_PARTICIPANTS_DESCRIPTION } from "./descriptions.js";
-import { confirmFlag } from "./confirm-flag.js";
-import { idempotent } from "../capsule/idempotent.js";
-import { capsuleDelete, capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
+import { defineDelete } from "./define-delete.js";
+import { capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
 
 // ── Read ────────────────────────────────────────────────────────────────────
 
@@ -121,9 +121,9 @@ export async function addNote(input: z.infer<typeof addNoteSchema>) {
   }
 
   const body: Record<string, unknown> = { type: "note", content };
-  if (partyId) body["party"] = { id: partyId };
-  if (opportunityId) body["opportunity"] = { id: opportunityId };
-  if (projectId) body["kase"] = { id: projectId };
+  setRef(body, "party", partyId);
+  setRef(body, "opportunity", opportunityId);
+  setRef(body, "kase", projectId);
   if (entryAt !== undefined) body["entryAt"] = entryAt;
 
   return capsulePost<{ entry: unknown }>("/entries", { entry: body });
@@ -169,20 +169,10 @@ export async function updateEntry(input: z.infer<typeof updateEntrySchema>) {
 
 // ───────────────────────────────────────────────────────────────────────────
 
-export const deleteEntrySchema = z.object({
-  id: positiveId.describe("Entry (note/email/task-record) ID"),
-  confirm: confirmFlag().describe(
+export const { schema: deleteEntrySchema, handler: deleteEntry } = defineDelete({
+  toolName: "delete_entry",
+  pathPrefix: "/entries",
+  confirmHint:
     "Must be set to true. Permanently deletes the entry — use this to remove a note from a party/opportunity/project. Irreversible.",
-  ),
+  idDescription: "Entry (note/email/task-record) ID",
 });
-
-export async function deleteEntry(input: z.infer<typeof deleteEntrySchema>) {
-  if (input.confirm !== true) {
-    throw new Error("delete_entry requires confirm: true");
-  }
-  return idempotent(
-    () => capsuleDelete(`/entries/${input.id}`),
-    () => ({ deleted: true, alreadyDeleted: false, id: input.id }),
-    () => ({ deleted: true, alreadyDeleted: true, id: input.id }),
-  );
-}
