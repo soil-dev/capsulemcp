@@ -129,7 +129,7 @@ export const createOpportunitySchema = z.object({
   ownerId: positiveId
     .optional()
     .describe(
-      "Assign to user ID. Defaults to the API-token owner when omitted — note that opportunities do NOT inherit owner from the linked party, even though one might expect it. Once set, this connector cannot clear the owner back to null (use Capsule's web UI). Discover IDs via list_users. " +
+      "Assign to user ID. Defaults to the API-token owner when omitted — note that opportunities do NOT inherit owner from the linked party, even though one might expect it. To clear owner later, call update_opportunity with `ownerId: null`. Discover IDs via list_users. " +
         "WARNING: tenant pipeline / milestone-reached automation can mutate this field post-create — see the `milestoneId` description for details and the chained-PUT workaround.",
     ),
   teamId: positiveId

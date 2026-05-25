@@ -380,6 +380,19 @@ describe("createParty", () => {
     const body = JSON.parse(String((options as RequestInit).body));
     expect(body.party).not.toHaveProperty("fields");
   });
+
+  it("rejects null owner/team on create while update still allows clears", async () => {
+    const { createPartySchema, updatePartySchema } = await import("../src/tools/parties.js");
+
+    expect(
+      createPartySchema.safeParse({ type: "person", firstName: "X", ownerId: null }).success,
+    ).toBe(false);
+    expect(
+      createPartySchema.safeParse({ type: "person", firstName: "X", teamId: null }).success,
+    ).toBe(false);
+    expect(updatePartySchema.safeParse({ id: 1, ownerId: null }).success).toBe(true);
+    expect(updatePartySchema.safeParse({ id: 1, teamId: null }).success).toBe(true);
+  });
 });
 
 describe("deleteParty", () => {

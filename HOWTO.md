@@ -290,9 +290,9 @@ Versioning convention:
 
 ## Use MCP Tasks for long-running batch writes
 
-The 5 `batch_*` write tools (`batch_update_party`,
-`batch_update_opportunity`, `batch_complete_task`, `batch_add_tag`,
-`batch_remove_tag_by_id`) support the **MCP Tasks primitive**
+The 6 `batch_*` write tools (`batch_update_party`,
+`batch_update_opportunity`, `batch_update_project`, `batch_complete_task`,
+`batch_add_tag`, `batch_remove_tag_by_id`) support the **MCP Tasks primitive**
 (SEP-1686, "call-now, fetch-later"). When the operator has
 `MCP_TASKS_ENABLED=1` set on the OAuth HTTP deployment, clients
 can augment a `tools/call` with `params.task` to dispatch the work

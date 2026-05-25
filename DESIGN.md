@@ -70,7 +70,7 @@ where the bytes flow; the semantics are identical.
                                       ▼
                           ┌────────────────────────┐
                           │ src/tools/*.ts         │
-                          │ (86 tools across the   │
+                          │ (87 tools across the   │
                           │  Capsule resource      │
                           │  graph — see README)   │
                           └────────────────────────┘
@@ -331,7 +331,7 @@ When `MCP_TASKS_ENABLED=1` and an OAuth client_id is present, the
 SDK's auto-handlers for `tasks/get`, `tasks/result`, `tasks/list`,
 and `tasks/cancel` light up against a per-clientId scoped wrapper
 (`src/tasks/store.ts`) around the SDK's `InMemoryTaskStore`, and
-the five high-latency `batch_*` write tools opt into optional task
+the six high-latency `batch_*` write tools opt into optional task
 execution. When tasks are disabled, those batch tools register as
 ordinary synchronous tools so legacy callers never enter the SDK's
 task polling path. The wrapper enforces tenant isolation (a caller

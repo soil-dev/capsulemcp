@@ -4,7 +4,7 @@
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server for [Capsule CRM](https://capsulecrm.com). Connect Claude (Desktop, Code, or web Projects via Custom Connector) to your CRM and let it answer natural-language questions across the full record graph: contacts, organisations, opportunities, projects, tasks, and timeline activity. Beyond the basics it covers structured filters with field/operator conditions, saved searches with sort, workflow tracks (templates and instances), file attachments (read + write), audit of deleted records, and batch fetches up to 50 records per call.
 
-- **86 tools** across the Capsule resource graph (49 in read-only mode) — full read coverage plus careful, confirm-gated writes; 5 batched-write tools (`batch_*`) for mass-update workflows
+- **87 tools** across the Capsule resource graph (49 in read-only mode) — full read coverage plus careful, confirm-gated writes; 6 batched-write tools (`batch_*`) for mass-update workflows
 - **Two transports**: stdio for local installs (Claude Desktop / Code), HTTP+OAuth for hosted Custom Connectors
 - **Read-only mode** as a one-env-var flag; works alongside read-scoped Capsule tokens
 - **MCP tool annotations**: 49 read tools carry `readOnlyHint: true`, 7 destructive ones carry `destructiveHint: true` — clients that honor these hints can auto-approve safe reads while still prompting for writes/destructive calls

@@ -58,7 +58,7 @@ export function chunk<T>(arr: T[], size: number): T[][] {
  * Common options threaded through every batched-write tool. `signal`
  * fires when the caller sends `tasks/cancel`; `batchExecute` checks
  * it between items so unclaimed slots get a `cancelled` error rather
- * than running. Used both at the tool function boundary (the 5
+ * than running. Used both at the tool function boundary (the 6
  * `batch_*` handlers in `src/tools/`) and inside `batchExecute`
  * itself — so the shape is canonical and named.
  */

@@ -1,7 +1,7 @@
 /**
  * Tests for MCP tool annotations inference.
  *
- * Annotations are name-inferred at registration time so all 86 tools
+ * Annotations are name-inferred at registration time so all 87 tools
  * get accurate hints without per-call-site annotation declarations.
  * These tests pin three contracts:
  *
@@ -17,7 +17,7 @@
  *
  *   3. Aggregate counts match the catalog: 49 read-only-hinted tools
  *      (matches README "49 in read-only mode"), 7 destructive-hinted,
- *      30 unhinted writes. Drift in any direction means a new tool
+ *      31 unhinted writes. Drift in any direction means a new tool
  *      is going to surprise users with an unexpected pre-call prompt
  *      (or, worse, an auto-approval for something destructive).
  */
