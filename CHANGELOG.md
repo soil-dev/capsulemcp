@@ -11,6 +11,16 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.6.3] — 2026-05-25
+
+Patch release on top of v1.6.2. Adds the four parent-reference
+fields that were missing from the `update_*` schemas, plus the
+tool-description sweep so the new capability surfaces at
+`tools/list` for LLM routing. Production-driven (the gap was hit
+three times in a week before this fix); empirically verified
+against a live tenant. No tool surface change, no env-var change;
+safe in-place upgrade from v1.6.0 / v1.6.1 / v1.6.2.
+
 ### Added
 
 - **Re-parenting / re-linking on `update_*` tools.** Four
@@ -41,6 +51,26 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
   `batch_update_opportunity` / `batch_update_party` inherit the
   new fields via the shared item schemas — no code change for batch.
+
+### Documentation
+
+- **Top-level tool descriptions** for `update_opportunity` /
+  `update_party` / `update_project` / `update_task` now mention
+  the new parent-reference fields, so the capability surfaces at
+  `tools/list` for LLM routing (not just at the per-field
+  `.describe()` level the model sees later). Integration test
+  asserts the four descriptions stay aligned with their schemas.
+
+- **NOTES-ON-CAPSULE-API.md §31** added — empirically verified
+  PUT semantics for the four parent-reference fields (when null
+  is accepted, when it 422s, when Capsule silently ignores).
+  §27 now forward-references §31 to complete the linkage.
+
+- **HOWTO.md** test count and bundle sizes refreshed
+  (469 → 496 tests; ~147 / ~173 KB → ~153 / ~180 KB).
+
+- **`tests/bundle-shape.test.ts`** canary comment refreshed to
+  the current bundle sizes (the band itself is unchanged).
 
 ## [1.6.2] — 2026-05-25
 
