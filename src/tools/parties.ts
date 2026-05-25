@@ -3,6 +3,7 @@ import { setNullableRef, setRef } from "./body-helpers.js";
 import { defineBatch } from "./define-batch.js";
 import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
 import { defineDelete } from "./define-delete.js";
+import { readEntityRefs } from "./preserve-refs.js";
 import { positiveId } from "./shared-schemas.js";
 import { capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
 import { chunk } from "../capsule/batch.js";
@@ -284,9 +285,17 @@ const PartyWriteBaseSchema = {
       "APPEND-ONLY: items are merged into the existing list, never replaced. For atomic add/remove/replace use add_party_website and remove_party_website_by_id.",
     ),
   ownerId: positiveId
+    .nullable()
     .optional()
     .describe(
-      "Assign to user ID. On create_party, defaults to the API-token owner when omitted. Once set, this connector cannot clear the owner back to null — use Capsule's web UI for that. Discover IDs via list_users.",
+      "Assign to user ID. On create_party, defaults to the API-token owner when omitted. On update_party, pass a user ID to set or `null` to unassign (verified empirically in v1.6.4 wire-trace — Capsule accepts `owner: null` on PUT /parties/:id for both persons and organisations). Discover IDs via list_users. " +
+        "WARNING: Capsule's PUT on /parties has the same asymmetric owner/team semantic documented in NOTES-ON-CAPSULE-API.md §27 for /kases — setting `owner` while omitting `team` is plausibly clearing-prone. When you supply `ownerId` and omit `teamId`, this connector reads the party's current team and includes it in the PUT body to preserve it across the owner change. Supply `teamId` explicitly to change it.",
+    ),
+  teamId: positiveId
+    .nullable()
+    .optional()
+    .describe(
+      "Assign to team ID (discover via list_teams). Pass a team ID to set, or `null` to unassign. Capsule enforces the owner∈team membership constraint — passing a team the current owner doesn't belong to returns 422 'owner is not a member of the team'. Combine `ownerId: null` + `teamId: <T>` in one call to transfer a party to team-ownership with no specific user (verified empirically in v1.6.4 wire-trace; the membership rule doesn't fire when owner is null).",
     ),
 };
 
@@ -304,10 +313,15 @@ export const createPartySchema = z.object({
 });
 
 export async function createParty(input: z.infer<typeof createPartySchema>) {
-  const { ownerId, organisationId, ...rest } = input;
+  const { ownerId, teamId, organisationId, ...rest } = input;
 
   const body: Record<string, unknown> = { ...rest };
+  // On create, null is meaningless for owner (Capsule defaults to the
+  // API-token user) and for team (no defaulting; just omit). `setRef`
+  // skips both null and undefined; only positive int IDs land in the
+  // body.
   setRef(body, "owner", ownerId);
+  setRef(body, "team", teamId);
   setRef(body, "organisation", organisationId);
 
   return capsulePost<{ party: unknown }>("/parties", { party: body });
@@ -338,13 +352,25 @@ export const updatePartySchema = z.object({
 });
 
 export async function updateParty(input: z.infer<typeof updatePartySchema>) {
-  const { id, ownerId, organisationId, fields, ...rest } = input;
+  const { id, ownerId, teamId, organisationId, fields, ...rest } = input;
 
   const body: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(rest)) {
     if (v !== undefined) body[k] = v;
   }
-  setRef(body, "owner", ownerId);
+
+  // Defeat Capsule's owner→clears-team asymmetric PUT semantic on
+  // /parties (NOTES-ON-CAPSULE-API.md §27, extended to parties in
+  // §31 via v1.6.4 wire-trace). When ownerId is being touched and
+  // teamId is omitted, read the current team and carry it forward;
+  // skip the GET when teamId is explicit.
+  let resolvedTeamId: number | null | undefined = teamId;
+  if (ownerId !== undefined && teamId === undefined) {
+    ({ teamId: resolvedTeamId } = await readEntityRefs(`/parties/${id}`, "party"));
+  }
+
+  setNullableRef(body, "owner", ownerId);
+  setNullableRef(body, "team", resolvedTeamId);
   setNullableRef(body, "organisation", organisationId);
   const mappedFields = mapFieldsForBody(fields);
   if (mappedFields !== undefined) body["fields"] = mappedFields;

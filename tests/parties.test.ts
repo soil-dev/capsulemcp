@@ -481,6 +481,119 @@ describe("updateParty", () => {
     const body = JSON.parse((options as RequestInit).body as string);
     expect(body.party).toHaveProperty("organisation", null);
   });
+
+  it("maps teamId → team:{id} (v1.6.4)", async () => {
+    // Reporter scenario: transfer 16 organisation parties to team
+    // ownership. Pre-v1.6.4 the schema didn't expose teamId so the
+    // field was silently dropped. v1.6.4 plumbs it through with
+    // wire-trace-confirmed PUT body shape. teamId-only update does
+    // NOT fire the defensive RMW (only ownerId-touched does) — one
+    // fetch, no GET.
+    mockFetch(200, { party: { id: 5 } });
+
+    const { updateParty } = await import("../src/tools/parties.js");
+    await updateParty({ id: 5, teamId: 88 });
+
+    expect(vi.mocked(fetch).mock.calls).toHaveLength(1);
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.party.team).toEqual({ id: 88 });
+    expect(body.party.teamId).toBeUndefined();
+  });
+
+  it("teamId: null clears the team (v1.6.4)", async () => {
+    mockFetch(200, { party: { id: 5 } });
+    const { updateParty } = await import("../src/tools/parties.js");
+    await updateParty({ id: 5, teamId: null });
+
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.party).toHaveProperty("team", null);
+  });
+
+  it("ownerId: null clears the owner (v1.6.4)", async () => {
+    // Wire-trace probe E/F confirmed: PUT /parties/:id { owner: null }
+    // succeeds on both person and organisation, clearing the field.
+    // Pre-v1.6.4 ownerId was non-nullable; this is the new behavior.
+    mockFetch(200, { party: { id: 5, team: null } }); // GET (RMW reads since ownerId touched + teamId omitted)
+    mockFetch(200, { party: { id: 5 } }); // PUT
+
+    const { updateParty } = await import("../src/tools/parties.js");
+    await updateParty({ id: 5, ownerId: null });
+
+    // 2 fetches: defensive GET + PUT
+    expect(vi.mocked(fetch).mock.calls).toHaveLength(2);
+    const [, putOptions] = vi.mocked(fetch).mock.calls[1]!;
+    const body = JSON.parse((putOptions as RequestInit).body as string);
+    expect(body.party).toHaveProperty("owner", null);
+  });
+
+  it("ownerId: null + teamId: <id> in one call — the reporter's transfer-to-team-ownership scenario (v1.6.4)", async () => {
+    // Wire-trace probe G: PUT { owner: null, team: { id: T } } on an
+    // org lands as { owner: null, team: { id: T } }. The owner∈team
+    // membership rule doesn't fire when owner is null. No defensive
+    // GET because both fields are explicit.
+    mockFetch(200, { party: { id: 5 } });
+    const { updateParty } = await import("../src/tools/parties.js");
+    await updateParty({ id: 5, ownerId: null, teamId: 88 });
+
+    expect(vi.mocked(fetch).mock.calls).toHaveLength(1);
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.party).toHaveProperty("owner", null);
+    expect(body.party.team).toEqual({ id: 88 });
+  });
+
+  it("ownerId touched + teamId omitted: defensive RMW carries current team forward (v1.6.4 §27 mitigation)", async () => {
+    // Mirrors the update_project / update_opportunity pattern: when
+    // ownerId is being touched and teamId is omitted, fetch the
+    // party's current team and include it in the PUT body so the §27
+    // asymmetric clear (owner-in-body clears team) doesn't fire.
+    mockFetch(200, { party: { id: 5, team: { id: 42, name: "Ops" } } }); // GET
+    mockFetch(200, { party: { id: 5 } }); // PUT
+
+    const { updateParty } = await import("../src/tools/parties.js");
+    await updateParty({ id: 5, ownerId: 7 });
+
+    expect(vi.mocked(fetch).mock.calls).toHaveLength(2);
+    const [getUrl, getOptions] = vi.mocked(fetch).mock.calls[0]!;
+    expect(String(getUrl)).toMatch(/\/parties\/5($|\?)/);
+    expect((getOptions as RequestInit).method ?? "GET").toBe("GET");
+
+    const [, putOptions] = vi.mocked(fetch).mock.calls[1]!;
+    const putBody = JSON.parse((putOptions as RequestInit).body as string);
+    expect(putBody.party.owner).toEqual({ id: 7 });
+    // Team preserved from the GET — without this, Capsule would clear it.
+    expect(putBody.party.team).toEqual({ id: 42 });
+  });
+
+  it("ownerId touched + currentTeam=null: PUT body omits team (no spurious clear)", async () => {
+    // When the party has no team to begin with, the RMW still fires
+    // (ownerId touched, teamId omitted) but no team is carried
+    // forward — sending team: null would be a redundant clear.
+    mockFetch(200, { party: { id: 5, team: null } }); // GET
+    mockFetch(200, { party: { id: 5 } }); // PUT
+
+    const { updateParty } = await import("../src/tools/parties.js");
+    await updateParty({ id: 5, ownerId: 7 });
+
+    const [, putOptions] = vi.mocked(fetch).mock.calls[1]!;
+    const putBody = JSON.parse((putOptions as RequestInit).body as string);
+    expect(putBody.party.owner).toEqual({ id: 7 });
+    expect(putBody.party).not.toHaveProperty("team");
+  });
+
+  it("ownerId + explicit teamId: no defensive GET (both fields explicit)", async () => {
+    mockFetch(200, { party: { id: 5 } });
+    const { updateParty } = await import("../src/tools/parties.js");
+    await updateParty({ id: 5, ownerId: 7, teamId: 88 });
+
+    expect(vi.mocked(fetch).mock.calls).toHaveLength(1);
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.party.owner).toEqual({ id: 7 });
+    expect(body.party.team).toEqual({ id: 88 });
+  });
 });
 
 describe("error body parsing", () => {

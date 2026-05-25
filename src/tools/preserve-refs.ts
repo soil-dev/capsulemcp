@@ -33,7 +33,7 @@ interface EntityRefShape {
  */
 export async function readEntityRefs(
   path: string,
-  responseKey: "kase" | "opportunity",
+  responseKey: "kase" | "opportunity" | "party",
 ): Promise<{ teamId: number | undefined; stageId: number | undefined }> {
   const { data } = await capsuleGet<Record<string, EntityRefShape>>(path);
   const entity = data[responseKey];

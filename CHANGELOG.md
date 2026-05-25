@@ -11,6 +11,68 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Added
+
+- **`teamId` on `create_party` / `update_party` /
+  `batch_update_party`.** Production hit the same schema-omission
+  shape as v1.6.1's opportunity teamId gap, then v1.6.3's parent-ref
+  sweep — parties had no way to set or change the `team` field
+  through this connector even though Capsule's REST API accepts it.
+  v1.6.4 plumbs it through with full nullable support: pass a team
+  id to set, or `null` to unassign. Empirically verified via
+  `scripts/wire-trace-v164.ts` (7 probes, person + organisation,
+  full cleanup).
+
+- **`ownerId: null` now supported on `update_party`.** Previously
+  the connector documented "cannot clear the owner back to null —
+  use Capsule's web UI" as a client-side guard. The v1.6.4
+  wire-trace empirically refuted that: `PUT /parties/:id
+  { owner: null }` succeeds on both persons and organisations and
+  Capsule returns the party with `owner: null`. Schema now exposes
+  `ownerId.nullable()` matching the v1.6.3 `update_project.ownerId`
+  shape. The combined `{ ownerId: null, teamId: <id> }` call puts
+  a party into "team-owned, no specific user" state — the common
+  pattern when transferring a departed user's records.
+
+  Reporter's exact scenario (16 organisation parties, end state
+  owner=null + team=X) now achievable in one batch via
+  `batch_update_party({items: [{id, ownerId: null, teamId: T}, ...]})`.
+
+### Fixed
+
+- **`update_party` now applies the same §27 defensive
+  read-modify-write that `update_project` and `update_opportunity`
+  ship.** Capsule's PUT on `/parties` plausibly shares the
+  asymmetric owner-clears-team semantic with `/kases` and
+  `/opportunities`. When `update_party` is called with `ownerId`
+  touched but `teamId` omitted, the connector now reads the
+  party's current team and includes it in the PUT body to prevent
+  the silent clear. No extra GET when `teamId` is also explicit.
+  Mirrors the v1.6.1 / v1.6.3 RMW pattern via the existing
+  `readEntityRefs` helper (extended to accept `responseKey:
+  "party"`).
+
+### Documentation
+
+- **`create_party` and `update_party` tool descriptions** in
+  `src/server.ts` updated to mention the new `teamId` field
+  and the nullable `ownerId` behavior. Integration test
+  (`tests/mcp-integration.test.ts`) extended to assert
+  `update_party` description contains both `organisationId`
+  AND `teamId`.
+
+- **NOTES-ON-CAPSULE-API.md §31** extended with the empirical
+  findings on `PUT /parties` party-team semantics — including
+  the Capsule-side owner∈team membership constraint that
+  applies to parties (same 422 message as /kases and
+  /opportunities) and the fact that the membership rule does
+  NOT fire when owner is null (verified by probe G).
+
+- **`scripts/wire-trace-v164.ts`** ships as the reusable probe
+  harness for the party-team behavior verification — 7 probes
+  covering person + organisation × set/null/owner-null
+  combinations, full cleanup on exit.
+
 ## [1.6.3] — 2026-05-25
 
 Patch release on top of v1.6.2. Adds the four parent-reference
