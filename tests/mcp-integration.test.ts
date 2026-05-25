@@ -183,11 +183,20 @@ describe("tools/list", () => {
   });
 
   it("keeps parent-reference update descriptions aligned with their schemas", async () => {
+    // Schema-level .describe() strings document fields once the LLM has
+    // committed to a tool. Top-level tool descriptions in registerTool()
+    // are what surface FIRST in tools/list — if a new parent-ref field
+    // exists on the schema but isn't called out at the tool level, the
+    // model may not realise the tool can do that operation. This test
+    // pins the visibility for all four `update_*` tools that gained
+    // parent-ref fields in PR #50.
     const { client } = await spawn();
     const { tools } = await client.listTools();
     const byName = new Map(tools.map((t) => [t.name, t]));
 
+    expect(byName.get("update_opportunity")?.description).toContain("partyId");
     expect(byName.get("update_party")?.description).toContain("organisationId");
+    expect(byName.get("update_project")?.description).toContain("partyId");
     expect(byName.get("update_task")?.description).toContain("partyId");
     expect(byName.get("update_task")?.description).toContain("opportunityId");
     expect(byName.get("update_task")?.description).toContain("projectId");

@@ -537,7 +537,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
     registerTool(
       server,
       "update_opportunity",
-      "Update fields on an existing opportunity. Only the fields you provide are changed. Closed (Won/Lost) opportunities ARE editable — Capsule does not enforce closed-record immutability, so `value`, `description`, etc. can be changed on a Won opp without warning. If the workflow needs historical revenue numbers to be stable, enforce that caller-side.",
+      "Update fields on an existing opportunity, including the parent-reference field `partyId` to reassign the opp to a different primary party. Only the fields you provide are changed. Closed (Won/Lost) opportunities ARE editable — Capsule does not enforce closed-record immutability, so `value`, `description`, etc. can be changed on a Won opp without warning. If the workflow needs historical revenue numbers to be stable, enforce that caller-side. Capsule requires every opportunity to have a party — passing `partyId: null` is rejected with 422 'party is required'.",
       updateOpportunitySchema,
       updateOpportunity,
     );
@@ -613,7 +613,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
     registerTool(
       server,
       "update_project",
-      "Update fields on an existing project. Only the fields you provide are changed. Use status='CLOSED' to close a project. CLOSED projects remain fully editable — Capsule does not enforce closed-record immutability. Stage moves and description edits on a CLOSED project are accepted without warning.",
+      "Update fields on an existing project, including the parent-reference field `partyId` to reassign the project to a different primary party. Only the fields you provide are changed. Use status='CLOSED' to close a project. CLOSED projects remain fully editable — Capsule does not enforce closed-record immutability. Stage moves and description edits on a CLOSED project are accepted without warning. Capsule requires every project to have a party — passing `partyId: null` is rejected with 422 'party is required'.",
       updateProjectSchema,
       updateProject,
     );
