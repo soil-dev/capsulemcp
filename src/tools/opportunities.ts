@@ -134,10 +134,18 @@ export const createOpportunitySchema = z.object({
     .describe(
       "Assign to user ID. Defaults to the API-token owner when omitted — note that opportunities do NOT inherit owner from the linked party, even though one might expect it. Once set, this connector cannot clear the owner back to null (use Capsule's web UI). Discover IDs via list_users.",
     ),
+  teamId: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      "Assign to team ID (discover via list_teams). Independent from `ownerId` — setting one does NOT clear the other on create. Three ownership shapes are valid: owner alone, team alone, or owner+team (the owner must be a member of the team; users can belong to multiple teams — 422 'owner is not a member of the team' otherwise).",
+    ),
 });
 
 export async function createOpportunity(input: z.infer<typeof createOpportunitySchema>) {
-  const { partyId, milestoneId, ownerId, ...rest } = input;
+  const { partyId, milestoneId, ownerId, teamId, ...rest } = input;
 
   const body: Record<string, unknown> = {
     ...rest,
@@ -145,6 +153,7 @@ export async function createOpportunity(input: z.infer<typeof createOpportunityS
     milestone: { id: milestoneId },
   };
   if (ownerId) body["owner"] = { id: ownerId };
+  if (teamId) body["team"] = { id: teamId };
 
   return capsulePost<{ opportunity: unknown }>("/opportunities", { opportunity: body });
 }
@@ -193,7 +202,20 @@ export const updateOpportunitySchema = z.object({
     .positive()
     .optional()
     .describe(
-      "Reassign owner to user ID. Once set, this connector cannot clear an owner back to null — use Capsule's web UI for that.",
+      "Reassign owner to user ID. Once set, this connector cannot clear an owner back to null — use Capsule's web UI for that. " +
+        "When you supply `ownerId` and omit `teamId`, the connector fetches the opportunity's current team and includes it in the PUT body to preserve it across the owner change. Without this defensive read, Capsule's PUT would clear the existing team (see NOTES-ON-CAPSULE-API.md §27 — same asymmetric semantic as /kases). Supply `teamId` explicitly on the same call to change the team instead.",
+    ),
+  teamId: z
+    .number()
+    .int()
+    .positive()
+    .nullable()
+    .optional()
+    .describe(
+      "Reassign team: pass a team ID (discover via list_teams) to set, or `null` to unassign. " +
+        "Capsule preserves the existing owner across a team change (server-side), so `update_opportunity { teamId }` alone is safe — the owner is carried through. " +
+        "Owner must be a member of the new team or Capsule returns 422 'owner is not a member of the team'. " +
+        "Independent from `ownerId` — setting `teamId` does NOT clear the owner.",
     ),
   fields: z
     .array(CustomFieldWriteSchema)
@@ -202,14 +224,43 @@ export const updateOpportunitySchema = z.object({
 });
 
 export async function updateOpportunity(input: z.infer<typeof updateOpportunitySchema>) {
-  const { id, milestoneId, ownerId, lostReasonId, fields, ...rest } = input;
+  const { id, milestoneId, ownerId, teamId, lostReasonId, fields, ...rest } = input;
 
   const body: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(rest)) {
     if (v !== undefined) body[k] = v;
   }
   if (milestoneId) body["milestone"] = { id: milestoneId };
+
+  // Capsule's PUT on /opportunities has the same asymmetric owner/team
+  // semantic as /kases (see NOTES-ON-CAPSULE-API.md §27):
+  //
+  //   `owner` in body → Capsule clears `team` (unless `team` also in body)
+  //   `team` in body  → Capsule preserves the existing `owner` (and
+  //                     validates owner ∈ team)
+  //
+  // To make `update_opportunity { ownerId }` safe (so it doesn't
+  // accidentally clear an existing team), the connector reads the
+  // current opportunity and carries the omitted `team` into the PUT
+  // body whenever `ownerId` is being touched. No extra GET when
+  // `teamId` is also supplied explicitly.
+  //
+  // `null` on teamId means "unassign team" (matches Capsule's UI
+  // "Unassign" option); `undefined` means "don't touch this field".
+  let resolvedTeamId: number | null | undefined = teamId;
+  if (ownerId !== undefined && teamId === undefined) {
+    const { data } = await capsuleGet<{
+      opportunity: { team?: { id: number } | null };
+    }>(`/opportunities/${id}`);
+    // Only carry forward when the opp actually has a team; if current
+    // team is null, leave the field out entirely (sending team: null
+    // would be a redundant clear).
+    resolvedTeamId = data.opportunity?.team?.id ?? undefined;
+  }
+
   if (ownerId) body["owner"] = { id: ownerId };
+  if (resolvedTeamId === null) body["team"] = null;
+  else if (resolvedTeamId !== undefined) body["team"] = { id: resolvedTeamId };
   // Capsule's body field is `lostReason: {id}`. Only meaningful when
   // closing to Lost; for other milestones Capsule drops it silently.
   if (lostReasonId) body["lostReason"] = { id: lostReasonId };
