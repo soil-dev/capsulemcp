@@ -141,6 +141,11 @@ export const updateProjectSchema = z.object({
   name: z.string().min(1).optional(),
   description: z.string().optional(),
   status: z.enum(["OPEN", "CLOSED"]).optional(),
+  partyId: positiveId
+    .optional()
+    .describe(
+      "Reassign the project to a different primary party. Capsule requires every project to have a party — passing `null` is rejected with 422 'party is required' (verified empirically in v1.6.3 wire-trace). Discover ids via search_parties / filter_parties.",
+    ),
   ownerId: positiveId
     .nullable()
     .optional()
@@ -180,37 +185,23 @@ export const updateProjectSchema = z.object({
 });
 
 export async function updateProject(input: z.infer<typeof updateProjectSchema>) {
-  const { id, ownerId, teamId, stageId, fields, ...rest } = input;
+  const { id, partyId, ownerId, teamId, stageId, fields, ...rest } = input;
 
   const body: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(rest)) {
     if (v !== undefined) body[k] = v;
   }
+  setRef(body, "party", partyId);
 
-  // Capsule's PUT on /kases has an asymmetric owner/team semantic:
-  //
-  //   `owner` in body          → Capsule clears `team` (unless `team` also in body)
-  //   `team` in body           → Capsule preserves the existing `owner` (and validates owner ∈ team)
-  //
-  // To make `update_project { ownerId }` safe (so it doesn't accidentally
-  // clear an existing team — or, defensively, stage), the connector reads
-  // the current project and carries any omitted `team` / `stage` into the
-  // PUT body whenever `ownerId` is being touched. Carrying stage is
-  // defensive: alpha.20-era verification didn't directly probe whether
-  // owner-in-body PUTs clear stage the way they clear team, but the cost
-  // of a redundant `stage: <currentId>` is one extra integer in the body,
-  // so we err on the safe side rather than risk a silent stage clear.
-  //
-  // `null` means "unassign" on either owner/team (matches Capsule's UI
-  // "Unassign" option); `undefined` means "don't touch this field".
+  // Defeat Capsule's owner→clears-team asymmetric PUT semantic on
+  // /kases (NOTES-ON-CAPSULE-API.md §27). When ownerId is being
+  // touched and team/stage are omitted, read the current values and
+  // carry them forward. Stage carry is defensive (alpha.20-era
+  // verification didn't directly probe the symmetric clear, but a
+  // redundant stage in body is cheaper than risking a silent clear).
   let resolvedTeamId: number | null | undefined = teamId;
   let resolvedStageId: number | undefined = stageId;
   if (ownerId !== undefined && (teamId === undefined || stageId === undefined)) {
-    // Only carry forward when the project actually has a value; if
-    // current team/stage is null, leave the field out of the body
-    // entirely (sending `team: null` would be a redundant clear and
-    // could surprise on the owner-or-team-required 422 path; same
-    // idea for stage).
     const current = await readEntityRefs(`/kases/${id}`, "kase");
     if (teamId === undefined) resolvedTeamId = current.teamId;
     if (stageId === undefined) resolvedStageId = current.stageId;
