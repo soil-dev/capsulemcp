@@ -15,7 +15,7 @@ afterEach(() => {
 
 describe("listCustomFields", () => {
   it("GETs /<entity>/fields/definitions per entity type", async () => {
-    mockFetch(200, { definitions: [{ id: 1, name: "Member State", type: "list" }] });
+    mockFetch(200, { definitions: [{ id: 1, name: "Sample Field", type: "list" }] });
     const { listCustomFields } = await import("../src/tools/custom-fields.js");
     const result = await listCustomFields({ entity: "parties" });
     const [url] = vi.mocked(fetch).mock.calls[0]!;
@@ -34,14 +34,14 @@ describe("listCustomFields", () => {
 
 describe("getCustomField", () => {
   it("GETs /<entity>/fields/definitions/{id}", async () => {
-    mockFetch(200, { definition: { id: 910997, name: "Member State" } });
+    mockFetch(200, { definition: { id: 999, name: "Sample Field" } });
     const { getCustomField } = await import("../src/tools/custom-fields.js");
     const result = await getCustomField({
       entity: "parties",
-      fieldId: 910997,
+      fieldId: 999,
     });
     const [url] = vi.mocked(fetch).mock.calls[0]!;
-    expect(url).toContain("/parties/fields/definitions/910997");
-    expect((result as { definition: { id: number } }).definition.id).toBe(910997);
+    expect(url).toContain("/parties/fields/definitions/999");
+    expect((result as { definition: { id: number } }).definition.id).toBe(999);
   });
 });
