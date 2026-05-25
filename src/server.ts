@@ -380,7 +380,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
     registerTool(
       server,
       "update_party",
-      "Update top-level fields on an existing party (about, firstName/lastName/name/title/jobTitle, ownerId). Only the fields you provide are changed. Child arrays (emailAddresses / phoneNumbers / addresses / websites) on this tool are APPEND-ONLY: items are merged into the existing list, not replaced. For surgical changes — replacing one email, removing one phone number, fixing the type on one address — use the dedicated atomic tools: add_party_email_address / remove_party_email_address_by_id (and the phone/address/website equivalents).",
+      "Update top-level fields on an existing party (about, firstName/lastName/name/title/jobTitle, ownerId, organisationId). For PERSON parties, organisationId links to an organisation or null unlinks the person from its organisation; for ORGANISATION parties Capsule silently ignores organisationId. Only the fields you provide are changed. Child arrays (emailAddresses / phoneNumbers / addresses / websites) on this tool are APPEND-ONLY: items are merged into the existing list, not replaced. For surgical changes — replacing one email, removing one phone number, fixing the type on one address — use the dedicated atomic tools: add_party_email_address / remove_party_email_address_by_id (and the phone/address/website equivalents).",
       updatePartySchema,
       updateParty,
     );
@@ -709,7 +709,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
     registerTool(
       server,
       "update_task",
-      "Update fields on an existing task: `description`, `dueOn`, `dueTime`, `detail`, `status` (OPEN or COMPLETED), and `ownerId`. Only the fields you provide are changed. To mark a task done, prefer the dedicated `complete_task` tool — it's idempotent (a no-op success on an already-completed task) and semantically clearer than `update_task status=COMPLETED`. Capsule rejects directly setting status=PENDING (which exists only internally for track-driven tasks); use OPEN or COMPLETED. Completed tasks remain fully editable — Capsule does not enforce closed-record immutability.",
+      "Update fields on an existing task: `description`, `dueOn`, `dueTime`, `detail`, `status` (OPEN or COMPLETED), `ownerId`, and the parent-reference fields `partyId`, `opportunityId`, `projectId`. Pass a parent id to re-link the task, or null on a parent field to orphan/unlink it; at most one parent id may be set in a single call, though null+id swaps are allowed. Only the fields you provide are changed. To mark a task done, prefer the dedicated `complete_task` tool — it's idempotent (a no-op success on an already-completed task) and semantically clearer than `update_task status=COMPLETED`. Capsule rejects directly setting status=PENDING (which exists only internally for track-driven tasks); use OPEN or COMPLETED. Completed tasks remain fully editable — Capsule does not enforce closed-record immutability.",
       updateTaskSchema,
       updateTask,
     );

@@ -181,6 +181,17 @@ describe("tools/list", () => {
     expect(removeTrack?.description).toContain("auto-tasks");
     expect(removeTrack?.description).toContain("copy any task details");
   });
+
+  it("keeps parent-reference update descriptions aligned with their schemas", async () => {
+    const { client } = await spawn();
+    const { tools } = await client.listTools();
+    const byName = new Map(tools.map((t) => [t.name, t]));
+
+    expect(byName.get("update_party")?.description).toContain("organisationId");
+    expect(byName.get("update_task")?.description).toContain("partyId");
+    expect(byName.get("update_task")?.description).toContain("opportunityId");
+    expect(byName.get("update_task")?.description).toContain("projectId");
+  });
 });
 
 // ── tools/call — read-side ──────────────────────────────────────────────────
