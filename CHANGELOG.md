@@ -14,13 +14,15 @@ versions adhere to [Semantic Versioning](https://semver.org).
 ### Fixed
 
 - **All Capsule entity ID fields now accept integer-shaped strings**
-  via `z.coerce.number()`. Production data surfaced a class of
+  via a narrow shared coercion helper. Production data surfaced a class of
   intermittent `Input validation error: expected number, received
   string` rejections that traced to LLM-driven MCP clients
   serializing IDs as JSON strings on some calls and integers on
   others (non-deterministic across calls — same logical input,
-  different wire type). Coercion is safe: `Number("123")` → 123
-  passes `.int().positive()`; `Number("abc")` → NaN still rejects.
+  different wire type). Coercion is intentionally limited to decimal
+  digit strings (`"123"` → `123`); booleans, arrays, objects,
+  floats, exponent notation, empty strings, and arbitrary text still
+  reject instead of flowing into destructive tool paths.
   Applied uniformly across `id`, `partyId`, `opportunityId`,
   `projectId`, `milestoneId`, `ownerId`, `teamId`, `stageId`,
   `lostReasonId`, `entityId`, `trackId`, `definitionId`,
@@ -40,9 +42,9 @@ versions adhere to [Semantic Versioning](https://semver.org).
   pipeline/milestone-reached automation rules in Capsule (Settings
   → Sales Pipeline → Automation) that mutate `owner` and/or `team`
   immediately after creation or milestone transition. The "Assign to
-  a Team" automation action in particular inherits the asymmetric
-  write semantic from NOTES-ON-CAPSULE-API.md §27 and will clear
-  `owner` as a side-effect even when the caller passed `ownerId`.
+  a Team" automation action in particular has been observed to clear
+  `owner` as an automation side-effect even when the caller passed
+  `ownerId`.
   Symmetric to the board-automation note already on
   `create_project.ownerId`. Documented workaround: chain a
   `batch_update_opportunity` PUT carrying both `ownerId` and
