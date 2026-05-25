@@ -903,6 +903,22 @@ projects, the connector does not expose `ownerId: null` for
 opportunities; only `teamId: null` is available for explicit team
 unassign.
 
+### Pipeline automation can mutate opportunity `owner` / `team`
+
+Separate from the normal `PUT /opportunities/{id}` API contract,
+Capsule tenants can configure Sales Pipeline automation rules that
+fire when an opportunity enters a milestone. Production verification
+found an "Assign to a Team" milestone automation that cleared
+`owner` immediately after `create_opportunity { ownerId, teamId,
+milestoneId }`. That is an automation side-effect, not the §27 PUT
+rule above.
+
+Practical workaround: after a create or milestone transition that
+fires such automation, issue a second `update_opportunity` or
+`batch_update_opportunity` carrying both `ownerId` and `teamId`. The
+milestone-reached trigger fires on the transition, so the follow-up
+PUT preserves the intended owner/team pair.
+
 ### Tenant board automation can mutate `owner` / `team` independently of the API
 
 A separate behaviour to be aware of: Capsule lets tenants

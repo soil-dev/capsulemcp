@@ -40,7 +40,10 @@ const HARD_MAX_BASE64_CHARS = Math.ceil(HARD_MAX_SIZE_BYTES / 3) * 4;
 
 export const getAttachmentSchema = z.object({
   id: positiveId.describe("Attachment ID."),
-  maxSizeBytes: positiveId
+  maxSizeBytes: z
+    .number()
+    .int()
+    .positive()
     .max(HARD_MAX_SIZE_BYTES)
     .optional()
     .describe(

@@ -15,9 +15,8 @@
  *      non-deterministic client serialization.
  *
  *   3. Reject garbage. The `.int().positive()` checks still apply
- *      AFTER coercion — `Number("abc")` is NaN, fails `.int()`.
- *      `0` fails `.positive()`. Negative numbers fail `.positive()`.
- *      Floats fail `.int()`.
+ *      AFTER string coercion. Non-decimal strings, zero, negatives,
+ *      floats, booleans, arrays, and objects all reject.
  *
  * Pinned at the helper level (not per-tool) because every tool's ID
  * fields go through this same Zod schema; if it changes, every tool
@@ -40,13 +39,16 @@ describe("positiveId", () => {
     expect(positiveId.parse("1")).toBe(1);
     expect(positiveId.parse("12345")).toBe(12345);
     expect(positiveId.parse("99999")).toBe(99999);
+    expect(positiveId.parse(" 42 ")).toBe(42);
   });
 
   it("rejects non-numeric strings", () => {
-    // Coercion is safe: `Number("abc")` is NaN, which fails .int().
+    // Coercion is intentionally narrower than Number(...).
     expect(() => positiveId.parse("abc")).toThrow();
     expect(() => positiveId.parse("")).toThrow();
     expect(() => positiveId.parse("12.5")).toThrow();
+    expect(() => positiveId.parse("1e3")).toThrow();
+    expect(() => positiveId.parse("+12")).toThrow();
   });
 
   it("rejects zero and negative numbers", () => {
@@ -66,12 +68,9 @@ describe("positiveId", () => {
     expect(() => positiveId.parse(null)).toThrow();
     expect(() => positiveId.parse(undefined)).toThrow();
     expect(() => positiveId.parse({})).toThrow();
-    // Multi-element arrays: `Number([1, 2])` is NaN, fails `.int()`.
-    // (JS quirks inherited from `z.coerce.number()` that we
-    // intentionally don't guard against: `Number([1])` is 1,
-    // `Number(true)` is 1 — no realistic MCP client sends those
-    // shapes for an ID field, so adding extra wrappers to reject
-    // them would be over-engineering.)
+    expect(() => positiveId.parse(true)).toThrow();
+    expect(() => positiveId.parse(false)).toThrow();
+    expect(() => positiveId.parse([1])).toThrow();
     expect(() => positiveId.parse([1, 2])).toThrow();
   });
 

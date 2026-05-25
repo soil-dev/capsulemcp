@@ -13,13 +13,16 @@ import { z } from "zod";
 /**
  * Schema for Capsule entity IDs (positive integers).
  *
- * Coerces string → number BEFORE validation so callers that ship
- * IDs as strings (LLM-driven clients sometimes do, regardless of
- * what the JSON Schema says) are accepted instead of being rejected
- * with `expected number, received string`. The coercion is safe:
- * `Number("123")` → 123 (passes `.int().positive()`),
- * `Number("abc")` → NaN (fails `.int()`), so garbage still reports
- * a clean validation error.
+ * Coerces decimal digit strings → number BEFORE validation so
+ * callers that ship IDs as strings (LLM-driven clients sometimes
+ * do, regardless of what the JSON Schema says) are accepted instead
+ * of being rejected with `expected number, received string`.
+ *
+ * The coercion is deliberately narrow: only JSON numbers and strings
+ * matching `/^\d+$/` after trimming are accepted. Generic
+ * `z.coerce.number()` also accepts JavaScript oddities like `true`
+ * and `[1]` as `1`, which is not acceptable for ID fields,
+ * especially on destructive tools.
  *
  * Use for every field that represents a Capsule entity ID — party,
  * opportunity, project, task, milestone, owner (user), team, etc.
@@ -29,4 +32,8 @@ import { z } from "zod";
  * typing on those preserves the signal that a caller-side bug is
  * passing the wrong shape.
  */
-export const positiveId = z.coerce.number().int().positive();
+export const positiveId = z.preprocess((input) => {
+  if (typeof input !== "string") return input;
+  const trimmed = input.trim();
+  return /^\d+$/.test(trimmed) ? Number(trimmed) : input;
+}, z.number().int().positive());
