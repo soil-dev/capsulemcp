@@ -361,6 +361,101 @@ describe("updateProject", () => {
     const body = JSON.parse((options as RequestInit).body as string);
     expect(body.kase).toHaveProperty("team", null);
   });
+
+  // ── v1.6.5: nullable stageId on update_project ────────────────────────
+  it("sends stage:null when stageId=null (remove project from all stages)", async () => {
+    // Verified empirically in v1.6.5 wire-trace probe B1: Capsule accepts
+    // stage: null on PUT /kases/:id and the project drops off all boards.
+    // No RMW needed because the caller's intent is explicit.
+    mockFetch(200, { kase: { id: 10 } });
+
+    const { updateProject } = await import("../src/tools/projects.js");
+    await updateProject({ id: 10, stageId: null });
+
+    // No RMW — only stageId is being changed, no ownerId touch.
+    expect(vi.mocked(fetch).mock.calls).toHaveLength(1);
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    expect((options as RequestInit).method).toBe("PUT");
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.kase).toHaveProperty("stage", null);
+  });
+
+  it("explicit stageId: null + ownerId touch: null wins over RMW carry-forward", async () => {
+    // Subtle interaction: ownerId-touched fires the defensive RMW which
+    // would normally carry the *current* stage into the body. But when
+    // stageId is explicitly null, the caller's intent (clear stage)
+    // must dominate over the RMW carry.
+    mockFetch(200, { kase: { id: 10, stage: { id: 99 } } }); // GET
+    mockFetch(200, { kase: { id: 10 } }); // PUT
+
+    const { updateProject } = await import("../src/tools/projects.js");
+    await updateProject({ id: 10, ownerId: 7, stageId: null });
+
+    expect(vi.mocked(fetch).mock.calls).toHaveLength(2);
+    const [, putOptions] = vi.mocked(fetch).mock.calls[1]!;
+    const body = JSON.parse((putOptions as RequestInit).body as string);
+    expect(body.kase.owner).toEqual({ id: 7 });
+    // The current stage (99) is in the GET response but does NOT
+    // leak into the PUT body — explicit null wins.
+    expect(body.kase).toHaveProperty("stage", null);
+  });
+});
+
+// ── v1.6.5: fields[] on create_project ──────────────────────────────────
+describe("createProject fields[] support (v1.6.5)", () => {
+  it("maps fields:[{definitionId,value}] → fields:[{definition:{id},value}] on create", async () => {
+    // Verified empirically in v1.6.5 wire-trace probe C-kase: Capsule's
+    // POST /kases accepts the same fields[] shape as PUT, eliminating
+    // the create-then-update ritual for custom-field writes.
+    mockFetch(201, { kase: { id: 10, name: "Project" } });
+
+    const { createProject } = await import("../src/tools/projects.js");
+    await createProject({
+      name: "Project",
+      partyId: 1,
+      fields: [{ definitionId: 99, value: "v165 sample" }],
+    });
+
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.kase.fields).toEqual([{ definition: { id: 99 }, value: "v165 sample" }]);
+    expect(body.kase.fields[0].definitionId).toBeUndefined();
+  });
+
+  it("omits the fields key when no custom fields are supplied", async () => {
+    mockFetch(201, { kase: { id: 10 } });
+
+    const { createProject } = await import("../src/tools/projects.js");
+    await createProject({ name: "Project", partyId: 1 });
+
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.kase).not.toHaveProperty("fields");
+  });
+});
+
+// ── v1.6.5: batch_update_project ────────────────────────────────────────
+describe("batchUpdateProject (v1.6.5)", () => {
+  it("fans out one updateProject PUT per item, returning aggregated results", async () => {
+    // Mirrors batch_update_party and batch_update_opportunity — same
+    // defineBatch shape, same { results, summary } response envelope.
+    mockFetch(200, { kase: { id: 1, name: "Alpha" } });
+    mockFetch(200, { kase: { id: 2, name: "Beta" } });
+
+    const { batchUpdateProject } = await import("../src/tools/projects.js");
+    const result = await batchUpdateProject({
+      items: [
+        { id: 1, name: "Alpha" },
+        { id: 2, name: "Beta" },
+      ],
+    });
+
+    expect(vi.mocked(fetch).mock.calls).toHaveLength(2);
+    const urls = vi.mocked(fetch).mock.calls.map((c) => String(c[0]));
+    expect(urls.some((u) => u.includes("/kases/1"))).toBe(true);
+    expect(urls.some((u) => u.includes("/kases/2"))).toBe(true);
+    expect(result.summary).toMatchObject({ total: 2, succeeded: 2, failed: 0 });
+  });
 });
 
 describe("getProjects (batch)", () => {

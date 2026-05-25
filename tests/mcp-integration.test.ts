@@ -63,7 +63,7 @@ describe("tools/list", () => {
 
     // README advertises the exact catalogue size; keep it locked here
     // so docs drift is caught before release.
-    expect(tools.length).toBe(86);
+    expect(tools.length).toBe(87);
 
     // Reads we always expect
     for (const r of [
@@ -95,6 +95,7 @@ describe("tools/list", () => {
       "remove_party_website_by_id",
       "create_opportunity",
       "delete_opportunity",
+      "batch_update_project",
       "add_note",
       "update_entry",
       "delete_entry",
@@ -201,6 +202,14 @@ describe("tools/list", () => {
     expect(byName.get("update_task")?.description).toContain("partyId");
     expect(byName.get("update_task")?.description).toContain("opportunityId");
     expect(byName.get("update_task")?.description).toContain("projectId");
+
+    // v1.6.5 consistency sweep — opportunity gained nullable owner;
+    // project gained nullable stage. Lock the surface so future drift
+    // is caught at build time.
+    expect(byName.get("update_opportunity")?.description).toMatch(/ownerId.*null/);
+    expect(byName.get("update_project")?.description).toMatch(/stageId.*null/);
+    // batch_update_project must exist and mirror its party/opp siblings.
+    expect(byName.get("batch_update_project")?.description).toContain("Update 1–50 projects");
   });
 });
 

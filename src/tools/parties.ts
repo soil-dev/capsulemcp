@@ -310,10 +310,17 @@ export const createPartySchema = z.object({
   // organisation
   name: z.string().optional(),
   ...PartyWriteBaseSchema,
+  fields: z
+    .array(CustomFieldWriteSchema)
+    .optional()
+    .describe(
+      fieldsArrayDescriptor("get_party") +
+        " Verified empirically in v1.6.5 wire-trace: Capsule's POST /parties accepts the same `fields[]` shape as PUT, so callers can set custom field values on creation without a follow-up update.",
+    ),
 });
 
 export async function createParty(input: z.infer<typeof createPartySchema>) {
-  const { ownerId, teamId, organisationId, ...rest } = input;
+  const { ownerId, teamId, organisationId, fields, ...rest } = input;
 
   const body: Record<string, unknown> = { ...rest };
   // On create, null is meaningless for owner (Capsule defaults to the
@@ -323,6 +330,8 @@ export async function createParty(input: z.infer<typeof createPartySchema>) {
   setRef(body, "owner", ownerId);
   setRef(body, "team", teamId);
   setRef(body, "organisation", organisationId);
+  const mappedFields = mapFieldsForBody(fields);
+  if (mappedFields !== undefined) body["fields"] = mappedFields;
 
   return capsulePost<{ party: unknown }>("/parties", { party: body });
 }

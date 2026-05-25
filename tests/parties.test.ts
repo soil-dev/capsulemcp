@@ -349,6 +349,37 @@ describe("createParty", () => {
     const body = JSON.parse(String((options as RequestInit).body));
     expect(body.party.websites).toEqual([{ address: "@acmeco", service: "TWITTER" }]);
   });
+
+  // ── v1.6.5: fields[] on create_party ───────────────────────────────
+  it("maps fields:[{definitionId,value}] → fields:[{definition:{id},value}] on create (v1.6.5)", async () => {
+    // Verified empirically in v1.6.5 wire-trace probe C-party: Capsule's
+    // POST /parties accepts the same fields[] shape as PUT, eliminating
+    // the create-then-update ritual for custom-field writes.
+    mockFetch(201, { party: { id: 1, type: "person" } });
+
+    const { createParty } = await import("../src/tools/parties.js");
+    await createParty({
+      type: "person",
+      firstName: "X",
+      fields: [{ definitionId: 99, value: "v165 sample" }],
+    });
+
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse(String((options as RequestInit).body));
+    expect(body.party.fields).toEqual([{ definition: { id: 99 }, value: "v165 sample" }]);
+    expect(body.party.fields[0].definitionId).toBeUndefined();
+  });
+
+  it("omits the fields key when no custom fields are supplied (v1.6.5)", async () => {
+    mockFetch(201, { party: { id: 1, type: "person" } });
+
+    const { createParty } = await import("../src/tools/parties.js");
+    await createParty({ type: "person", firstName: "X" });
+
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse(String((options as RequestInit).body));
+    expect(body.party).not.toHaveProperty("fields");
+  });
 });
 
 describe("deleteParty", () => {

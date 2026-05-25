@@ -159,8 +159,8 @@ describe("tools/list response carries inferred annotations", () => {
     }
     expect(readOnly).toBe(49);
     expect(destructive).toBe(7);
-    expect(unhinted).toBe(30);
+    expect(unhinted).toBe(31);
     expect(readOnly + destructive + unhinted).toBe(result.tools.length);
-    expect(result.tools.length).toBe(86);
+    expect(result.tools.length).toBe(87);
   });
 });

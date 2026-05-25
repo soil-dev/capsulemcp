@@ -158,7 +158,8 @@ export const updateTaskSchema = z.object({
     .nullable()
     .optional()
     .describe(
-      "Re-link the task to a party by id, or `null` to orphan it. Mutually exclusive with `opportunityId` / `projectId` — Capsule enforces 'task can be related to at most one entity' server-side (422 if two parent-refs are set at once, verified in v1.6.3 wire-trace). To swap parent type atomically, pass the old one as `null` and the new one as an id in the same call.",
+      "Re-link the task to a party by id, or `null` to orphan it. Mutually exclusive with `opportunityId` / `projectId` — Capsule enforces 'task can be related to at most one entity' server-side (422 if two parent-refs are set at once, verified in v1.6.3 wire-trace). To swap parent type atomically, pass the old one as `null` and the new one as an id in the same call. " +
+        "NOTE: orphaning is unique to tasks — `update_opportunity.partyId` and `update_project.partyId` are NOT nullable (Capsule rejects with 422 'party is required'). Tasks are the only entity in Capsule's data model that can exist without any parent.",
     ),
   opportunityId: positiveId
     .nullable()

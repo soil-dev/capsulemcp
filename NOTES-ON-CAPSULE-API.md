@@ -955,6 +955,55 @@ v1.6.4 — when `ownerId` is touched and `teamId` is omitted,
 the connector reads the current team and includes it in the
 PUT body.
 
+### Opportunity owner-clear + project stage-clear (verified v1.6.5)
+
+Two further probes from `scripts/wire-trace-v165.ts` closed
+inconsistencies between the three entity types' update tools:
+
+- `PUT /opportunities/{id} { owner: null }` — accepted (200).
+  Mirrors the v1.6.4 party finding. `update_opportunity.ownerId`
+  is now nullable, matching `update_party.ownerId` and
+  `update_project.ownerId`. The defensive RMW still fires on
+  ownerId-touched (whether setting or clearing) to guarantee
+  team preservation under the §27 asymmetric semantic.
+- `PUT /opportunities/{id} { owner: null, team: { id: T } }` —
+  accepted (200). The "team-owned, no specific user" transfer
+  pattern works in a single PUT on opportunities, same as on
+  parties (v1.6.4 probe G).
+- `PUT /kases/{id} { stage: null }` — accepted (200). Removes
+  the project from all stages (and therefore all boards). Owner
+  and team are preserved across the stage-clear. `update_project.stageId`
+  is now nullable.
+
+Combined effect: the `update_*` surface across party, opportunity,
+and project is now uniform — `ownerId`, `teamId` are nullable
+on all three; party adds nullable `organisationId`; project adds
+nullable `stageId`. Callers who learn the clear-via-null semantic
+on one tool can apply it to the others.
+
+### Custom-field writes are accepted on CREATE, not just UPDATE (verified v1.6.5)
+
+Probe C of `scripts/wire-trace-v165.ts` verified that Capsule's
+POST endpoints accept the same `fields: [{ definition: { id }, value }]`
+shape as PUT:
+
+- `POST /parties { ..., fields: [...] }` — accepted (201).
+  Custom field values persist on the new record.
+- `POST /kases { ..., fields: [...] }` — accepted (201).
+- `POST /opportunities { ..., fields: [...] }` — inferred by
+  symmetry (the tenant probed had no opportunity custom field
+  definitions configured, so no positive case was run). Capsule's
+  API consistently mirrors the create/update shape across entity
+  types, and the negative case (POST without fields) was the
+  previous default — any rejection on POST would be a per-endpoint
+  policy, not a body-shape limitation.
+
+`create_party`, `create_opportunity`, `create_project` all expose
+the same `fields: z.array(CustomFieldWriteSchema)` field as the
+corresponding `update_*` tool. Removes the create-then-update
+ritual previously required for setting custom field values on
+new records.
+
 ### Tenant board automation can mutate `owner` / `team` independently of the API
 
 A separate behaviour to be aware of: Capsule lets tenants

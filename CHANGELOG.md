@@ -38,6 +38,39 @@ versions adhere to [Semantic Versioning](https://semver.org).
   owner=null + team=X) now achievable in one batch via
   `batch_update_party({items: [{id, ownerId: null, teamId: T}, ...]})`.
 
+- **`ownerId: null` now supported on `update_opportunity`
+  (v1.6.5 consistency sweep).** Brings the opportunity update
+  surface into parity with party (v1.6.4) and project. Verified
+  empirically via `scripts/wire-trace-v165.ts` probe A1:
+  `PUT /opportunities/{id} { owner: null }` succeeds (200), and
+  the combined `{ owner: null, team: {id} }` puts an opp into
+  team-owned-no-user state in a single call (probe A2). Removes
+  the only remaining "cannot clear owner via API" caveat across
+  the three `update_*` tools — callers can now apply the same
+  null-clear mental model uniformly.
+
+- **`stageId: null` now supported on `update_project`
+  (v1.6.5).** `PUT /kases/{id} { stage: null }` succeeds (200)
+  and removes the project from all boards (probe B1). Owner and
+  team are preserved across the stage-clear. Lets callers move a
+  project off-board via PUT without needing the Capsule web UI.
+
+- **`fields[]` on `create_party` / `create_opportunity` /
+  `create_project` (v1.6.5).** Custom field values can now be set
+  on creation, not just via a follow-up `update_*` call. Removes
+  the create-then-update ritual previously required for any new
+  record with custom field values. Verified empirically for
+  `POST /parties` and `POST /kases` via probe C; inferred by
+  symmetry for `POST /opportunities` (the probed tenant had no
+  opportunity custom field definitions configured).
+
+- **`batch_update_project` (v1.6.5).** New tool mirroring
+  `batch_update_party` and `batch_update_opportunity` — fan-out
+  of up to 50 `update_project` operations in parallel via
+  `defineBatch`. Closes the asymmetry where projects were the
+  only entity in the {party, opp, project} trio without a batch
+  update tool. Tool catalog grows from 86 → 87.
+
 ### Fixed
 
 - **`update_party` now applies the same §27 defensive
@@ -52,6 +85,16 @@ versions adhere to [Semantic Versioning](https://semver.org).
   `readEntityRefs` helper (extended to accept `responseKey:
   "party"`).
 
+### Changed
+
+- **Tool-surface consistency (v1.6.5).** The `update_*` and
+  `create_*` tools across party, opportunity, and project are now
+  uniform: `ownerId` and `teamId` are nullable on all three
+  `update_*` tools, `fields[]` is accepted on all three `create_*`
+  tools, and all three entity types have a corresponding
+  `batch_update_*` companion. Callers who learn one tool's API
+  can transfer that mental model to the others without surprises.
+
 ### Documentation
 
 - **`create_party` and `update_party` tool descriptions** in
@@ -61,6 +104,18 @@ versions adhere to [Semantic Versioning](https://semver.org).
   `update_party` description contains both `organisationId`
   AND `teamId`.
 
+- **`update_opportunity` and `update_project` tool descriptions**
+  (`src/server.ts`) updated to surface the new nullable owner /
+  stage behavior. Integration test extended to assert
+  `update_opportunity.description` mentions `ownerId` + `null`
+  and `update_project.description` mentions `stageId` + `null`.
+
+- **Parent-ref nullability cross-references** added to
+  `update_task.partyId`, `update_opportunity.partyId`, and
+  `update_project.partyId` descriptions so callers see the
+  difference up front: tasks can be orphaned (partyId nullable),
+  opportunities and projects cannot (Capsule rejects null).
+
 - **NOTES-ON-CAPSULE-API.md §31** extended with the empirical
   findings on `PUT /parties` party-team semantics — including
   the Capsule-side owner∈team membership constraint that
@@ -68,10 +123,20 @@ versions adhere to [Semantic Versioning](https://semver.org).
   /opportunities) and the fact that the membership rule does
   NOT fire when owner is null (verified by probe G).
 
+- **NOTES-ON-CAPSULE-API.md §27** extended with the v1.6.5
+  findings: opportunity owner-clear, project stage-clear, and
+  custom-field writes accepted on POST (not just PUT).
+
 - **`scripts/wire-trace-v164.ts`** ships as the reusable probe
   harness for the party-team behavior verification — 7 probes
   covering person + organisation × set/null/owner-null
   combinations, full cleanup on exit.
+
+- **`scripts/wire-trace-v165.ts`** ships as the consistency-sweep
+  probe harness — 6 probes covering opportunity owner-clear,
+  project stage-clear, and custom-field writes on create, with
+  full cleanup on exit and dynamic tenant discovery (no
+  tenant-specific values hardcoded).
 
 ## [1.6.3] — 2026-05-25
 

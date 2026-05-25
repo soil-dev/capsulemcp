@@ -271,6 +271,97 @@ describe("updateOpportunity", () => {
     expect(body.opportunity.owner).toEqual({ id: 7 });
     expect(body.opportunity.team).toEqual({ id: 88 });
   });
+
+  // ── v1.6.5: nullable ownerId on update_opportunity ────────────────────
+  it("ownerId: null clears the owner on the wire (v1.6.5 parity with update_party/project)", async () => {
+    // Verified empirically in v1.6.5 wire-trace probe A1: Capsule accepts
+    // owner: null on PUT /opportunities/:id. Brings update_opportunity into
+    // parity with update_party (v1.6.4) and update_project. Note: the
+    // ownerId-touched branch still fires the defensive RMW, so a GET
+    // precedes the PUT here.
+    mockFetch(200, { opportunity: { id: 20, team: null } }); // RMW GET
+    mockFetch(200, { opportunity: { id: 20 } }); // PUT
+
+    const { updateOpportunity } = await import("../src/tools/opportunities.js");
+    await updateOpportunity({ id: 20, ownerId: null });
+
+    expect(vi.mocked(fetch).mock.calls).toHaveLength(2);
+    const [, putOptions] = vi.mocked(fetch).mock.calls[1]!;
+    const body = JSON.parse((putOptions as RequestInit).body as string);
+    expect(body.opportunity).toHaveProperty("owner", null);
+  });
+
+  it("ownerId: null + teamId: T clears owner and sets team in one call (v1.6.5 transfer-to-team)", async () => {
+    // Verified empirically in v1.6.5 wire-trace probe A2: combined
+    // {owner: null, team: {id: T}} works in a single PUT. Mirrors the
+    // v1.6.4 party finding (probe G). Both fields explicit → no RMW.
+    mockFetch(200, { opportunity: { id: 20 } });
+
+    const { updateOpportunity } = await import("../src/tools/opportunities.js");
+    await updateOpportunity({ id: 20, ownerId: null, teamId: 88 });
+
+    // No defensive GET when teamId is explicit.
+    expect(vi.mocked(fetch).mock.calls).toHaveLength(1);
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    expect((options as RequestInit).method).toBe("PUT");
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.opportunity).toHaveProperty("owner", null);
+    expect(body.opportunity.team).toEqual({ id: 88 });
+  });
+
+  it("ownerId: null with currentTeam set: RMW preserves the team across the owner-clear", async () => {
+    // Even when clearing the owner, the §27 defensive RMW should keep
+    // the existing team so callers who only want to clear owner don't
+    // accidentally clear team too. Capsule's PUT semantic on owner=null
+    // appears to leave team intact in our probe, but the RMW makes the
+    // contract explicit and survives any future API change.
+    mockFetch(200, { opportunity: { id: 20, team: { id: 42, name: "Ops" } } }); // GET
+    mockFetch(200, { opportunity: { id: 20 } }); // PUT
+
+    const { updateOpportunity } = await import("../src/tools/opportunities.js");
+    await updateOpportunity({ id: 20, ownerId: null });
+
+    const [, putOptions] = vi.mocked(fetch).mock.calls[1]!;
+    const body = JSON.parse((putOptions as RequestInit).body as string);
+    expect(body.opportunity).toHaveProperty("owner", null);
+    expect(body.opportunity.team).toEqual({ id: 42 });
+  });
+});
+
+// ── v1.6.5: fields[] on create_opportunity ──────────────────────────────
+describe("createOpportunity fields[] support (v1.6.5)", () => {
+  it("maps fields:[{definitionId,value}] → fields:[{definition:{id},value}] on create", async () => {
+    // v1.6.5 sweep: POST /opportunities now accepts fields[] (inferred
+    // by symmetry with the verified POST /parties + POST /kases probes;
+    // the tenant we probed had no opp custom fields configured).
+    // Removes the create-then-update ritual for custom-field writes.
+    mockFetch(201, { opportunity: { id: 20, name: "Deal" } });
+
+    const { createOpportunity } = await import("../src/tools/opportunities.js");
+    await createOpportunity({
+      name: "Deal",
+      partyId: 1,
+      milestoneId: 3,
+      fields: [{ definitionId: 99, value: "Q4" }],
+    });
+
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.opportunity.fields).toEqual([{ definition: { id: 99 }, value: "Q4" }]);
+    // user-facing definitionId doesn't leak into the wire body
+    expect(body.opportunity.fields[0].definitionId).toBeUndefined();
+  });
+
+  it("omits the fields key when no custom fields are supplied", async () => {
+    mockFetch(201, { opportunity: { id: 20 } });
+
+    const { createOpportunity } = await import("../src/tools/opportunities.js");
+    await createOpportunity({ name: "Deal", partyId: 1, milestoneId: 3 });
+
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.opportunity).not.toHaveProperty("fields");
+  });
 });
 
 describe("OpportunityValueSchema custom error", () => {
