@@ -372,7 +372,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
     registerTool(
       server,
       "create_party",
-      "Create a new person or organisation in Capsule CRM. For type='person', firstName or lastName is required (one suffices); the `name` field is silently ignored. For type='organisation', `name` is required and firstName/lastName/title/jobTitle are silently ignored. Passing organisationId pointing at a non-organisation party (e.g. another person's id) returns 404 'organisation not found' — Capsule filters lookups by type.",
+      "Create a new person or organisation in Capsule CRM. For type='person', firstName or lastName is required (one suffices); the `name` field is silently ignored. For type='organisation', `name` is required and firstName/lastName/title/jobTitle are silently ignored. Passing organisationId pointing at a non-organisation party (e.g. another person's id) returns 404 'organisation not found' — Capsule filters lookups by type. Accepts `ownerId` and `teamId` to set ownership at create time; both are optional and Capsule defaults `owner` to the API-token user when omitted (team has no default).",
       createPartySchema,
       createParty,
     );
@@ -380,7 +380,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
     registerTool(
       server,
       "update_party",
-      "Update top-level fields on an existing party (about, firstName/lastName/name/title/jobTitle, ownerId, organisationId). For PERSON parties, organisationId links to an organisation or null unlinks the person from its organisation; for ORGANISATION parties Capsule silently ignores organisationId. Only the fields you provide are changed. Child arrays (emailAddresses / phoneNumbers / addresses / websites) on this tool are APPEND-ONLY: items are merged into the existing list, not replaced. For surgical changes — replacing one email, removing one phone number, fixing the type on one address — use the dedicated atomic tools: add_party_email_address / remove_party_email_address_by_id (and the phone/address/website equivalents).",
+      "Update top-level fields on an existing party (about, firstName/lastName/name/title/jobTitle, ownerId, teamId, organisationId). `ownerId` and `teamId` both accept `null` to unassign — the combination `{ownerId: null, teamId: <id>}` puts a party into 'team-owned, no specific user' state (the common pattern when transferring ownership to a team after a user departs). For PERSON parties, organisationId links to an organisation or null unlinks; for ORGANISATION parties Capsule silently ignores organisationId. Only the fields you provide are changed. Child arrays (emailAddresses / phoneNumbers / addresses / websites) on this tool are APPEND-ONLY: items are merged into the existing list, not replaced. For surgical changes — replacing one email, removing one phone number, fixing the type on one address — use the dedicated atomic tools: add_party_email_address / remove_party_email_address_by_id (and the phone/address/website equivalents).",
       updatePartySchema,
       updateParty,
     );

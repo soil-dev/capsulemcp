@@ -23,7 +23,11 @@
  * schema rejects it as not-positive) but the truthy check defends
  * against future schema relaxation.
  */
-export function setRef(body: Record<string, unknown>, key: string, id: number | undefined): void {
+export function setRef(
+  body: Record<string, unknown>,
+  key: string,
+  id: number | null | undefined,
+): void {
   if (id) body[key] = { id };
 }
 

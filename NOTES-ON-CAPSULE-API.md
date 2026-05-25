@@ -922,6 +922,39 @@ fires such automation, issue a second `update_opportunity` or
 milestone-reached trigger fires on the transition, so the follow-up
 PUT preserves the intended owner/team pair.
 
+### Party owner/team PUT semantics (verified v1.6.4)
+
+`PUT /parties/{id}` accepts both `owner` and `team` as
+top-level fields on the body, on both person AND organisation
+parties. Empirically verified via `scripts/wire-trace-v164.ts`
+(7 probes, full cleanup):
+
+- `{ team: { id: T } }` — sets team. Subject to the same
+  `owner ∈ team` membership rule as /kases and /opportunities;
+  passing a team the current owner doesn't belong to returns
+  `422 'owner is not a member of the team'`.
+- `{ team: null }` — clears team. 200 on both person and org.
+- `{ owner: null }` — clears owner. 200 on both person and org.
+  Refutes the pre-v1.6.4 assumption that owner couldn't be
+  cleared on parties; that was a client-side guard, not a
+  Capsule constraint.
+- `{ owner: null, team: { id: T } }` — sets the "team-owned,
+  no specific user" state in one PUT. The owner∈team
+  membership rule does NOT fire because owner is null. This is
+  the canonical pattern for transferring a departed user's
+  records to team ownership.
+
+Combined with §27, parties plausibly share the asymmetric
+owner-clears-team PUT semantic (PUT `{ owner: { id: X } }`
+without `team` may clear the existing team). The v1.6.4
+wire-trace did not directly probe this on parties because the
+test records started with `team: null`, but by analogy with
+/kases and /opportunities it's prudent to apply the same
+defensive read-modify-write. `update_party` does so as of
+v1.6.4 — when `ownerId` is touched and `teamId` is omitted,
+the connector reads the current team and includes it in the
+PUT body.
+
 ### Tenant board automation can mutate `owner` / `team` independently of the API
 
 A separate behaviour to be aware of: Capsule lets tenants

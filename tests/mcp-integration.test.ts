@@ -196,6 +196,7 @@ describe("tools/list", () => {
 
     expect(byName.get("update_opportunity")?.description).toContain("partyId");
     expect(byName.get("update_party")?.description).toContain("organisationId");
+    expect(byName.get("update_party")?.description).toContain("teamId");
     expect(byName.get("update_project")?.description).toContain("partyId");
     expect(byName.get("update_task")?.description).toContain("partyId");
     expect(byName.get("update_task")?.description).toContain("opportunityId");
