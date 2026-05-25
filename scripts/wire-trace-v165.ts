@@ -65,11 +65,7 @@ async function call(method: string, path: string, body?: unknown): Promise<ApiRe
 function pp(label: string, result: ApiResult, fieldsToShow: string[] = []): void {
   console.log(`\n--- ${label} ---`);
   console.log(`  status: ${result.status}`);
-  if (
-    result.body &&
-    typeof result.body === "object" &&
-    !Array.isArray(result.body)
-  ) {
+  if (result.body && typeof result.body === "object" && !Array.isArray(result.body)) {
     const obj = result.body as Record<string, unknown>;
     const wrapperKey = Object.keys(obj).find((k) =>
       ["party", "opportunity", "kase", "task"].includes(k),
@@ -110,11 +106,11 @@ async function discoverWritableFieldDef(
   entity: "parties" | "opportunities" | "kases",
 ): Promise<{ id: number; sampleValue: string; type: string } | null> {
   const list = await call("GET", `/${entity}/fields/definitions`);
-  const defs =
-    (list.body as { definitions?: FieldDefinitionListItem[] })?.definitions ?? [];
+  const defs = (list.body as { definitions?: FieldDefinitionListItem[] })?.definitions ?? [];
 
   const text = defs.find(
-    (d) => d.type === "TEXT" || d.type === "LARGE_TEXT" || d.type === "text" || d.type === "large_text",
+    (d) =>
+      d.type === "TEXT" || d.type === "LARGE_TEXT" || d.type === "text" || d.type === "large_text",
   );
   if (text) return { id: text.id, sampleValue: "v165 probe value", type: text.type };
 
@@ -138,8 +134,7 @@ async function main() {
     console.log("=== Discovery ===");
 
     const teamsRes = await call("GET", "/teams");
-    const teams =
-      ((teamsRes.body as { teams?: { id: number; name: string }[] })?.teams) ?? [];
+    const teams = (teamsRes.body as { teams?: { id: number; name: string }[] })?.teams ?? [];
     if (teams.length === 0) {
       console.error("No teams in tenant. Create one before re-running.");
       process.exit(1);
@@ -149,10 +144,8 @@ async function main() {
 
     const milestonesRes = await call("GET", "/milestones");
     const milestones =
-      ((milestonesRes.body as { milestones?: { id: number; name: string }[] })?.milestones) ?? [];
-    const openMilestone = milestones.find(
-      (m) => (m as { closed?: boolean }).closed !== true,
-    );
+      (milestonesRes.body as { milestones?: { id: number; name: string }[] })?.milestones ?? [];
+    const openMilestone = milestones.find((m) => (m as { closed?: boolean }).closed !== true);
     if (!openMilestone) {
       console.error("No open milestone in tenant. Cannot create probe opportunity.");
       process.exit(1);
@@ -161,8 +154,7 @@ async function main() {
     console.log(`  milestone id ${milestoneId}`);
 
     const stagesRes = await call("GET", "/stages");
-    const stages =
-      ((stagesRes.body as { stages?: { id: number; name: string }[] })?.stages) ?? [];
+    const stages = (stagesRes.body as { stages?: { id: number; name: string }[] })?.stages ?? [];
     if (stages.length === 0) {
       console.error("No stages in tenant. Cannot create probe project with stage.");
       process.exit(1);
@@ -173,9 +165,15 @@ async function main() {
     const partyFieldDef = await discoverWritableFieldDef("parties");
     const oppFieldDef = await discoverWritableFieldDef("opportunities");
     const projectFieldDef = await discoverWritableFieldDef("kases");
-    console.log(`  party custom field:   ${partyFieldDef ? `id=${partyFieldDef.id} type=${partyFieldDef.type}` : "NONE"}`);
-    console.log(`  opp custom field:     ${oppFieldDef ? `id=${oppFieldDef.id} type=${oppFieldDef.type}` : "NONE"}`);
-    console.log(`  project custom field: ${projectFieldDef ? `id=${projectFieldDef.id} type=${projectFieldDef.type}` : "NONE"}`);
+    console.log(
+      `  party custom field:   ${partyFieldDef ? `id=${partyFieldDef.id} type=${partyFieldDef.type}` : "NONE"}`,
+    );
+    console.log(
+      `  opp custom field:     ${oppFieldDef ? `id=${oppFieldDef.id} type=${oppFieldDef.type}` : "NONE"}`,
+    );
+    console.log(
+      `  project custom field: ${projectFieldDef ? `id=${projectFieldDef.id} type=${projectFieldDef.type}` : "NONE"}`,
+    );
 
     // Setup party (parent for opp + project probes).
     const setupParty = await call("POST", "/parties", {
@@ -243,9 +241,7 @@ async function main() {
         party: {
           type: "organisation",
           name: `${tag}-C-PARTY`,
-          fields: [
-            { definition: { id: partyFieldDef.id }, value: partyFieldDef.sampleValue },
-          ],
+          fields: [{ definition: { id: partyFieldDef.id }, value: partyFieldDef.sampleValue }],
         },
       });
       pp(`C-party: POST /parties { fields: [def=${partyFieldDef.id}] }`, cP, ["name"]);
@@ -275,7 +271,8 @@ async function main() {
         const coId = (cO.body as { opportunity: { id: number } }).opportunity.id;
         created.push({ kind: "opportunity", id: coId });
         const cOread = await call("GET", `/opportunities/${coId}?embed=fields`);
-        const fields = (cOread.body as { opportunity?: { fields?: unknown[] } })?.opportunity?.fields;
+        const fields = (cOread.body as { opportunity?: { fields?: unknown[] } })?.opportunity
+          ?.fields;
         console.log(`  opportunity.fields (after embed=fields read): ${JSON.stringify(fields)}`);
       }
     } else {
@@ -288,9 +285,7 @@ async function main() {
           name: `${tag}-C-PROJECT`,
           party: { id: partyId },
           status: "OPEN",
-          fields: [
-            { definition: { id: projectFieldDef.id }, value: projectFieldDef.sampleValue },
-          ],
+          fields: [{ definition: { id: projectFieldDef.id }, value: projectFieldDef.sampleValue }],
         },
       });
       pp(`C-kase: POST /kases { fields: [def=${projectFieldDef.id}] }`, cK, ["name"]);
