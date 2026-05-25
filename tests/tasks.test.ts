@@ -92,6 +92,80 @@ describe("updateTask", () => {
     expect(body.task.ownerId).toBeUndefined();
   });
 
+  it("maps partyId → party:{id} for re-linking a task (v1.6.3)", async () => {
+    // Production bug report shape: update_task couldn't change a task's
+    // parent record. v1.6.3 plumbs all three parent-ref fields through.
+    mockFetch(200, { task: { id: 5 } });
+    const { updateTask } = await import("../src/tools/tasks.js");
+    await updateTask({ id: 5, partyId: 99 });
+
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.task.party).toEqual({ id: 99 });
+    expect(body.task.partyId).toBeUndefined();
+  });
+
+  it("maps opportunityId → opportunity:{id} (v1.6.3)", async () => {
+    mockFetch(200, { task: { id: 5 } });
+    const { updateTask } = await import("../src/tools/tasks.js");
+    await updateTask({ id: 5, opportunityId: 77 });
+
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.task.opportunity).toEqual({ id: 77 });
+  });
+
+  it("maps projectId → kase:{id} (v1.6.3)", async () => {
+    // Caller-facing field is projectId; on-wire Capsule names projects
+    // 'kase' (legacy naming).
+    mockFetch(200, { task: { id: 5 } });
+    const { updateTask } = await import("../src/tools/tasks.js");
+    await updateTask({ id: 5, projectId: 42 });
+
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.task.kase).toEqual({ id: 42 });
+    expect(body.task.projectId).toBeUndefined();
+  });
+
+  it("partyId: null orphans the task (v1.6.3)", async () => {
+    // Wire-trace confirmed: tasks can be orphaned by sending
+    // {party: null} (or opportunity/kase: null). Useful when deleting
+    // a parent record but wanting to keep the task as a standalone item.
+    mockFetch(200, { task: { id: 5 } });
+    const { updateTask } = await import("../src/tools/tasks.js");
+    await updateTask({ id: 5, partyId: null });
+
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.task).toHaveProperty("party", null);
+  });
+
+  it("rejects two parent-refs set simultaneously (XOR check)", async () => {
+    // Capsule's API enforces "at most one related entity" with a 422,
+    // verified in v1.6.3 wire-trace. The client-side check surfaces a
+    // cleaner error before the HTTP round-trip — mirrors create_task's
+    // existing XOR validation.
+    const { updateTask } = await import("../src/tools/tasks.js");
+    await expect(updateTask({ id: 5, partyId: 99, opportunityId: 77 })).rejects.toThrow(
+      /at most one of partyId, opportunityId, or projectId/,
+    );
+  });
+
+  it("allows atomic swap via null+id (e.g. unlink party + link opportunity)", async () => {
+    // Caller idiom for moving a task from one parent type to another:
+    // `partyId: null, opportunityId: 123` — the null doesn't count
+    // toward the XOR cap because it's an unlink, not a parent set.
+    mockFetch(200, { task: { id: 5 } });
+    const { updateTask } = await import("../src/tools/tasks.js");
+    await updateTask({ id: 5, partyId: null, opportunityId: 123 });
+
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.task).toHaveProperty("party", null);
+    expect(body.task.opportunity).toEqual({ id: 123 });
+  });
+
   it("rejects status: 'PENDING' at the schema layer (Capsule rejects on direct set)", async () => {
     // Production write-mode test caught: enum included PENDING but
     // Capsule responds 422 'cannot set task status to PENDING' — that

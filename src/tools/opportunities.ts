@@ -158,6 +158,12 @@ export async function createOpportunity(input: z.infer<typeof createOpportunityS
 export const updateOpportunitySchema = z.object({
   id: positiveId,
   name: z.string().min(1).optional(),
+  partyId: positiveId
+    .optional()
+    .describe(
+      "Reassign the opportunity to a different primary party. Capsule requires every opportunity to have a party — passing `null` is rejected with 422 'party is required' (use Capsule's web UI if you need to dissolve the link entirely). Discover ids via search_parties / filter_parties. " +
+        "No defensive read-modify-write needed: this connector verified empirically (v1.6.3 wire-trace) that `party` is a standalone PUT field on /opportunities and does not interact with the asymmetric owner/team semantic from NOTES-ON-CAPSULE-API.md §27.",
+    ),
   milestoneId: positiveId
     .optional()
     .describe(
@@ -208,12 +214,13 @@ export const updateOpportunitySchema = z.object({
 });
 
 export async function updateOpportunity(input: z.infer<typeof updateOpportunitySchema>) {
-  const { id, milestoneId, ownerId, teamId, lostReasonId, fields, ...rest } = input;
+  const { id, partyId, milestoneId, ownerId, teamId, lostReasonId, fields, ...rest } = input;
 
   const body: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(rest)) {
     if (v !== undefined) body[k] = v;
   }
+  setRef(body, "party", partyId);
   setRef(body, "milestone", milestoneId);
 
   // Capsule's PUT on /opportunities has the same asymmetric owner/team

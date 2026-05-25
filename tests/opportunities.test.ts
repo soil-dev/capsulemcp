@@ -167,6 +167,27 @@ describe("updateOpportunity", () => {
     expect(body.opportunity.lostReasonId).toBeUndefined();
   });
 
+  it("maps partyId → party:{id} for re-parenting an opportunity (v1.6.3)", async () => {
+    // Production bug report (v1.6.2 era): the partyId field was silently
+    // dropped by Zod because it wasn't on the schema, so callers couldn't
+    // reassign an opp from one primary party to another via this
+    // connector — the workaround was a UI swap that risked deleting the
+    // opp. v1.6.3 plumbs partyId through to `party: { id }` in the PUT body.
+    // Wire-trace confirmed the field works server-side and party is NOT
+    // subject to the asymmetric §27 owner/team semantic.
+    mockFetch(200, { opportunity: { id: 20 } });
+    const { updateOpportunity } = await import("../src/tools/opportunities.js");
+    await updateOpportunity({ id: 20, partyId: 99 });
+
+    expect(vi.mocked(fetch).mock.calls).toHaveLength(1);
+    const [url, options] = vi.mocked(fetch).mock.calls[0]!;
+    expect(String(url)).toContain("/opportunities/20");
+    expect((options as RequestInit).method).toBe("PUT");
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.opportunity.party).toEqual({ id: 99 });
+    expect(body.opportunity.partyId).toBeUndefined();
+  });
+
   it("maps teamId → team:{id} in the request body (no defensive read when teamId is explicit)", async () => {
     mockFetch(200, { opportunity: { id: 20 } });
     const { updateOpportunity } = await import("../src/tools/opportunities.js");

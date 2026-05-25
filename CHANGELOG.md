@@ -11,6 +11,37 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Added
+
+- **Re-parenting / re-linking on `update_*` tools.** Four
+  `update_*` schemas were missing the parent-reference fields they
+  needed, so callers couldn't change a record's primary parent
+  without falling back to Capsule's web UI. Production hit this
+  three times in a week (re-parenting opp, attaching orphan person
+  to org, re-linking a task). All four are now plumbed through:
+
+  - **`update_opportunity.partyId`** — reassign opp to a different
+    primary party. `null` rejected by Capsule with 422 'party is
+    required' (verified empirically), so schema doesn't expose nullable.
+  - **`update_party.organisationId`** — link a person to an
+    organisation, or `null` to orphan. Silently ignored when passed
+    on an organisation-typed party (Capsule's API quirk; no client
+    guard since the no-op is harmless).
+  - **`update_project.partyId`** — same shape as opportunity;
+    re-parent only, no null.
+  - **`update_task.partyId` / `opportunityId` / `projectId`** —
+    all three settable + nullable (orphan supported). Client-side
+    XOR check rejects two non-null parent-refs in a single call,
+    mirroring `create_task`'s existing constraint. `null + id`
+    atomic swap supported (`partyId: null, opportunityId: 123`).
+
+  All wire-trace verified (`scripts/wire-trace-v163.ts`) against a
+  live tenant before exposing. Findings documented in
+  NOTES-ON-CAPSULE-API.md §31. 10 new tests, 495 total.
+
+  `batch_update_opportunity` / `batch_update_party` inherit the
+  new fields via the shared item schemas — no code change for batch.
+
 ## [1.6.2] — 2026-05-25
 
 Patch release on top of v1.6.1. Three production-driven fixes plus

@@ -168,6 +168,25 @@ describe("updateProject", () => {
     expect(body.kase).toEqual({ status: "CLOSED" });
   });
 
+  it("maps partyId → party:{id} for re-parenting a project (v1.6.3)", async () => {
+    // Production bug report shape (same class as the v1.6.3
+    // update_opportunity.partyId gap): the partyId field was silently
+    // dropped by Zod because it wasn't on the update schema. Wire-trace
+    // confirmed Capsule accepts {party: {id}} on PUT /kases/:id and
+    // rejects {party: null} with 422 "party is required".
+    mockFetch(200, { kase: { id: 10 } });
+    const { updateProject } = await import("../src/tools/projects.js");
+    await updateProject({ id: 10, partyId: 99 });
+
+    expect(vi.mocked(fetch).mock.calls).toHaveLength(1);
+    const [url, options] = vi.mocked(fetch).mock.calls[0]!;
+    expect(String(url)).toContain("/kases/10");
+    expect((options as RequestInit).method).toBe("PUT");
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.kase.party).toEqual({ id: 99 });
+    expect(body.kase.partyId).toBeUndefined();
+  });
+
   it("maps ownerId to nested owner object, preserving current team AND stage via read-modify-write", async () => {
     // RMW: ownerId-touched + teamId-undefined → fetch current, carry
     // both team AND stage forward (alpha.20 verification flagged that

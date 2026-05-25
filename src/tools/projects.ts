@@ -141,6 +141,11 @@ export const updateProjectSchema = z.object({
   name: z.string().min(1).optional(),
   description: z.string().optional(),
   status: z.enum(["OPEN", "CLOSED"]).optional(),
+  partyId: positiveId
+    .optional()
+    .describe(
+      "Reassign the project to a different primary party. Capsule requires every project to have a party — passing `null` is rejected with 422 'party is required' (verified empirically in v1.6.3 wire-trace). Discover ids via search_parties / filter_parties.",
+    ),
   ownerId: positiveId
     .nullable()
     .optional()
@@ -180,12 +185,13 @@ export const updateProjectSchema = z.object({
 });
 
 export async function updateProject(input: z.infer<typeof updateProjectSchema>) {
-  const { id, ownerId, teamId, stageId, fields, ...rest } = input;
+  const { id, partyId, ownerId, teamId, stageId, fields, ...rest } = input;
 
   const body: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(rest)) {
     if (v !== undefined) body[k] = v;
   }
+  setRef(body, "party", partyId);
 
   // Capsule's PUT on /kases has an asymmetric owner/team semantic:
   //

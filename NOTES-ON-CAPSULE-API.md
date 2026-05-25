@@ -1139,6 +1139,87 @@ spell out the dictionary edges with the probed examples above.
 
 ---
 
+## 31. Parent-reference (`party` / `organisation` / `opportunity` / `kase`) PUT semantics
+
+The four "parent-reference" fields on PUT — `party` on opp/project/
+task, `organisation` on a person-party, `opportunity`/`kase` on a
+task — have asymmetric rules around whether `null` is accepted.
+Probed empirically during v1.6.3 wire-trace; written up here so
+future maintainers don't have to re-probe.
+
+### Rule A — PUT `/opportunities/:id` and PUT `/kases/:id`: `party` MUST be set
+
+Both endpoints require every record to have a primary party.
+
+- `{ party: { id: N } }` → 200, reassigned.
+- `{ party: null }` → **422 Validation Failed**
+  `"party is required"`.
+
+Practical implication: `update_opportunity.partyId` and
+`update_project.partyId` accept positive integers only. Don't
+expose `.nullable()` — a caller who needs to "remove" a party from
+an opp/project must delete the record entirely.
+
+Independent of the §27 owner/team asymmetric semantic — re-parenting
+to a different `party` does NOT clear `owner` or `team`. No
+defensive RMW needed.
+
+### Rule B — PUT `/parties/:id` on a PERSON: `organisation` is fully nullable
+
+- `{ organisation: { id: N } }` on a person → 200, person linked
+  to org N.
+- `{ organisation: null }` on a person → 200, person becomes
+  standalone (org link cleared).
+
+Practical implication: `update_party.organisationId` is
+`.nullable().optional()` — both set and unlink supported.
+
+### Rule C — PUT `/parties/:id` on an ORGANISATION: `organisation` silently ignored
+
+- `{ organisation: { id: N } }` on an organisation → 200, but the
+  returned body shows no `organisation` field on the org (orgs
+  don't have a parent org in Capsule's data model). The field is
+  silently accepted by the API and silently dropped from the
+  response.
+
+Practical implication: no client-side type guard added —
+the no-op is harmless. Tool description on `update_party.organisationId`
+calls this out so callers don't think it's a connector bug.
+
+### Rule D — PUT `/tasks/:id`: any one parent-ref can be set OR cleared, but only one set at a time
+
+Tasks can be orphan (`party`/`opportunity`/`kase` all null) or
+linked to exactly one parent.
+
+- `{ party: { id: N } }` → 200, re-linked.
+- `{ party: null }` → 200, task orphaned (if no other parent set).
+- `{ opportunity: null, kase: { id: M } }` → 200, atomic swap from
+  opp to project.
+- `{ party: { id: N }, opportunity: { id: M } }` → **422**
+  `"task can be related to at most one entity"`.
+
+Practical implication: `update_task` exposes
+`partyId` / `opportunityId` / `projectId`, each `.nullable().optional()`,
+with a client-side XOR check (mirrors `create_task`) that allows
+nulls but rejects two non-null parent-refs in the same call.
+
+### Where in our code
+
+- `src/tools/opportunities.ts` `updateOpportunitySchema.partyId`
+- `src/tools/projects.ts` `updateProjectSchema.partyId`
+- `src/tools/parties.ts` `updatePartySchema.organisationId`
+- `src/tools/tasks.ts` `updateTaskSchema.{partyId,opportunityId,projectId}`
+  + the XOR check in the handler
+
+### Quote
+
+No Capsule docs page explicitly documents these. Findings come from
+the `scripts/wire-trace-v163.ts` probe run (12 mutations against a
+live tenant, full cleanup) — captured in the script's `PROBE 1`–
+`PROBE 12` blocks for re-runnability.
+
+---
+
 ## How to add to this file
 
 When you discover a new Capsule API quirk:

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { setRef } from "./body-helpers.js";
+import { setNullableRef, setRef } from "./body-helpers.js";
 import { defineDelete } from "./define-delete.js";
 import { positiveId } from "./shared-schemas.js";
 import { capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
@@ -154,16 +154,50 @@ export const updateTaskSchema = z.object({
     .describe(
       "Reassign owner to user ID. Once set, this connector cannot clear an owner back to null — use Capsule's web UI for that.",
     ),
+  partyId: positiveId
+    .nullable()
+    .optional()
+    .describe(
+      "Re-link the task to a party by id, or `null` to orphan it. Mutually exclusive with `opportunityId` / `projectId` — Capsule enforces 'task can be related to at most one entity' server-side (422 if two parent-refs are set at once, verified in v1.6.3 wire-trace). To swap parent type atomically, pass the old one as `null` and the new one as an id in the same call.",
+    ),
+  opportunityId: positiveId
+    .nullable()
+    .optional()
+    .describe(
+      "Re-link the task to an opportunity by id, or `null` to orphan it. Mutually exclusive with `partyId` / `projectId` — see `partyId` for the XOR semantic.",
+    ),
+  projectId: positiveId
+    .nullable()
+    .optional()
+    .describe(
+      "Re-link the task to a project (kase) by id, or `null` to orphan it. Mutually exclusive with `partyId` / `opportunityId` — see `partyId` for the XOR semantic.",
+    ),
 });
 
 export async function updateTask(input: z.infer<typeof updateTaskSchema>) {
-  const { id, ownerId, ...rest } = input;
+  const { id, ownerId, partyId, opportunityId, projectId, ...rest } = input;
+
+  // XOR check on the three parent-ref fields. Capsule's API enforces
+  // "at most one related entity" with a 422 on the PUT itself; this
+  // client-side check mirrors create_task's pattern (lines ~111-115)
+  // so callers get a cleaner error before the HTTP round-trip.
+  // `null` (explicit unlink) does NOT count toward the cap — callers
+  // can pass `partyId: null, opportunityId: 123` to swap parent type.
+  const setCount = [partyId, opportunityId, projectId].filter((v) => typeof v === "number").length;
+  if (setCount > 1) {
+    throw new Error(
+      "update_task: provide at most one of partyId, opportunityId, or projectId (Capsule rejects multi-parent tasks with 422 'task can be related to at most one entity')",
+    );
+  }
 
   const body: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(rest)) {
     if (v !== undefined) body[k] = v;
   }
   setRef(body, "owner", ownerId);
+  setNullableRef(body, "party", partyId);
+  setNullableRef(body, "opportunity", opportunityId);
+  setNullableRef(body, "kase", projectId);
 
   return capsulePut<{ task: unknown }>(`/tasks/${id}`, { task: body });
 }

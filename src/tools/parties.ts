@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { setRef } from "./body-helpers.js";
+import { setNullableRef, setRef } from "./body-helpers.js";
 import { defineBatch } from "./define-batch.js";
 import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
 import { defineDelete } from "./define-delete.js";
@@ -326,18 +326,26 @@ export const updatePartySchema = z.object({
   title: z.string().optional(),
   jobTitle: z.string().optional(),
   name: z.string().optional(),
+  organisationId: positiveId
+    .nullable()
+    .optional()
+    .describe(
+      "For PERSON parties: link to an organisation by id, or `null` to unlink (the person becomes an orphan / standalone record). Discover org IDs via search_parties / filter_parties with type=organisation. " +
+        "For ORGANISATION parties: silently ignored by Capsule's API — organisations don't have a parent organisation in the data model. Empirically verified in v1.6.3 wire-trace; no client-side type guard since the no-op is harmless.",
+    ),
   fields: z.array(CustomFieldWriteSchema).optional().describe(fieldsArrayDescriptor("get_party")),
   ...PartyWriteBaseSchema,
 });
 
 export async function updateParty(input: z.infer<typeof updatePartySchema>) {
-  const { id, ownerId, fields, ...rest } = input;
+  const { id, ownerId, organisationId, fields, ...rest } = input;
 
   const body: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(rest)) {
     if (v !== undefined) body[k] = v;
   }
   setRef(body, "owner", ownerId);
+  setNullableRef(body, "organisation", organisationId);
   const mappedFields = mapFieldsForBody(fields);
   if (mappedFields !== undefined) body["fields"] = mappedFields;
 

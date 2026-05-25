@@ -452,6 +452,35 @@ describe("updateParty", () => {
     );
     expect(result).toEqual(updated);
   });
+
+  it("maps organisationId → organisation:{id} to link a person to an org (v1.6.3)", async () => {
+    // Production bug report: persons created without an org link could
+    // not be attached to an organisation later — the schema dropped
+    // organisationId silently. v1.6.3 adds it; wire-trace confirmed
+    // the PUT body shape and that Capsule sets the link.
+    mockFetch(200, { party: { id: 5 } });
+    const { updateParty } = await import("../src/tools/parties.js");
+    await updateParty({ id: 5, organisationId: 99 });
+
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.party.organisation).toEqual({ id: 99 });
+    expect(body.party.organisationId).toBeUndefined();
+  });
+
+  it("maps organisationId: null → organisation:null to orphan a person (v1.6.3)", async () => {
+    // Wire-trace confirmed Capsule accepts {organisation: null} on a
+    // person and returns the party with organisation: null in the
+    // response. Used to dissolve a person→org link without deleting
+    // either record.
+    mockFetch(200, { party: { id: 5 } });
+    const { updateParty } = await import("../src/tools/parties.js");
+    await updateParty({ id: 5, organisationId: null });
+
+    const [, options] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.party).toHaveProperty("organisation", null);
+  });
 });
 
 describe("error body parsing", () => {
