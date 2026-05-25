@@ -10,10 +10,9 @@
  *   - batch.complete event always emits (verbose-independent), with
  *     aggregate summary fields only by default
  *   - detailed failureReasons are emitted only in verbose mode
- *   - The 5 wired-up batch tools (batch_update_party,
- *     batch_update_opportunity, batch_complete_task, batch_add_tag,
- *     batch_remove_tag_by_id) all PUT once per item and aggregate
- *     results correctly
+ *   - The wired-up batch wrappers exercised here PUT once per item
+ *     and aggregate results correctly; entity-specific siblings
+ *     such as batch_update_project are covered with their tool tests
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

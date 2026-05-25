@@ -288,7 +288,7 @@ const PartyWriteBaseSchema = {
     .nullable()
     .optional()
     .describe(
-      "Assign to user ID. On create_party, defaults to the API-token owner when omitted. On update_party, pass a user ID to set or `null` to unassign (verified empirically in v1.6.4 wire-trace — Capsule accepts `owner: null` on PUT /parties/:id for both persons and organisations). Discover IDs via list_users. " +
+      "Pass a user ID to set, or `null` to unassign (verified empirically in v1.6.4 wire-trace — Capsule accepts `owner: null` on PUT /parties/:id for both persons and organisations). Discover IDs via list_users. " +
         "WARNING: Capsule's PUT on /parties has the same asymmetric owner/team semantic documented in NOTES-ON-CAPSULE-API.md §27 for /kases — setting `owner` while omitting `team` is plausibly clearing-prone. When you supply `ownerId` and omit `teamId`, this connector reads the party's current team and includes it in the PUT body to preserve it across the owner change. Supply `teamId` explicitly to change it.",
     ),
   teamId: positiveId
@@ -310,6 +310,16 @@ export const createPartySchema = z.object({
   // organisation
   name: z.string().optional(),
   ...PartyWriteBaseSchema,
+  ownerId: positiveId
+    .optional()
+    .describe(
+      "Assign to user ID. Defaults to the API-token owner when omitted. To create a team-owned party with no specific user, first create the party, then call update_party with `ownerId: null` and `teamId`.",
+    ),
+  teamId: positiveId
+    .optional()
+    .describe(
+      "Assign to team ID (discover via list_teams). Omit to leave team unset on create. To clear an existing team or create a team-owned party with no specific owner, use update_party after creation.",
+    ),
   fields: z
     .array(CustomFieldWriteSchema)
     .optional()
@@ -323,10 +333,9 @@ export async function createParty(input: z.infer<typeof createPartySchema>) {
   const { ownerId, teamId, organisationId, fields, ...rest } = input;
 
   const body: Record<string, unknown> = { ...rest };
-  // On create, null is meaningless for owner (Capsule defaults to the
-  // API-token user) and for team (no defaulting; just omit). `setRef`
-  // skips both null and undefined; only positive int IDs land in the
-  // body.
+  // On create, only positive integer IDs are accepted by the schema.
+  // `setRef` still keeps this defensive at runtime and skips absent
+  // values, so Capsule's create defaults are left intact when omitted.
   setRef(body, "owner", ownerId);
   setRef(body, "team", teamId);
   setRef(body, "organisation", organisationId);

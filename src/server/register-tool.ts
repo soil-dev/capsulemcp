@@ -213,7 +213,7 @@ export function registerTool<Schema extends z.ZodObject<ZodRawShape>>(
  * Handler signature mirrors `registerTool`'s, plus an optional
  * `opts: { signal?: AbortSignal }` second arg. The signal fires
  * when the caller sends `tasks/cancel` — handlers that fan out
- * (the 5 `batch_*` writes today) pass the signal into
+ * (the 6 `batch_*` writes today) pass the signal into
  * `batchExecute` so unclaimed items get a `cancelled` error rather
  * than running.
  *

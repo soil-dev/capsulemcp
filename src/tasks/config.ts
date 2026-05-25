@@ -12,7 +12,7 @@
  * are not registered. Existing callers see the connector behave
  * exactly as it did before this code shipped.
  *
- * The five `batch_*` write tools opt in when a task store is wired
+ * The six `batch_*` write tools opt in when a task store is wired
  * (`registerToolTask` with `taskSupport: "optional"`). Enabling
  * tasks is non-breaking for callers that omit `params.task`: the
  * SDK's `handleAutomaticTaskPolling` keeps them on the synchronous-

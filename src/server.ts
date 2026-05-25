@@ -275,13 +275,13 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
       : undefined,
   );
 
-  // Single decision-point for the 5 batch_* writes. When tasks are
+  // Single decision-point for the 6 batch_* writes. When tasks are
   // wired, register as task-augmented (`taskSupport: "optional"`).
   // When they're not, register as ordinary synchronous tools — the
   // SDK's auto-poll path requires a `taskStore`, which we don't
   // have when `MCP_TASKS_ENABLED` is unset or the caller is the
   // stdio entrypoint (no clientId). Decided once, closed over
-  // `server` and `tasksWired` so the 5 call sites below don't
+  // `server` and `tasksWired` so the 6 call sites below don't
   // repeat the gating.
   const registerBatchTool: typeof registerToolTask = tasksWired
     ? registerToolTask
