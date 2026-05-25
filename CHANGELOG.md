@@ -11,6 +11,13 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.6.2] — 2026-05-25
+
+Patch release on top of v1.6.1. Three production-driven fixes plus
+the internal-quality refactor sweep, all surfaced by the
+opportunity-team work that landed in v1.6.1. No new tool surface,
+no env-var changes; safe in-place upgrade from v1.6.0 / v1.6.1.
+
 ### Fixed
 
 - **All Capsule entity ID fields now accept integer-shaped strings**
