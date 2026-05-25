@@ -11,6 +11,14 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.6.1] — 2026-05-25
+
+Patch release on top of v1.6.0. Two production-driven fixes (one
+observability metric correction, one opportunity-team write
+regression) plus the n8n integration guide and a transitive
+dependency bump. No new tool surface, no env-var changes; safe
+in-place upgrade from v1.6.0.
+
 ### Fixed
 
 - **`capsule.request.durationMs` now reflects full request lifecycle,
@@ -32,7 +40,7 @@ versions adhere to [Semantic Versioning](https://semver.org).
   `capsulePut`, `capsuleSearch`, `capsuleDelete`, `capsuleGetBinary`,
   `capsulePostBinary`. New `consumeBody` helper centralises the
   emit-after-body-read pattern; one new test pins the contract.
-  470 tests total.
+  470 tests total at the time of this fix.
 
 - **`update_opportunity` and `batch_update_opportunity` no longer
   silently clear `team` when only `ownerId` is supplied.** Capsule's
@@ -47,7 +55,7 @@ versions adhere to [Semantic Versioning](https://semver.org).
   fetches the opportunity's current team and includes it in the PUT
   body so the team is preserved. One extra `GET /opportunities/:id`
   on the owner-touched code path; no overhead when `teamId` is also
-  explicit. 477 tests total (6 new for opportunity-team coverage).
+  explicit. 477 tests total (7 new for opportunity-team coverage).
 
 ### Added
 
@@ -68,6 +76,11 @@ versions adhere to [Semantic Versioning](https://semver.org).
   The guide explicitly calls out that n8n's documented AI Agent MCP
   Client Tool sub-node is SSE-only today, while capsulemcp does not
   serve `/sse`.
+
+### Dependencies
+
+- Transitive `qs` 6.15.1 → 6.15.2 (patch-level bug fixes in
+  `stringify`/`parse`; reaches us via `express`).
 
 ## [1.6.0] — 2026-05-20
 
