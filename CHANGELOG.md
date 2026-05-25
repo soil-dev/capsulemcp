@@ -27,7 +27,7 @@ versions adhere to [Semantic Versioning](https://semver.org).
   attributed correctly. No event-shape change; existing analytics
   queries continue to work with more accurate numbers.
 
-  Affects all six write/read helpers in `src/capsule/client.ts`:
+  Affects all outbound Capsule HTTP helpers in `src/capsule/client.ts`:
   `capsuleGet`, `capsuleGetCached`, `capsulePost`, `capsulePostNoContent`,
   `capsulePut`, `capsuleSearch`, `capsuleDelete`, `capsuleGetBinary`,
   `capsulePostBinary`. New `consumeBody` helper centralises the
@@ -60,6 +60,14 @@ versions adhere to [Semantic Versioning](https://semver.org).
   to assign a team, or `null` on update to clear it. Same ownership
   shapes as projects: owner alone, team alone, or owner+team (the
   owner must be a member of the team or Capsule returns 422).
+
+### Documentation
+
+- Added an n8n integration guide, scoped to the regular MCP Client
+  node that can use capsulemcp's Streamable HTTP `/mcp` endpoint.
+  The guide explicitly calls out that n8n's documented AI Agent MCP
+  Client Tool sub-node is SSE-only today, while capsulemcp does not
+  serve `/sse`.
 
 ## [1.6.0] — 2026-05-20
 

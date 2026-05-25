@@ -885,6 +885,24 @@ The owner/team half of the PUT semantic is **asymmetric**:
 
 This is the only owner/team-related rule the API itself imposes.
 
+### Opportunity owner/team updates mirror Rule A
+
+v1.6.1 production verification found the same asymmetric
+owner/team PUT semantic on `PUT /opportunities/{id}`:
+
+- **`owner` in body, `team` absent** → Capsule clears `team`.
+- **`team` in body, `owner` absent** → Capsule preserves the
+  existing `owner` server-side and validates owner∈team.
+- **Both in body** → both are set; same membership constraint.
+
+`update_opportunity` now applies the same connector-side mitigation
+as `update_project`: when the caller supplies `ownerId` and omits
+`teamId`, it fetches the current opportunity, carries the existing
+team into the PUT body, and prevents accidental team clears. Unlike
+projects, the connector does not expose `ownerId: null` for
+opportunities; only `teamId: null` is available for explicit team
+unassign.
+
 ### Tenant board automation can mutate `owner` / `team` independently of the API
 
 A separate behaviour to be aware of: Capsule lets tenants
