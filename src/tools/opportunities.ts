@@ -223,26 +223,12 @@ export async function updateOpportunity(input: z.infer<typeof updateOpportunityS
   setRef(body, "party", partyId);
   setRef(body, "milestone", milestoneId);
 
-  // Capsule's PUT on /opportunities has the same asymmetric owner/team
-  // semantic as /kases (see NOTES-ON-CAPSULE-API.md §27):
-  //
-  //   `owner` in body → Capsule clears `team` (unless `team` also in body)
-  //   `team` in body  → Capsule preserves the existing `owner` (and
-  //                     validates owner ∈ team)
-  //
-  // To make `update_opportunity { ownerId }` safe (so it doesn't
-  // accidentally clear an existing team), the connector reads the
-  // current opportunity and carries the omitted `team` into the PUT
-  // body whenever `ownerId` is being touched. No extra GET when
-  // `teamId` is also supplied explicitly.
-  //
-  // `null` on teamId means "unassign team" (matches Capsule's UI
-  // "Unassign" option); `undefined` means "don't touch this field".
+  // Defeat Capsule's owner→clears-team asymmetric PUT semantic on
+  // /opportunities (NOTES-ON-CAPSULE-API.md §27). When ownerId is
+  // being touched and teamId is omitted, read the current team and
+  // carry it forward; skip the GET when teamId is explicit.
   let resolvedTeamId: number | null | undefined = teamId;
   if (ownerId !== undefined && teamId === undefined) {
-    // Only carry forward when the opp actually has a team; if current
-    // team is null, leave the field out entirely (sending team: null
-    // would be a redundant clear).
     ({ teamId: resolvedTeamId } = await readEntityRefs(`/opportunities/${id}`, "opportunity"));
   }
 
