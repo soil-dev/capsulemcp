@@ -11,6 +11,35 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Tool annotations now emit `{readOnlyHint, destructiveHint}`
+  explicitly on every tool — never rely on MCP spec defaults.** Per
+  spec, `destructiveHint` defaults to `true`. The pre-fix
+  `inferAnnotations` returned `{readOnlyHint: true}` for read tools
+  and `undefined` for non-destructive writes, both of which
+  resolved (in spec-compliant clients) to an implicit
+  `destructiveHint: true`. Real-world Claude clients have been
+  observed honoring that implicit-true even when `readOnlyHint:
+  true` is also set, despite the spec saying `destructiveHint` is
+  "meaningful only when readOnlyHint == false". Result: routine
+  reads and additive writes (add_note, add_tag, create_party,
+  update_party, every `batch_*`) were getting the same UI weight
+  as `delete_party` in some client paths.
+
+  After the fix, every tool emits a full hint pair:
+  - reads → `{readOnlyHint: true, destructiveHint: false}` (49)
+  - destructive (delete_* + remove_track + remove_additional_party)
+    → `{readOnlyHint: false, destructiveHint: true}` (7)
+  - all other writes → `{readOnlyHint: false, destructiveHint: false}`
+    (31, was `undefined` before)
+
+  Behavioural change is client-side only — surfaces on the next
+  `tools/list` fetch (typically every new MCP connection). No tool
+  runtime behaviour changes, no input schemas change. The pure-helper
+  unit tests + the SDK round-trip test in
+  `tests/tool-annotations.test.ts` lock the new contract.
+
 ### Added
 
 - **`list_party_entries.includeLinkedPersons` (optional, default

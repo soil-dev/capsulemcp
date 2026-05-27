@@ -70,37 +70,53 @@ function isDestructive(name: string): boolean {
  * above), so we can derive accurate hints without touching every
  * registration site.
  *
- * Returned shapes:
+ * Returned shapes (every tool gets a full hint set — see "Why
+ * explicit destructiveHint" below):
  *
- *   - Read-prefixed tools → `{ readOnlyHint: true }`. Clients can
- *     use this to auto-approve invocations, removing per-call
- *     confirmation prompts for safe reads when they trust the server.
+ *   - Read-prefixed tools → `{ readOnlyHint: true, destructiveHint: false }`.
+ *     Clients can use this to auto-approve invocations, removing
+ *     per-call confirmation prompts for safe reads.
  *
  *   - Destructive tools (whole-record deletes + workflow / party-
- *     association removers) → `{ destructiveHint: true }`. Clients
- *     can surface a stronger pre-call warning. Our schema-level
- *     `confirm: true` gate is the actual hard stop; this is the
- *     hint that travels over the wire to the client UI.
+ *     association removers) → `{ readOnlyHint: false, destructiveHint: true }`.
+ *     Clients can surface a stronger pre-call warning. Our schema-
+ *     level `confirm: true` gate is the actual hard stop; this is
+ *     the hint that travels over the wire to the client UI.
  *
  *   - Everything else (creates, updates, additive child writes,
- *     batches) → `undefined`. No special hint; clients fall back
- *     to their default (typically: prompt). MCP spec §"Tool
- *     annotations" deliberately defaults to safe.
+ *     batches) → `{ readOnlyHint: false, destructiveHint: false }`.
+ *     Routine writes that mutate data but don't delete it — clients
+ *     should prompt before invocation (the absence of `readOnlyHint`
+ *     ensures they don't auto-approve) but shouldn't escalate to the
+ *     destructive-warning UI.
  *
- * `openWorldHint` is left unset because the default semantics
- * ("interacts with external entities") already match every Capsule
+ * Why explicit destructiveHint everywhere:
+ * Per MCP spec, `destructiveHint`'s DEFAULT IS `true`. So a tool
+ * that emits only `{readOnlyHint: true}` or omits annotations
+ * entirely resolves (in spec-compliant clients) to
+ * `{destructiveHint: true}` — destructive by default. Real-world
+ * Claude clients have been observed treating that implicit-true as
+ * load-bearing even when `readOnlyHint: true` is also set, despite
+ * the spec saying `destructiveHint` is "meaningful only when
+ * readOnlyHint == false". The defensive fix is to never rely on
+ * spec defaults — emit the full hint pair explicitly so the wire
+ * shape is unambiguous regardless of client interpretation.
+ *
+ * `openWorldHint` is left unset because the default (true,
+ * "interacts with external entities") already matches every Capsule
  * tool. `idempotentHint` is left unset because idempotency in our
  * codebase is per-tool runtime behaviour (see `capsule/idempotent.ts`)
- * rather than a catalog-level property.
+ * rather than a catalog-level property — surfacing it would imply a
+ * guarantee the runtime doesn't always make.
  */
-export function inferAnnotations(name: string): ToolAnnotations | undefined {
+export function inferAnnotations(name: string): ToolAnnotations {
   if (READ_PREFIXES.some((p) => name.startsWith(p))) {
-    return { readOnlyHint: true };
+    return { readOnlyHint: true, destructiveHint: false };
   }
   if (isDestructive(name)) {
-    return { destructiveHint: true };
+    return { readOnlyHint: false, destructiveHint: true };
   }
-  return undefined;
+  return { readOnlyHint: false, destructiveHint: false };
 }
 
 /**
