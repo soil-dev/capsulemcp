@@ -804,9 +804,12 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
     "Download an attachment by id. Returns image content for image/* types (Claude can describe it natively); decoded text for text/* and application/json (small files); JSON metadata + base64 payload for other binary types (PDF, Office docs, etc.). Files exceeding maxSizeBytes (default 5MB) return metadata only with a `truncated: true` flag.",
     getAttachmentSchema.shape,
     // get_attachment is read-only — downloads a binary, never mutates.
-    // Mirrors the auto-inferred `readOnlyHint: true` that
-    // `registerTool` applies to every other `get_*` tool.
-    { readOnlyHint: true },
+    // Mirrors the auto-inferred `{readOnlyHint: true, destructiveHint:
+    // false}` that `registerTool` applies to every other `get_*` tool.
+    // Explicit destructiveHint: false is load-bearing — MCP spec
+    // defaults destructiveHint to `true`, so omitting it would (in
+    // some client implementations) classify this read as destructive.
+    { readOnlyHint: true, destructiveHint: false },
     async (input) => {
       const result = await getAttachment(input);
 
