@@ -29,6 +29,187 @@ describe("listPartyEntries", () => {
     expect(url).toContain("perPage=25");
     expect(result.entries).toHaveLength(2);
   });
+
+  // ── v1.6.6: includeLinkedPersons ────────────────────────────────────
+  //
+  // Capsule files each entry against exactly one party row (verified
+  // v1.6.6 wire-trace probe 4 — POST /entries rejects multi-party).
+  // For an org with multiple contacts, customer-facing email lands on
+  // person rows; the org's own /entries response misses it. The
+  // includeLinkedPersons flag tells the connector to enumerate linked
+  // persons via /parties/{org}/people, fan out per-person entry
+  // fetches, and merge into one feed. These tests pin the contract.
+
+  it("default behaviour unchanged — single GET, no fan-out", async () => {
+    mockFetch(200, { entries: [{ id: 1, type: "note" }] });
+
+    const { listPartyEntries } = await import("../src/tools/entries.js");
+    await listPartyEntries({ partyId: 7, page: 1, perPage: 25 });
+
+    // Critical canary: when includeLinkedPersons is omitted, the
+    // connector MUST NOT issue the /people lookup. That's the
+    // pre-v1.6.6 contract.
+    expect(vi.mocked(fetch).mock.calls).toHaveLength(1);
+    expect(String(vi.mocked(fetch).mock.calls[0]![0])).toMatch(/\/parties\/7\/entries/);
+  });
+
+  it("includeLinkedPersons + org with 2 linked persons: fans out 1+1+2 GETs and merges", async () => {
+    // Sequence: /parties/7/people → /parties/7/entries + /parties/8/entries + /parties/9/entries (3 parallel)
+    mockFetch(200, { parties: [{ id: 8 }, { id: 9 }] }); // /people
+    mockFetch(200, {
+      entries: [{ id: 100, type: "note", entryAt: "2026-05-25T10:00:00Z" }],
+    });
+    mockFetch(200, {
+      entries: [{ id: 200, type: "email", entryAt: "2026-05-27T12:00:00Z" }],
+    });
+    mockFetch(200, {
+      entries: [{ id: 300, type: "email", entryAt: "2026-05-26T08:00:00Z" }],
+    });
+
+    const { listPartyEntries } = await import("../src/tools/entries.js");
+    const result = await listPartyEntries({
+      partyId: 7,
+      page: 1,
+      perPage: 25,
+      includeLinkedPersons: true,
+    });
+
+    // 1 /people enumeration + 3 per-party /entries fan-outs (org +
+    // 2 linked persons).
+    expect(vi.mocked(fetch).mock.calls).toHaveLength(4);
+    expect(String(vi.mocked(fetch).mock.calls[0]![0])).toContain("/parties/7/people");
+    const fanOutUrls = vi
+      .mocked(fetch)
+      .mock.calls.slice(1)
+      .map((c) => String(c[0]));
+    expect(fanOutUrls.some((u) => u.includes("/parties/7/entries"))).toBe(true);
+    expect(fanOutUrls.some((u) => u.includes("/parties/8/entries"))).toBe(true);
+    expect(fanOutUrls.some((u) => u.includes("/parties/9/entries"))).toBe(true);
+
+    // Merge: newest first by entryAt. The May-27 entry (person 8)
+    // wins despite being created on a linked person, not the org —
+    // this is the whole point of the flag.
+    expect(result.entries.map((e: { id: number }) => e.id)).toEqual([200, 300, 100]);
+  });
+
+  it("includeLinkedPersons + org with zero linked persons: collapses to single GET", async () => {
+    mockFetch(200, { parties: [] }); // /people returns no linked persons
+    mockFetch(200, { entries: [{ id: 1, type: "note" }] });
+
+    const { listPartyEntries } = await import("../src/tools/entries.js");
+    const result = await listPartyEntries({
+      partyId: 7,
+      page: 1,
+      perPage: 25,
+      includeLinkedPersons: true,
+    });
+
+    // /people lookup + single fast-path /entries. No fan-out.
+    expect(vi.mocked(fetch).mock.calls).toHaveLength(2);
+    expect(String(vi.mocked(fetch).mock.calls[1]![0])).toContain("/parties/7/entries");
+    expect(result.entries).toHaveLength(1);
+  });
+
+  it("includeLinkedPersons + person partyId: no-op (no fan-out)", async () => {
+    // A person partyId has no linked-people in Capsule's data model —
+    // /people returns an empty array (verified v1.6.6 wire-trace
+    // probe 5). Connector short-circuits to single GET; flag is
+    // functionally inert.
+    mockFetch(200, { parties: [] }); // /people on a person
+    mockFetch(200, { entries: [{ id: 42, type: "note" }] });
+
+    const { listPartyEntries } = await import("../src/tools/entries.js");
+    const result = await listPartyEntries({
+      partyId: 999,
+      page: 1,
+      perPage: 25,
+      includeLinkedPersons: true,
+    });
+
+    expect(vi.mocked(fetch).mock.calls).toHaveLength(2);
+    expect(result.entries).toHaveLength(1);
+  });
+
+  it("dedups by entry id across the merge (defensive against captured-email SMTP routing)", async () => {
+    // If Capsule's SMTP ingestion ever files the same captured-email
+    // entry against both an org and a linked person, naive concat
+    // would surface a duplicate. The connector dedups by entry.id.
+    // The probe (v166 #4) showed POST rejects multi-party, but
+    // captured emails go through a separate code path we can't
+    // simulate — dedup is belt-and-suspenders.
+    mockFetch(200, { parties: [{ id: 8 }] });
+    mockFetch(200, {
+      entries: [{ id: 100, type: "email", entryAt: "2026-05-27T10:00:00Z" }],
+    });
+    mockFetch(200, {
+      entries: [{ id: 100, type: "email", entryAt: "2026-05-27T10:00:00Z" }], // same id
+    });
+
+    const { listPartyEntries } = await import("../src/tools/entries.js");
+    const result = await listPartyEntries({
+      partyId: 7,
+      page: 1,
+      perPage: 25,
+      includeLinkedPersons: true,
+    });
+
+    expect(result.entries).toHaveLength(1);
+    expect((result.entries[0] as { id: number }).id).toBe(100);
+  });
+
+  it("merges sorted by entryAt descending; falls back to id desc on tie", async () => {
+    // Two entries with identical entryAt should sort by id desc so
+    // the order is total (not implementation-defined). Capsule's API
+    // returns timestamps to millisecond precision so ties are rare —
+    // but rare ≠ never, and a non-total sort is a sneaky bug.
+    mockFetch(200, { parties: [{ id: 8 }] });
+    mockFetch(200, {
+      entries: [{ id: 10, type: "note", entryAt: "2026-05-27T10:00:00Z" }],
+    });
+    mockFetch(200, {
+      entries: [{ id: 20, type: "note", entryAt: "2026-05-27T10:00:00Z" }],
+    });
+
+    const { listPartyEntries } = await import("../src/tools/entries.js");
+    const result = await listPartyEntries({
+      partyId: 7,
+      page: 1,
+      perPage: 25,
+      includeLinkedPersons: true,
+    });
+
+    expect(result.entries.map((e: { id: number }) => e.id)).toEqual([20, 10]);
+  });
+
+  it("applies caller's pagination window to the merged feed; nextPage when more entries remain", async () => {
+    mockFetch(200, { parties: [{ id: 8 }] });
+    mockFetch(200, {
+      entries: [
+        { id: 1, type: "note", entryAt: "2026-05-27T05:00:00Z" },
+        { id: 2, type: "note", entryAt: "2026-05-27T04:00:00Z" },
+      ],
+    });
+    mockFetch(200, {
+      entries: [
+        { id: 3, type: "note", entryAt: "2026-05-27T10:00:00Z" },
+        { id: 4, type: "note", entryAt: "2026-05-27T09:00:00Z" },
+        { id: 5, type: "note", entryAt: "2026-05-27T08:00:00Z" },
+      ],
+    });
+
+    const { listPartyEntries } = await import("../src/tools/entries.js");
+    const result = await listPartyEntries({
+      partyId: 7,
+      page: 1,
+      perPage: 2,
+      includeLinkedPersons: true,
+    });
+
+    // Merged sorted: [3, 4, 5, 1, 2]. Page 1, perPage 2 → slice [3, 4].
+    expect(result.entries.map((e: { id: number }) => e.id)).toEqual([3, 4]);
+    // 5 candidates, slice goes 0..2 → nextPage signals more remain.
+    expect((result as { nextPage?: number }).nextPage).toBe(2);
+  });
 });
 
 describe("listOpportunityEntries", () => {

@@ -1305,6 +1305,83 @@ live tenant, full cleanup) — captured in the script's `PROBE 1`–
 
 ---
 
+## 32. `/parties/{id}/entries` is strictly per-row — no traversal to linked people
+
+Capsule's per-party entries endpoint
+(`GET /parties/{partyId}/entries`) returns entries whose `party.id`
+matches `partyId` exactly. No upward traversal (person → linked org)
+and no downward traversal (org → linked people).
+
+For organisations this is operationally surprising: customer-facing
+emails are typically captured with the contact (a person) as the
+party — almost never with the org row itself — so an org's
+`/entries` response will look empty even when the relationship is
+actively conversing. The org's `lastContactedAt` *is* refreshed by
+person-level entries (so the org's `get_party` response reads
+correctly), but the entries themselves don't surface at the org
+level. The mismatch between `lastContactedAt` and the entries list
+is the diagnostic signal.
+
+**Quote** — none. Capsule's
+[Party docs](https://developer.capsulecrm.com/v2/operations/Party)
+describe `/{id}/entries` as "the list of entries linked to this
+party" without elaborating on the linked-persons case. Behaviour
+verified live, not from docs.
+
+### Verified empirically (v1.6.6 wire-trace)
+
+`scripts/wire-trace-v166.ts` ran five probes against a live tenant
+to confirm the semantic before designing the mitigation:
+
+- **Probe 1** — note filed on a linked person → org's `/entries`
+  returns 0 entries. Gap confirmed.
+- **Probe 2** — note filed on the org → linked person's `/entries`
+  doesn't include it. No upward traversal either.
+- **Probe 3** — `GET /parties/{orgId}/people` returns the linked
+  persons with the expected `{id, type, ...}` shape (same that
+  `list_employees` already consumes).
+- **Probe 4** — `POST /entries` with
+  `parties: [{id: org}, {id: person}]` is rejected with 422 "entry
+  must be linked to either a party, opportunity or kase". **Each
+  entry is filed against exactly one party row** — no native
+  multi-party entries via the API.
+- **Probe 5** — `GET /parties/{personId}/people` returns 200 with
+  an empty array on a person (no linked-people relationship in the
+  data model). Connector can short-circuit cleanly without 404
+  handling.
+
+### Connector-side mitigation
+
+`list_party_entries.includeLinkedPersons` (added v1.6.6, optional,
+default `false` — preserves the pre-v1.6.6 contract bit-for-bit).
+When `true` and `partyId` is an organisation:
+
+1. Fetch `/parties/{orgId}/people` to enumerate linked persons.
+2. Fan out `/parties/{personId}/entries` for each linked person in
+   parallel (concurrency-capped via `getBatchConcurrency()` — same
+   helper the `batch_*` writes use, default 5).
+3. Concat + dedup by entry `id` (defensive — probe 4 showed naive
+   concat is correctness-safe via the API path, but captured-email
+   SMTP routing is a separate code path we can't simulate, so dedup
+   is belt-and-suspenders).
+4. Sort by `entryAt` descending (tie-break by `id` desc so the sort
+   is total).
+5. Slice the caller's `(page, perPage)` window over the merged feed.
+
+When `partyId` is a person, `includeLinkedPersons: true` is a no-op:
+the `/people` lookup returns empty (probe 5), and the connector
+short-circuits to the single-GET fast path. The flag is safe to
+default-on in callers without conditional logic.
+
+### Where in our code
+
+- [`src/tools/entries.ts`](src/tools/entries.ts) `listPartyEntries`
+  — the `includeLinkedPersons` branch + `fanOutPartyEntries` helper.
+- [`scripts/wire-trace-v166.ts`](scripts/wire-trace-v166.ts) — the
+  re-runnable probe harness.
+
+---
+
 ## How to add to this file
 
 When you discover a new Capsule API quirk:

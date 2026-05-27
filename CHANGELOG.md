@@ -11,6 +11,52 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Added
+
+- **`list_party_entries.includeLinkedPersons` (optional, default
+  `false`).** Opt-in flag that surfaces entries filed against an
+  organisation's linked people in addition to the org's own
+  entries. Closes a long-standing workflow gap: Capsule's API files
+  each entry against exactly one party row (verified v1.6.6
+  wire-trace probe 4 — `POST /entries` rejects multi-party bodies
+  with 422 "entry must be linked to either a party, opportunity or
+  kase"), so customer-facing emails typically land on a person row
+  and the org's `/entries` response misses them. Pre-v1.6.6, the
+  fix required a manual `get_party` → `list_party_entries(org)` →
+  `list_employees(org)` → `list_party_entries(personN)` chain. With
+  the flag, the connector enumerates linked persons via
+  `/parties/{orgId}/people`, fans out per-person entry fetches
+  in parallel (concurrency-capped via the same
+  `CAPSULE_MCP_BATCH_CONCURRENCY` knob the `batch_*` writes use,
+  default 5), and returns one merged feed sorted by `entryAt`
+  descending, deduped by entry id.
+
+  Behaviour when `includeLinkedPersons: true` is passed against a
+  PERSON party: silent no-op — persons have no linked-people
+  relationship in the data model (verified v1.6.6 probe 5,
+  `/parties/{personId}/people` returns 200 with an empty array).
+  The flag is safe to default-on in callers without conditional
+  branching.
+
+  Default `false` — existing callers (filter UIs, audit scripts
+  that genuinely want org-row-only entries) see no behavioural
+  change. The `list_party_entries` tool description in `src/server.ts`
+  is updated to surface the flag prominently for the "what's new
+  with $ORG?" workflow.
+
+### Documentation
+
+- **NOTES-ON-CAPSULE-API.md §32 (new section)** documenting the
+  per-row entries semantic, the v166 probe outcomes, and the
+  connector-side mitigation. Same format as the existing §27 / §31
+  sections.
+
+- **`scripts/wire-trace-v166.ts`** ships as the re-runnable probe
+  harness — 5 probes covering the gap, cross-direction strictness,
+  the `/people` endpoint shape, multi-party POST rejection, and the
+  person-partyId no-op. Same `ZZZ-V166-*` test record tagging and
+  full cleanup pattern as v164 / v165.
+
 ## [1.6.5] — 2026-05-25
 
 Patch release on top of v1.6.3. Combines two waves of consistency

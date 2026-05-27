@@ -754,7 +754,8 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
   registerTool(
     server,
     "list_party_entries",
-    "List timeline entries (notes, captured emails, completed-task records) for a party. Returns entries newest-first. Each entry has a type ('note', 'email', 'task'), free-text content, and timestamps. Use this to read the conversation history with a contact or organisation — answers questions like 'what's the latest with X?' For opportunity or project timelines, use list_opportunity_entries or list_project_entries respectively.",
+    "List timeline entries (notes, captured emails, completed-task records) for a party. Returns entries newest-first. Each entry has a type ('note', 'email', 'task'), free-text content, and timestamps. Use this to read the conversation history with a contact or organisation — answers questions like 'what's the latest with X?' For opportunity or project timelines, use list_opportunity_entries or list_project_entries respectively. " +
+      "IMPORTANT for organisations: pass `includeLinkedPersons: true` to surface entries filed against the org's linked people (sales-conversation emails almost always land on a person row, not the org row — Capsule's API files each entry against exactly one party). Without this flag, an org with active customer-facing email will appear quiet here even though its `lastContactedAt` is current. For any 'what's new with $ORG?' query, set `includeLinkedPersons: true`.",
     listPartyEntriesSchema,
     listPartyEntries,
   );
