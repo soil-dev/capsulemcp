@@ -200,6 +200,53 @@ export function createApp(opts: AppOptions): express.Express {
   app.get("/icon.svg", iconHandler);
   app.get("/favicon.ico", iconHandler);
 
+  // ── Landing page (cosmetic) ──────────────────────────────────────────────
+  // Browser-style favicon discovery walks the `<link>` tags in the HTML head
+  // at `/`. Without a real HTML response, Express's default 404 page renders
+  // with an empty <head>, and any client doing browser-shaped icon discovery
+  // (favicon checkers, possibly Claude.ai's connector UI) gives up there.
+  //
+  // This route serves a tiny static page that:
+  //   - Declares the SVG icon via <link rel="icon"> + apple-touch-icon
+  //   - Tells human visitors what this URL is and where the MCP endpoint
+  //     lives (so a curious dev hitting the URL in a browser doesn't see
+  //     "Cannot GET /" and assume the service is down)
+  //
+  // Static bytes — no user input, no template interpolation, no XSS surface.
+  // Generic content only (no deployment-specific URLs or tenant info).
+  // 1h cache so an icon refresh propagates within a reasonable window.
+  const LANDING_HTML = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>capsulemcp</title>
+<link rel="icon" type="image/svg+xml" href="/icon.svg">
+<link rel="apple-touch-icon" href="/icon.svg">
+<meta name="description" content="Model Context Protocol server for Capsule CRM. MCP endpoint: /mcp">
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;max-width:42em;margin:3em auto;padding:0 1em;color:#222;line-height:1.5}
+h1{font-size:1.6em;margin-bottom:0.2em}
+code{background:#f3f3f3;padding:0.1em 0.35em;border-radius:3px;font-size:0.95em}
+a{color:#1e3a8a}
+.muted{color:#666;font-size:0.92em}
+</style>
+</head>
+<body>
+<h1>capsulemcp</h1>
+<p>This is the HTTP+OAuth deployment of <a href="https://github.com/soil-dev/capsulemcp">capsulemcp</a>, a Model Context Protocol (MCP) server for Capsule CRM.</p>
+<p>The MCP endpoint is at <code>/mcp</code>. Use Claude.ai's Custom Connector flow (or any MCP-compatible client) to connect &mdash; this URL is not navigable by hand.</p>
+<p class="muted">Source: <a href="https://github.com/soil-dev/capsulemcp">github.com/soil-dev/capsulemcp</a> &middot; License: Apache-2.0</p>
+</body>
+</html>
+`;
+  app.get("/", (_req, res) => {
+    res
+      .set("Content-Type", "text/html; charset=utf-8")
+      .set("Cache-Control", "public, max-age=3600")
+      .send(LANDING_HTML);
+  });
+
   // ── MCP endpoint (gated by Bearer token from the OAuth provider) ─────────
   const guardOrigin: express.RequestHandler = (req, res, next) => {
     const origin = req.get("Origin");
