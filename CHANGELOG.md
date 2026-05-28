@@ -13,6 +13,29 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ### Fixed
 
+- **`serverInfo.icons` now emits a URL-form entry first when
+  `PUBLIC_BASE_URL` is set (HTTP+OAuth deploys), with the existing
+  data-URI form retained as a second fallback entry.** Some client
+  UIs (observed: Claude.ai's connector list on the Cloud Run URL)
+  silently skip `data:` image srcs — plausibly a CSP / `img-src`
+  policy that disallows data URIs. A sibling MCP server fronted by
+  a custom domain rendered its icon correctly with the URL form
+  while capsulemcp on `*.run.app` didn't, even though the SVG bytes
+  were identical. The fix emits both shapes (URL first so clients
+  iterating the array pick it; data URI second for stdio + CSP-
+  tolerant clients). Stdio installs (no `PUBLIC_BASE_URL`) see no
+  behavioural change — still data-URI-only.
+
+  Refactor: the icons array shape now lives in
+  `src/icon-builder.ts` (hand-edited) instead of inside the SVG
+  generator at `scripts/build-icon.mjs`. `src/icon.ts` is now pure
+  generated data (`ICON_SVG`, `ICON_DATA_URI`); the orchestration
+  (URL vs data URI ordering, sizes hints) is separate. The `ICONS`
+  named export from `src/icon.ts` is gone — replaced by
+  `buildIcons(publicBaseUrl?)` in `src/icon-builder.ts`. No external
+  consumer relied on `ICONS` (single internal call site in
+  `src/server.ts`).
+
 - **Tool annotations now emit `{readOnlyHint, destructiveHint}`
   explicitly on every tool — never rely on MCP spec defaults.** Per
   spec, `destructiveHint` defaults to `true`. The pre-fix
