@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { isReadOnly } from "./capsule/client.js";
-import { ICONS } from "./icon.js";
+import { buildIcons } from "./icon-builder.js";
 import { registerTool, registerToolTask } from "./server/register-tool.js";
 import { getTasksConfig } from "./tasks/config.js";
 import { createScopedTaskStore } from "./tasks/store.js";
@@ -254,7 +254,11 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
       description:
         "Read and (optionally) modify Capsule CRM data — parties, opportunities, projects, tasks, timeline entries, pipelines, tags.",
       websiteUrl: "https://github.com/soil-dev/capsulemcp",
-      icons: ICONS,
+      // PUBLIC_BASE_URL (HTTP+OAuth deploy) → emit URL-form icon
+      // first, then data: URI fallback. Stdio (no PUBLIC_BASE_URL)
+      // gets data-URI-only — preserves the pre-fix shape exactly.
+      // See src/icon-builder.ts for the URL-vs-data-URI rationale.
+      icons: buildIcons(process.env["PUBLIC_BASE_URL"]),
     },
     tasksWired
       ? {
