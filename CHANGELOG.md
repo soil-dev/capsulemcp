@@ -11,6 +11,34 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Added
+
+- **`GET /` now serves a small HTML landing page** with proper
+  `<link rel="icon" type="image/svg+xml" href="/icon.svg">` and
+  `<link rel="apple-touch-icon" href="/icon.svg">` tags in the
+  head, plus a short human-readable body pointing at `/mcp` and
+  the GitHub repo. Closes the browser-style favicon-discovery gap:
+  before this change, hitting `/` returned Express's default 404
+  HTML with an empty `<head>`, so any client doing HTML-shaped
+  icon discovery (favicon checkers, some connector UIs) found no
+  hints and fell back to nothing.
+
+  Pairs with the v1.6.6 URL-form `serverInfo.icons` fix so we now
+  cover BOTH icon-discovery channels:
+  - MCP protocol channel: `serverInfo.icons` returns a URL entry
+    first (data URI fallback second) — for clients that read the
+    MCP initialize response.
+  - HTML channel: `GET /` returns an HTML page with `<link rel>`
+    tags pointing at `/icon.svg` — for clients that crawl the root
+    URL like a browser.
+
+  Static bytes, no template interpolation, no XSS surface. 1h
+  cache. Generic content only (no deployment-specific URLs or
+  tenant info in the body). 6 new tests in `tests/http-app.test.ts`
+  cover: content-type, the two `<link>` tags' shape, the `/mcp`
+  reference in the body, the cache-control header, and a
+  determinism check (two requests return identical bytes).
+
 ### Fixed
 
 - **`serverInfo.icons` now emits a URL-form entry first when

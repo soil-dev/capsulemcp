@@ -622,6 +622,66 @@ describe("Icon endpoints (cosmetic)", () => {
   });
 });
 
+describe("Landing page (cosmetic)", () => {
+  // `/` serves a tiny HTML page so browser-style favicon discovery
+  // (which walks `<link>` tags in the head) has something to find.
+  // Without it, Express's default 404 renders an empty <head> and
+  // any client doing HTML-shaped icon discovery (favicon checkers,
+  // possibly some connector UIs) gives up. Locking the contract.
+
+  it("GET / returns 200 with HTML content-type", async () => {
+    const res = await fetch(`${baseUrl}/`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/html");
+  });
+
+  it("response body declares the SVG icon via <link rel='icon'>", async () => {
+    const res = await fetch(`${baseUrl}/`);
+    const body = await res.text();
+    // type="image/svg+xml" is the explicit hint that lets browsers
+    // skip fetching the icon when they can't render SVG (rare today
+    // but the spec rewards being explicit).
+    expect(body).toMatch(/<link\s+rel="icon"\s+type="image\/svg\+xml"\s+href="\/icon\.svg"/);
+  });
+
+  it("response body declares the apple-touch-icon", async () => {
+    // iOS home-screen pinning fetches apple-touch-icon by spec name.
+    // No semantic difference from the regular icon for SVG, but
+    // belt-and-suspenders for the favicon-checker green-row count.
+    const res = await fetch(`${baseUrl}/`);
+    const body = await res.text();
+    expect(body).toMatch(/<link\s+rel="apple-touch-icon"\s+href="\/icon\.svg"/);
+  });
+
+  it("response body is human-readable (mentions the MCP endpoint)", async () => {
+    // If a dev hits the URL in a browser by mistake, they should see
+    // *something* useful, not "Cannot GET /". The /mcp anchor is the
+    // most concrete next-step a human reader needs.
+    const res = await fetch(`${baseUrl}/`);
+    const body = await res.text();
+    expect(body).toContain("/mcp");
+    expect(body).toMatch(/capsulemcp/i);
+  });
+
+  it("landing page has a 1h Cache-Control (shorter than the icon's 24h)", async () => {
+    // Page text might evolve as we polish copy; 1h means a fix
+    // propagates the same day. Icon bytes change ~never, hence 24h.
+    const res = await fetch(`${baseUrl}/`);
+    const cache = res.headers.get("cache-control");
+    expect(cache).toContain("public");
+    expect(cache).toContain("max-age=3600");
+  });
+
+  it("no template interpolation surfaces — body bytes match across requests", async () => {
+    // Defensive: catches an accidental refactor that introduces e.g.
+    // ${requestId} into the response. Two requests must produce
+    // identical bytes (modulo gzip variation, which fetch handles).
+    const a = await (await fetch(`${baseUrl}/`)).text();
+    const b = await (await fetch(`${baseUrl}/`)).text();
+    expect(a).toBe(b);
+  });
+});
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 async function getAuthCode(): Promise<string> {
