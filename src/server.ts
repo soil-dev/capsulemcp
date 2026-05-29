@@ -127,6 +127,8 @@ import {
   addTag,
   removeTagByIdSchema,
   removeTagById,
+  deleteTagDefinitionSchema,
+  deleteTagDefinition,
   batchAddTagSchema,
   batchAddTag,
   batchRemoveTagByIdSchema,
@@ -1095,6 +1097,14 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
       "Detach a tag from a party, opportunity, or project (kase). Atomic — one PUT to Capsule. Reversible — no `confirm: true` gate (re-attach with add_tag using the same tag name). The `tagId` parameter is the tag's id, readable via get_party/get_opportunity/get_project with embed='tags' (list_tags returns the same ids and also works, but reading via embed first confirms the tag is actually attached to this entity). The tag definition itself remains in the tenant for other entities that still share it. Idempotent on retry: response is `{removed: true, alreadyRemoved: false, entity, entityId, tagId, ...<updated entity>}` on a fresh detach or `{removed: true, alreadyRemoved: true, entity, entityId, tagId}` if the tag was already detached (Capsule's 422 'tag not found to delete' is caught and converted).",
       removeTagByIdSchema,
       removeTagById,
+    );
+
+    registerTool(
+      server,
+      "delete_tag_definition",
+      "DESTRUCTIVE & TENANT-WIDE: permanently delete a tag DEFINITION from an entity type's tag namespace (parties / opportunities / kases). Unlike remove_tag_by_id — which detaches a tag from ONE record and leaves the definition intact for others — this removes the definition itself, so the tag disappears from EVERY record that shared it. Use it to clean up stray / mistyped / test tag definitions polluting the tenant-global list. Requires confirm=true. Always read the affected tag first via list_tags and confirm with the user; if you only want to untag one record, use remove_tag_by_id instead. Irreversible (re-creating by name via add_tag mints a brand-new id). Idempotent on retry: `{deleted: true, alreadyDeleted: false, entity, tagId}` on a fresh delete, or `{deleted: true, alreadyDeleted: true, entity, tagId}` if the definition was already gone (Capsule's 404 is caught). Endpoint verified empirically (DELETE /<entity>/tags/{id} → 204).",
+      deleteTagDefinitionSchema,
+      deleteTagDefinition,
     );
 
     registerBatchTool(

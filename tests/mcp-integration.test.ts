@@ -63,7 +63,7 @@ describe("tools/list", () => {
 
     // README advertises the exact catalogue size; keep it locked here
     // so docs drift is caught before release.
-    expect(tools.length).toBe(87);
+    expect(tools.length).toBe(88);
 
     // Reads we always expect
     for (const r of [
@@ -106,6 +106,7 @@ describe("tools/list", () => {
       "remove_additional_party",
       "add_tag",
       "remove_tag_by_id",
+      "delete_tag_definition",
     ]) {
       expect(names).toContain(w);
     }
