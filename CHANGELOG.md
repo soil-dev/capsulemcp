@@ -57,8 +57,8 @@ versions adhere to [Semantic Versioning](https://semver.org).
   "≤10 ids → single GET, else split into 10-id chunks, fan out in
   parallel, concatenate" block; they're now one-line delegations.
   No behavioural or API change — the "Capsule caps multi-id GET at
-  10" rule now lives in one place. Covered by the existing
-  per-handler batch tests (incl. the >10-id chunking case).
+  10" rule now lives in one place. Covered by per-handler batch tests,
+  including the >10-id chunking path for all four callers.
 
 ### Fixed
 

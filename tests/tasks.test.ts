@@ -232,4 +232,19 @@ describe("getTasks (batch)", () => {
     const [url] = vi.mocked(fetch).mock.calls[0]!;
     expect(url).toMatch(/\/tasks\/1,2($|\?)/);
   });
+
+  it("splits >10 ids into chunks and merges tasks", async () => {
+    mockFetch(200, { tasks: Array.from({ length: 10 }, (_v, i) => ({ id: i + 1 })) });
+    mockFetch(200, { tasks: [{ id: 11 }] });
+
+    const { getTasks } = await import("../src/tools/tasks.js");
+    const ids = Array.from({ length: 11 }, (_v, i) => i + 1);
+    const result = (await getTasks({ ids })) as { tasks: Array<{ id: number }> };
+
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
+    const urls = vi.mocked(fetch).mock.calls.map((c) => String(c[0]));
+    expect(urls[0]).toContain("/tasks/1,2,3,4,5,6,7,8,9,10");
+    expect(urls[1]).toContain("/tasks/11");
+    expect(result.tasks.map((task) => task.id)).toEqual(ids);
+  });
 });

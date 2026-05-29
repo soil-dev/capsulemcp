@@ -409,4 +409,22 @@ describe("getOpportunities (batch)", () => {
     const [url] = vi.mocked(fetch).mock.calls[0]!;
     expect(url).toMatch(/\/opportunities\/1,2,3($|\?)/);
   });
+
+  it("splits >10 ids into chunks, propagates embed, and merges results", async () => {
+    mockFetch(200, { opportunities: Array.from({ length: 10 }, (_v, i) => ({ id: i + 1 })) });
+    mockFetch(200, { opportunities: [{ id: 11 }] });
+
+    const { getOpportunities } = await import("../src/tools/opportunities.js");
+    const ids = Array.from({ length: 11 }, (_v, i) => i + 1);
+    const result = (await getOpportunities({ ids, embed: "tags,fields" })) as {
+      opportunities: Array<{ id: number }>;
+    };
+
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
+    const urls = vi.mocked(fetch).mock.calls.map((c) => String(c[0]));
+    expect(urls[0]).toContain("/opportunities/1,2,3,4,5,6,7,8,9,10");
+    expect(urls[1]).toContain("/opportunities/11");
+    expect(urls.every((u) => u.includes("embed=tags%2Cfields"))).toBe(true);
+    expect(result.opportunities.map((o) => o.id)).toEqual(ids);
+  });
 });
