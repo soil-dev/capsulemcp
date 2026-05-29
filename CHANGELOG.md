@@ -11,6 +11,22 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.7.0] — 2026-05-29
+
+Minor release on top of v1.6.5 — first version to add net-new tools
+since the 1.6 line began, hence the minor bump. Highlights:
+`list_party_entries` can now fold an organisation's linked-people
+timelines into one merged feed (`includeLinkedPersons`); a new
+`delete_tag_definition` tool cleans up tenant-global tag definitions
+(not just per-record detach); MCP tool annotations now emit an
+explicit `{readOnlyHint, destructiveHint}` pair on every tool instead
+of relying on the spec's destructive-by-default; and the HTTP entry
+serves a small landing page at `/`. Internally, the four batch-fetch
+handlers were de-duplicated behind a shared `chunkedMultiGet` helper.
+Catalog: 88 tools (49 in read-only mode), 8 confirm-gated destructive.
+All API behaviours empirically verified via the committed
+`scripts/wire-trace-v16{4,5,6,7}.ts` probes.
+
 ### Added
 
 - **`delete_tag_definition` (write, destructive, confirm-gated).**
