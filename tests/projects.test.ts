@@ -467,4 +467,22 @@ describe("getProjects (batch)", () => {
     expect(url).toMatch(/\/kases\/1,2($|\?)/);
     expect(url).not.toContain("/projects/");
   });
+
+  it("splits >10 ids into chunks, propagates embed, and merges kases", async () => {
+    mockFetch(200, { kases: Array.from({ length: 10 }, (_v, i) => ({ id: i + 1 })) });
+    mockFetch(200, { kases: [{ id: 11 }] });
+
+    const { getProjects } = await import("../src/tools/projects.js");
+    const ids = Array.from({ length: 11 }, (_v, i) => i + 1);
+    const result = (await getProjects({ ids, embed: "tags,fields" })) as {
+      kases: Array<{ id: number }>;
+    };
+
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
+    const urls = vi.mocked(fetch).mock.calls.map((c) => String(c[0]));
+    expect(urls[0]).toContain("/kases/1,2,3,4,5,6,7,8,9,10");
+    expect(urls[1]).toContain("/kases/11");
+    expect(urls.every((u) => u.includes("embed=tags%2Cfields"))).toBe(true);
+    expect(result.kases.map((kase) => kase.id)).toEqual(ids);
+  });
 });

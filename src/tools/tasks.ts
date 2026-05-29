@@ -52,8 +52,9 @@ export async function getTask(input: z.infer<typeof getTaskSchema>) {
 
 // ───────────────────────────────────────────────────────────────────────────
 //
-// Batch fetch up to 10 tasks by id in a single call. Capsule's path
-// syntax: GET /tasks/<id1>,<id2>,... — the server caps at 10 per call.
+// Batch fetch up to 50 tasks by id. Capsule's path syntax:
+// GET /tasks/<id1>,<id2>,... caps at 10 ids per request, so larger
+// caller batches are split into 10-id chunks and merged.
 
 export const getTasksSchema = z.object({
   ids: z
