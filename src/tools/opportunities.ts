@@ -6,7 +6,7 @@ import { defineDelete } from "./define-delete.js";
 import { readEntityRefs } from "./preserve-refs.js";
 import { positiveId } from "./shared-schemas.js";
 import { capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
-import { chunk } from "../capsule/batch.js";
+import { chunkedMultiGet } from "../capsule/multi-get.js";
 import {
   CustomFieldWriteSchema,
   fieldsArrayDescriptor,
@@ -90,23 +90,7 @@ export const getOpportunitiesSchema = z.object({
 });
 
 export async function getOpportunities(input: z.infer<typeof getOpportunitiesSchema>) {
-  const { ids, embed } = input;
-  if (ids.length <= 10) {
-    const { data } = await capsuleGet<{ opportunities: unknown[] }>(
-      `/opportunities/${ids.join(",")}`,
-      { embed },
-    );
-    return data;
-  }
-  const chunks = chunk(ids, 10);
-  const responses = await Promise.all(
-    chunks.map((chunkIds) =>
-      capsuleGet<{ opportunities: unknown[] }>(`/opportunities/${chunkIds.join(",")}`, {
-        embed,
-      }),
-    ),
-  );
-  return { opportunities: responses.flatMap((r) => r.data.opportunities) };
+  return chunkedMultiGet("/opportunities", "opportunities", input.ids, { embed: input.embed });
 }
 
 // ── Write ───────────────────────────────────────────────────────────────────

@@ -48,6 +48,18 @@ versions adhere to [Semantic Versioning](https://semver.org).
   `<link>` tags, the `/mcp` reference, cache-control, and a
   determinism check.
 
+### Changed
+
+- **Internal: consolidated the four batch-fetch handlers'
+  chunk-and-fan-out logic into one helper** (`chunkedMultiGet` in
+  `src/capsule/multi-get.ts`). `get_parties`, `get_opportunities`,
+  `get_projects`, and `get_tasks` each hand-rolled the identical
+  "≤10 ids → single GET, else split into 10-id chunks, fan out in
+  parallel, concatenate" block; they're now one-line delegations.
+  No behavioural or API change — the "Capsule caps multi-id GET at
+  10" rule now lives in one place. Covered by the existing
+  per-handler batch tests (incl. the >10-id chunking case).
+
 ### Fixed
 
 - **`list_party_entries` merged-timeline pagination (the
