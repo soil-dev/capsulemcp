@@ -32,12 +32,12 @@
  *     is correct because Capsule's pagination is stable for stable
  *     data.
  *
- *   - Invalidation: `add_tag` and `remove_tag_by_id` mutate the
- *     tag catalogue, so they call `invalidateByPrefix("/tags")` to
- *     drop cached `list_tags` responses before the next read sees
- *     stale data. Other cached endpoints have no write-side
- *     counterpart in our tool surface, so no invalidation is
- *     wired for them.
+ *   - Invalidation: `add_tag`, `remove_tag_by_id`, and
+ *     `delete_tag_definition` mutate the tag catalogue, so they call
+ *     `invalidateByPrefix("/<entity>/tags")` to drop cached
+ *     `list_tags` responses before the next read sees stale data.
+ *     Other cached endpoints have no write-side counterpart in our
+ *     tool surface, so no invalidation is wired for them.
  */
 
 import { readBool, readPositiveInt } from "../env.js";
@@ -179,8 +179,8 @@ export function cacheSet<T>(key: string, result: PagedResult<T>): void {
 
 /**
  * Drop every cached entry whose key starts with `GET <pathPrefix>`.
- * Used by `add_tag` / `remove_tag_by_id` after a mutation to keep
- * subsequent `list_tags` reads consistent within the same process.
+ * Used by tag mutations after a write to keep subsequent `list_tags`
+ * reads consistent within the same process.
  * `trigger` identifies the caller (e.g. "add_tag") for log diagnostics.
  */
 export function invalidateByPrefix(pathPrefix: string, trigger?: string): void {

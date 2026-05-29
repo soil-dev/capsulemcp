@@ -276,4 +276,19 @@ describe("tag mutation invalidates list_tags cache", () => {
     await listTags({ entity: "parties", page: 1, perPage: 100 });
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(3);
   });
+
+  it("delete_tag_definition also invalidates the cached list", async () => {
+    mockFetch(200, { tags: [{ id: 5, name: "Typo" }] });
+    const { listTags, deleteTagDefinition } = await import("../src/tools/tags.js");
+    await listTags({ entity: "parties", page: 1, perPage: 100 });
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+
+    mockFetch(204, {});
+    await deleteTagDefinition({ entity: "parties", tagId: 5, confirm: true });
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
+
+    mockFetch(200, { tags: [] });
+    await listTags({ entity: "parties", page: 1, perPage: 100 });
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(3);
+  });
 });
