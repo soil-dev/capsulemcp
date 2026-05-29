@@ -7,18 +7,11 @@
  * edit this file directly** — edit the SVG and re-run `npm run
  * build:icon` (or `npm run build`, which chains it).
  *
- * This file is generated DATA: the raw SVG plus its `data:` URI
- * form. The `serverInfo.icons` ARRAY shape (URL form vs data URI
- * form vs both, ordering, sizes hints) is hand-edited orchestration
- * and lives in `src/icon-builder.ts` — kept out of this generator
- * so the icon-array shape can evolve without touching the SVG.
- *
- * Exposed two ways at runtime:
+ * Exposed two ways:
  *   - Embedded as a `data:` URI in the MCP `serverInfo.icons` array
- *     (spec-compliant; works without any HTTP route — stdio path).
+ *     (spec-compliant; works without any HTTP route).
  *   - Served at `/icon.svg` and `/favicon.ico` by the HTTP entry,
- *     so clients that prefer to fetch a URL get a real HTTPS resource
- *     (some UIs' CSP blocks `data:` image srcs — URL form survives).
+ *     in case the consuming client prefers a URL it can fetch.
  */
 
 export const ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="capsulemcp">
@@ -43,3 +36,16 @@ export const ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64
 </svg>`;
 
 export const ICON_DATA_URI = `data:image/svg+xml;base64,${Buffer.from(ICON_SVG, "utf8").toString("base64")}`;
+
+/**
+ * Shaped for MCP's `serverInfo.icons` field. Single 64x64 SVG that
+ * scales cleanly to any size; `sizes: ["any"]` tells the client it
+ * works at every render size.
+ */
+export const ICONS = [
+  {
+    src: ICON_DATA_URI,
+    mimeType: "image/svg+xml",
+    sizes: ["64x64", "any"],
+  },
+];

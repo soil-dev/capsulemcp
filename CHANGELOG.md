@@ -13,56 +13,29 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ### Added
 
-- **`GET /` now serves a small HTML landing page** with proper
+- **`GET /` now serves a small HTML landing page** — a short
+  human-readable body pointing at `/mcp` and the GitHub repo, plus
   `<link rel="icon" type="image/svg+xml" href="/icon.svg">` and
   `<link rel="apple-touch-icon" href="/icon.svg">` tags in the
-  head, plus a short human-readable body pointing at `/mcp` and
-  the GitHub repo. Closes the browser-style favicon-discovery gap:
-  before this change, hitting `/` returned Express's default 404
-  HTML with an empty `<head>`, so any client doing HTML-shaped
-  icon discovery (favicon checkers, some connector UIs) found no
-  hints and fell back to nothing.
+  head. Before this, hitting the root URL in a browser returned
+  Express's default "Cannot GET /" — now a curious visitor (or a
+  favicon checker that parses HTML) gets something useful.
 
-  Pairs with the v1.6.6 URL-form `serverInfo.icons` fix so we now
-  cover BOTH icon-discovery channels:
-  - MCP protocol channel: `serverInfo.icons` returns a URL entry
-    first (data URI fallback second) — for clients that read the
-    MCP initialize response.
-  - HTML channel: `GET /` returns an HTML page with `<link rel>`
-    tags pointing at `/icon.svg` — for clients that crawl the root
-    URL like a browser.
-
-  Static bytes, no template interpolation, no XSS surface. 1h
-  cache. Generic content only (no deployment-specific URLs or
-  tenant info in the body). 6 new tests in `tests/http-app.test.ts`
-  cover: content-type, the two `<link>` tags' shape, the `/mcp`
-  reference in the body, the cache-control header, and a
-  determinism check (two requests return identical bytes).
+  Scope note: this does NOT change how Claude.ai's connector UI
+  displays the server icon. We empirically traced that mechanism
+  to a favicon crawler (AWS-hosted, hourly, browser user-agents)
+  that fetches `/favicon.ico` directly — it does not parse the
+  landing-page `<link>` tags, and it only crawls **custom domains**,
+  not Public-Suffix-List platform subdomains like `*.run.app`. The
+  load-bearing route for that crawler (`/favicon.ico`) predates
+  this change; getting Claude.ai to show the icon requires mapping
+  the service to a custom domain, which is infra-side, not a code
+  change here. The landing page stands on its own DX merit. 6 new
+  tests in `tests/http-app.test.ts` cover content-type, the two
+  `<link>` tags, the `/mcp` reference, cache-control, and a
+  determinism check.
 
 ### Fixed
-
-- **`serverInfo.icons` now emits a URL-form entry first when
-  `PUBLIC_BASE_URL` is set (HTTP+OAuth deploys), with the existing
-  data-URI form retained as a second fallback entry.** Some client
-  UIs (observed: Claude.ai's connector list on the Cloud Run URL)
-  silently skip `data:` image srcs — plausibly a CSP / `img-src`
-  policy that disallows data URIs. A sibling MCP server fronted by
-  a custom domain rendered its icon correctly with the URL form
-  while capsulemcp on `*.run.app` didn't, even though the SVG bytes
-  were identical. The fix emits both shapes (URL first so clients
-  iterating the array pick it; data URI second for stdio + CSP-
-  tolerant clients). Stdio installs (no `PUBLIC_BASE_URL`) see no
-  behavioural change — still data-URI-only.
-
-  Refactor: the icons array shape now lives in
-  `src/icon-builder.ts` (hand-edited) instead of inside the SVG
-  generator at `scripts/build-icon.mjs`. `src/icon.ts` is now pure
-  generated data (`ICON_SVG`, `ICON_DATA_URI`); the orchestration
-  (URL vs data URI ordering, sizes hints) is separate. The `ICONS`
-  named export from `src/icon.ts` is gone — replaced by
-  `buildIcons(publicBaseUrl?)` in `src/icon-builder.ts`. No external
-  consumer relied on `ICONS` (single internal call site in
-  `src/server.ts`).
 
 - **Tool annotations now emit `{readOnlyHint, destructiveHint}`
   explicitly on every tool — never rely on MCP spec defaults.** Per
