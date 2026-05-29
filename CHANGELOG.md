@@ -50,6 +50,23 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ### Fixed
 
+- **`list_party_entries` merged-timeline pagination (the
+  `includeLinkedPersons` path).** Two off-by-one-class bugs in the
+  fan-out merge:
+  (1) it under-fetched for `page > 1` — only `perPage` candidates
+  were pulled per linked party, so a second page sliced from too
+  small a pool and could come back short or empty;
+  (2) it falsely reported `nextPage: undefined` on an exactly-full
+  page 1 even when linked parties still had older entries upstream
+  (the per-party `Link rel=next` signal was discarded), so callers
+  stopped paging early.
+  Now the connector fetches `min(page × perPage, 100)` candidates per
+  party and preserves each party's upstream next-page signal when the
+  requested window fits within the per-party fetch cap. Very deep
+  pagination on a large multi-person org can still be approximate
+  (documented on the schema). The default (`includeLinkedPersons`
+  omitted) single-GET path is unchanged.
+
 - **Tool annotations now emit `{readOnlyHint, destructiveHint}`
   explicitly on every tool — never rely on MCP spec defaults.** Per
   spec, `destructiveHint` defaults to `true`. The pre-fix

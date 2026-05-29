@@ -210,6 +210,37 @@ describe("listPartyEntries", () => {
     // 5 candidates, slice goes 0..2 → nextPage signals more remain.
     expect((result as { nextPage?: number }).nextPage).toBe(2);
   });
+
+  it("preserves upstream nextPage when the merged page is exactly full", async () => {
+    // Regression: if one linked person's first page is exactly full
+    // and Capsule sends Link rel=next, the merged result still has a
+    // next page even though merged.length === perPage.
+    mockFetch(200, { parties: [{ id: 8 }] });
+    mockFetch(200, { entries: [] });
+    mockFetch(
+      200,
+      {
+        entries: [
+          { id: 11, type: "email", entryAt: "2026-05-27T11:00:00Z" },
+          { id: 10, type: "email", entryAt: "2026-05-27T10:00:00Z" },
+        ],
+      },
+      {
+        Link: '<https://api.capsulecrm.com/api/v2/parties/8/entries?page=2&perPage=2>; rel="next"',
+      },
+    );
+
+    const { listPartyEntries } = await import("../src/tools/entries.js");
+    const result = await listPartyEntries({
+      partyId: 7,
+      page: 1,
+      perPage: 2,
+      includeLinkedPersons: true,
+    });
+
+    expect(result.entries.map((e: { id: number }) => e.id)).toEqual([11, 10]);
+    expect((result as { nextPage?: number }).nextPage).toBe(2);
+  });
 });
 
 describe("listOpportunityEntries", () => {
