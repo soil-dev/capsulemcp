@@ -1,9 +1,10 @@
 /**
  * Shared `confirm: true` literal for destructive write tools.
  *
- * Capsule's connector gates 7 destructive/removal tools behind an explicit
+ * Capsule's connector gates 8 destructive/removal tools behind an explicit
  * `confirm: true` flag (delete_party / _opportunity / _project / _task
- * / _entry, plus remove_track and remove_additional_party). Zod's
+ * / _entry / _tag_definition, plus remove_track and
+ * remove_additional_party). Zod's
  * default error on a missing or `false` value of a `z.literal(true)`
  * reads `"Invalid input: expected true"` — technically correct but
  * unhelpful at a callsite, especially for an LLM caller trying to

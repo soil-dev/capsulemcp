@@ -571,7 +571,7 @@ after.
 - Tool **arguments** are never logged — only the field NAMES that
   were present (`argFields: ["conditions", "page"]`). Search queries,
   party IDs, custom-field values, etc. stay out of operator logs.
-- Capsule API **paths** are redacted: `/parties/254022621/notes` →
+- Capsule API **paths** are redacted: `/parties/123456789/notes` →
   `/parties/:id/notes`, `/parties/search?q=Acme` → `/parties/search`.
   Numeric IDs and query strings never appear. The shape stays for
   analytics ("top endpoints", "p95 latency per endpoint").

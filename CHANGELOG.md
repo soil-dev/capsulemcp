@@ -62,10 +62,17 @@ versions adhere to [Semantic Versioning](https://semver.org).
   stopped paging early.
   Now the connector fetches `min(page × perPage, 100)` candidates per
   party and preserves each party's upstream next-page signal when the
-  requested window fits within the per-party fetch cap. Very deep
-  pagination on a large multi-person org can still be approximate
-  (documented on the schema). The default (`includeLinkedPersons`
-  omitted) single-GET path is unchanged.
+  NEXT window still falls strictly within the per-party fetch cap.
+  The merge has an inherent ceiling — a top-100-per-party merge
+  reliably orders only the most-recent ~100 entries across the org +
+  its people — so at exactly that ceiling the feed now ends honestly
+  (the next-page signal uses a strict `< 100`, not `<= 100`, to avoid
+  promising a phantom empty page) rather than reporting "approximate."
+  The schema description states the ceiling explicitly and directs a
+  specific contact's deeper history to `list_party_entries` on that
+  person's id (the default single-GET path paginates natively with no
+  ceiling). The default (`includeLinkedPersons` omitted) path is
+  unchanged.
 
 - **Tool annotations now emit `{readOnlyHint, destructiveHint}`
   explicitly on every tool — never rely on MCP spec defaults.** Per
@@ -81,10 +88,13 @@ versions adhere to [Semantic Versioning](https://semver.org).
   update_party, every `batch_*`) were getting the same UI weight
   as `delete_party` in some client paths.
 
-  After the fix, every tool emits a full hint pair:
+  After the fix, every tool emits a full hint pair (counts reflect
+  the full v1.7.0 catalog, including `delete_tag_definition` added
+  later in this same release):
   - reads → `{readOnlyHint: true, destructiveHint: false}` (49)
-  - destructive (delete_* + remove_track + remove_additional_party)
-    → `{readOnlyHint: false, destructiveHint: true}` (7)
+  - destructive (delete_* incl. delete_tag_definition, + remove_track
+    + remove_additional_party) → `{readOnlyHint: false,
+    destructiveHint: true}` (8)
   - all other writes → `{readOnlyHint: false, destructiveHint: false}`
     (31, was `undefined` before)
 
@@ -784,7 +794,7 @@ pointer.
 ### Privacy / hygiene
 
 - **Tightened `cache.evict` path field.** The evicted key was being
-  logged in its raw form (e.g. `GET /parties/254022621?embed=tags`),
+  logged in its raw form (e.g. `GET /parties/123456789?embed=tags`),
   which leaked record IDs and (in the case of `/parties/search?q=…`)
   search terms into operator logs. Now redacted to
   `GET /parties/:id` shape. Same `redactPath` helper used for all

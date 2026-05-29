@@ -26,7 +26,7 @@ export const listPartyEntriesSchema = z.object({
         "WHY THIS FLAG EXISTS: Capsule's API files each entry against exactly one party row (verified v1.6.6 wire-trace probe 4 — POST /entries rejects multi-party bodies with 422 'entry must be linked to either a party, opportunity or kase'). For an organisation with multiple contacts, captured emails almost always land on a person row, not the org. As a result, `list_party_entries(orgId)` with `includeLinkedPersons: false` will miss recent customer-facing email — even though the org's own `lastContactedAt` is updated by the activity. This flag is the correct call for any 'what's new with $ORG?' question. " +
         "WHEN `partyId` IS A PERSON: silently no-op — persons have no linked-people relationship in Capsule's data model, so the flag is functionally inert (the connector still issues a cheap `/people` check; the response is empty). " +
         "LATENCY: 1 + N round trips for an org with N linked people, concurrency-capped (typical: 2-3 waves for N=10). Linked-person enumeration reads the first 100 linked people; use list_employees for explicit pagination when an organisation has more contacts than that. Use `includeLinkedPersons: false` for fast pre-screen reads where you only need the org-row entries (e.g. invoice/contract notes that are typically filed at the org level). " +
-        "PAGINATION CAVEAT: `page` and `perPage` apply to the MERGED window. The connector fetches enough entries from each party to cover the requested merged window (up to Capsule's per-party cap of 100) then slices the caller's window; very deep pagination with a large multi-person org can still be approximate. For LLM-driven 'what's the latest' queries (the typical use), this is invisible.",
+        "PAGINATION CAVEAT: `page` and `perPage` apply to the MERGED window, and the merge has a hard ceiling — it reliably orders only the most-recent ~100 entries across the org + its people (each party is fetched at Capsule's per-party cap of 100, and a top-100-per-party merge is correct only up to global position 100). Paging past that ceiling (`page × perPage > 100`) returns no further entries and ends the feed; it does NOT continue into older history. To read a specific contact's full timeline beyond the merged ceiling, call `list_party_entries` on that person's id directly (the default single-GET path paginates natively with no ceiling). For the LLM-driven 'what's the latest with $ORG' query this is the typical use of, the first page is exact and the ceiling is never reached.",
     ),
 });
 
@@ -87,13 +87,21 @@ function mergedTimelineNextPage(
   const requestedWindowEnd = page * perPage;
   if (mergedLength > requestedWindowEnd) return page + 1;
 
-  // When the requested window fits within the per-party fetch cap,
-  // an upstream Link rel=next means there are older entries beyond
-  // our candidate set even if the merged slice length is exactly
-  // `perPage`. Preserve that signal instead of falsely ending the
-  // merged feed at page 1.
-  const coveredRequestedWindow = requestedWindowEnd <= 100;
-  if (coveredRequestedWindow && upstreamHasNextPage) return page + 1;
+  // When the NEXT window still falls strictly within the per-party
+  // fetch cap (100), an upstream Link rel=next means there are older
+  // entries beyond our candidate set even though the merged slice was
+  // exactly full — preserve that signal instead of falsely ending the
+  // feed (the v1.6.6 regression this guards).
+  //
+  // Strict `<` (not `<=`): the merge of "top-100 per party" reliably
+  // orders only the global top ~100 entries. At `requestedWindowEnd
+  // == 100` we are AT that ceiling — page+1 would need candidates
+  // beyond 100 that we never fetched, so promising it would yield a
+  // phantom empty page. End honestly at the ceiling instead; the
+  // schema description directs deeper per-contact history to
+  // list_party_entries on the specific person.
+  const nextWindowWithinCap = requestedWindowEnd < 100;
+  if (nextWindowWithinCap && upstreamHasNextPage) return page + 1;
 
   return undefined;
 }
