@@ -241,6 +241,45 @@ describe("listPartyEntries", () => {
     expect(result.entries.map((e: { id: number }) => e.id)).toEqual([11, 10]);
     expect((result as { nextPage?: number }).nextPage).toBe(2);
   });
+
+  it("does NOT promise a next page at the 100-entry merge ceiling (no phantom page)", async () => {
+    // The merge reliably orders only the global top ~100 (each party
+    // capped at 100 candidates). At a window whose end is exactly 100,
+    // page+1 would need candidates beyond the cap we never fetched —
+    // so even though a linked person still has an upstream Link
+    // rel=next, the feed must END here rather than promise a page that
+    // would come back empty. Guards the `<` (not `<=`) ceiling check.
+    mockFetch(200, { parties: [{ id: 8 }] }); // /people
+    mockFetch(200, { entries: [] }); // org (id 7) — empty
+    // Linked person returns a full cap of 100 entries AND signals more
+    // upstream. page=4 perPage=25 → requestedWindowEnd === 100.
+    const hundred = Array.from({ length: 100 }, (_v, i) => ({
+      id: 1000 + i,
+      type: "email",
+      entryAt: `2026-05-27T${String(23 - Math.floor(i / 5)).padStart(2, "0")}:00:00Z`,
+    }));
+    mockFetch(
+      200,
+      { entries: hundred },
+      {
+        Link: '<https://api.capsulecrm.com/api/v2/parties/8/entries?page=2&perPage=100>; rel="next"',
+      },
+    );
+
+    const { listPartyEntries } = await import("../src/tools/entries.js");
+    const result = await listPartyEntries({
+      partyId: 7,
+      page: 4,
+      perPage: 25,
+      includeLinkedPersons: true,
+    });
+
+    // page 4 of 25 = the window ending exactly at the 100 ceiling.
+    expect(result.entries).toHaveLength(25);
+    // No phantom page 5: the feed ends honestly at the ceiling even
+    // though the person had an upstream rel=next.
+    expect((result as { nextPage?: number }).nextPage).toBeUndefined();
+  });
 });
 
 describe("listOpportunityEntries", () => {

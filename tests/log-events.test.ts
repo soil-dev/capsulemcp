@@ -25,7 +25,7 @@ vi.mock("undici", () => ({ fetch: vi.fn() }));
 
 describe("redactPath", () => {
   it("redacts single numeric IDs", () => {
-    expect(redactPath("/parties/254022621")).toBe("/parties/:id");
+    expect(redactPath("/parties/123456789")).toBe("/parties/:id");
     expect(redactPath("/opportunities/1234")).toBe("/opportunities/:id");
     expect(redactPath("/kases/9")).toBe("/kases/:id");
   });
@@ -36,7 +36,7 @@ describe("redactPath", () => {
   });
 
   it("redacts nested numeric IDs", () => {
-    expect(redactPath("/parties/254022621/notes")).toBe("/parties/:id/notes");
+    expect(redactPath("/parties/123456789/notes")).toBe("/parties/:id/notes");
     expect(redactPath("/parties/123/notes/456")).toBe("/parties/:id/notes/:id");
   });
 
@@ -212,7 +212,7 @@ describe("end-to-end: tool.call, capsule.request, tool.chain via the MCP wire", 
     );
 
     await log.withRequestContext({ clientId: "cap-client" }, async () => {
-      await client.callTool({ name: "get_party", arguments: { id: 254022621 } });
+      await client.callTool({ name: "get_party", arguments: { id: 123456789 } });
     });
 
     const reqs = parseEvents("capsule.request");
@@ -220,9 +220,9 @@ describe("end-to-end: tool.call, capsule.request, tool.chain via the MCP wire", 
     const r = reqs[0]!;
     // Path is the full URL pathname (Capsule API base is
     // /api/v2/...). The load-bearing assertion: the raw party id
-    // 254022621 must NOT appear; `:id` must.
+    // 123456789 must NOT appear; `:id` must.
     expect(String(r["path"])).toBe("/api/v2/parties/:id");
-    expect(String(r["path"])).not.toContain("254022621");
+    expect(String(r["path"])).not.toContain("123456789");
     expect(r["method"]).toBe("GET");
     expect(r["status"]).toBe(200);
     expect(typeof r["durationMs"]).toBe("number");

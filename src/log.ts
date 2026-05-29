@@ -120,10 +120,10 @@ export function logEvent(
  * adjacent metadata) across log aggregators.
  *
  * Patterns redacted:
- *   /parties/254022621            -> /parties/:id
+ *   /parties/123456789            -> /parties/:id
  *   /parties/1,2,3                -> /parties/:id   (multi-id GET)
- *   /parties/254022621/notes      -> /parties/:id/notes
- *   /parties/254022621/notes/456  -> /parties/:id/notes/:id
+ *   /parties/123456789/notes      -> /parties/:id/notes
+ *   /parties/123456789/notes/456  -> /parties/:id/notes/:id
  *   /parties/search?q=Acme        -> /parties/search  (query dropped)
  *
  * Tag-list paths (`/parties/tags`, `/opportunities/tags`,
