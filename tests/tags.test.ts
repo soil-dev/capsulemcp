@@ -118,3 +118,66 @@ describe("removeTagById — atomic detach by per-entity link id", () => {
     expect(body[wrapper].tags).toEqual([{ id: 42, _delete: true }]);
   });
 });
+
+describe("deleteTagDefinition — tenant-wide definition delete (DESTRUCTIVE)", () => {
+  it.each([
+    ["parties", "/parties/tags/42"],
+    ["opportunities", "/opportunities/tags/42"],
+    ["kases", "/kases/tags/42"],
+  ] as const)("DELETEs /%s/tags/{id} when confirm=true", async (entity, expectedPath) => {
+    mockFetch(204, {});
+    const { deleteTagDefinition } = await import("../src/tools/tags.js");
+
+    const result = await deleteTagDefinition({ entity, tagId: 42, confirm: true });
+
+    const [url, opts] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toContain(expectedPath);
+    expect((opts as RequestInit).method).toBe("DELETE");
+    expect(result).toEqual({ deleted: true, alreadyDeleted: false, entity, tagId: 42 });
+  });
+
+  it("is idempotent: Capsule 404 → alreadyDeleted: true", async () => {
+    // A re-issued delete (definition already gone) 404s; the connector
+    // converts that to a success-shaped alreadyDeleted result so
+    // reconciliation / retry loops are safe.
+    mockFetch(404, { message: "Could not find resource" });
+    const { deleteTagDefinition } = await import("../src/tools/tags.js");
+
+    const result = await deleteTagDefinition({ entity: "parties", tagId: 42, confirm: true });
+    expect(result).toEqual({ deleted: true, alreadyDeleted: true, entity: "parties", tagId: 42 });
+  });
+
+  it("rejects confirm=false / missing confirm at the schema layer", async () => {
+    const { deleteTagDefinitionSchema } = await import("../src/tools/tags.js");
+    expect(
+      deleteTagDefinitionSchema.safeParse({ entity: "parties", tagId: 42, confirm: false }).success,
+    ).toBe(false);
+    expect(deleteTagDefinitionSchema.safeParse({ entity: "parties", tagId: 42 }).success).toBe(
+      false,
+    );
+    expect(
+      deleteTagDefinitionSchema.safeParse({ entity: "parties", tagId: 42, confirm: true }).success,
+    ).toBe(true);
+  });
+
+  it("rejects unknown entity at the schema layer", async () => {
+    const { deleteTagDefinitionSchema } = await import("../src/tools/tags.js");
+    expect(
+      deleteTagDefinitionSchema.safeParse({ entity: "widgets", tagId: 42, confirm: true }).success,
+    ).toBe(false);
+  });
+
+  it("handler guards confirm even when called directly (bypassing schema)", async () => {
+    // Tests + internal callers invoke the handler function directly,
+    // skipping the MCP-layer Zod validation. The handler's own guard
+    // must still reject a non-true confirm so the destructive op can't
+    // fire from a type-violating direct call.
+    const { deleteTagDefinition } = await import("../src/tools/tags.js");
+    await expect(
+      // @ts-expect-error — deliberately violating the `confirm: true` type
+      deleteTagDefinition({ entity: "parties", tagId: 42, confirm: false }),
+    ).rejects.toThrow(/requires confirm: true/);
+    // No HTTP call should have been attempted.
+    expect(vi.mocked(fetch).mock.calls).toHaveLength(0);
+  });
+});

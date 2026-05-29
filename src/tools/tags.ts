@@ -30,11 +30,12 @@
  */
 
 import { z } from "zod";
+import { confirmFlag } from "./confirm-flag.js";
 import { defineBatch } from "./define-batch.js";
 import { positiveId } from "./shared-schemas.js";
-import { capsuleGetCached, capsulePut } from "../capsule/client.js";
+import { capsuleDelete, capsuleGetCached, capsulePut } from "../capsule/client.js";
 import { invalidateByPrefix } from "../capsule/cache.js";
-import { idempotentWithResult, isCapsuleTagNotFound } from "../capsule/idempotent.js";
+import { idempotent, idempotentWithResult, isCapsuleTagNotFound } from "../capsule/idempotent.js";
 
 const TAG_LIST_PATH = {
   parties: "/parties/tags",
@@ -135,6 +136,51 @@ export async function removeTagById(input: z.infer<typeof removeTagByIdSchema>) 
   // tenant-global list (Capsule's docs don't specify). Cheap to
   // invalidate regardless.
   invalidateByPrefix(TAG_LIST_PATH[entity], "remove_tag_by_id");
+  return result;
+}
+
+// ── delete_tag_definition (write, DESTRUCTIVE) ─────────────────────────────
+//
+// remove_tag_by_id (above) DETACHES a tag from one entity — the tag
+// definition survives in the tenant for every other record that uses
+// it. This tool DELETES the definition itself from the tenant: the tag
+// disappears from the entity-type's tag namespace and from every
+// record that shared it. That blast radius is why it's confirm-gated
+// and destructive-hinted (the `delete_` prefix auto-applies the hint).
+//
+// Endpoint verified empirically (scripts/wire-trace-v167.ts): a fresh
+// definition created via add_tag was removed with
+// `DELETE /parties/tags/{id}` → 204, and a follow-up read confirmed it
+// was gone tenant-wide. Tags are entity-namespaced (separate
+// /parties/tags, /opportunities/tags, /kases/tags lists), so the tool
+// takes the same `entity` selector as add_tag / list_tags.
+
+export const deleteTagDefinitionSchema = z.object({
+  entity: TagEntity,
+  tagId: positiveId.describe(
+    "The tag definition's id (from list_tags, or embed='tags' on a record). NOT an entity id.",
+  ),
+  confirm: confirmFlag().describe(
+    "Must be set to true. DESTRUCTIVE & tenant-wide: permanently deletes the tag DEFINITION from this entity type's tag namespace, removing it from EVERY record that shares it — not just one. To detach a tag from a single record while keeping the definition, use remove_tag_by_id instead. Irreversible (the definition is gone; re-creating by name via add_tag mints a new id). Idempotent on retry.",
+  ),
+});
+
+export async function deleteTagDefinition(input: z.infer<typeof deleteTagDefinitionSchema>) {
+  const { entity, tagId, confirm } = input;
+  // The schema's confirmFlag() already rejects non-true at the MCP
+  // validation layer; this guard mirrors defineDelete for callers that
+  // invoke the handler directly (tests, future internal callers).
+  if (confirm !== true) {
+    throw new Error("delete_tag_definition requires confirm: true");
+  }
+  const result = await idempotent(
+    () => capsuleDelete(`/${entity}/tags/${tagId}`),
+    () => ({ deleted: true as const, alreadyDeleted: false, entity, tagId }),
+    () => ({ deleted: true as const, alreadyDeleted: true, entity, tagId }),
+  );
+  // The definition just left the tenant-global list for this entity
+  // type — drop the cached list so the next list_tags reads fresh.
+  invalidateByPrefix(TAG_LIST_PATH[entity], "delete_tag_definition");
   return result;
 }
 

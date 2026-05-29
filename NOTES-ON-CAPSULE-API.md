@@ -1382,6 +1382,57 @@ default-on in callers without conditional logic.
 
 ---
 
+## 33. No tenant-wide track-instance list; tag definitions ARE deletable
+
+Two endpoint-existence questions, settled empirically by
+[`scripts/wire-trace-v167.ts`](scripts/wire-trace-v167.ts) so that two
+proposed tools could be graded buildable-or-not before any code was
+written.
+
+### `GET /tracks` → 405 — there is NO tenant-wide track-instance list
+
+`GET /tracks` returns **`405 Method not allowed`** (the route exists
+but only accepts `POST`, which creates an instance). Track instances
+are therefore reachable only:
+
+- entity-scoped: `GET /<entity>/{id}/tracks` (the `list_entity_tracks`
+  tool), or
+- by known id: `GET /tracks/{id}` (the `show_track` tool).
+
+**Consequence:** the orphan track instances from §25 (which survive
+parent deletion) **cannot be enumerated tenant-wide** — if you don't
+already hold the orphan's id, there is no read path to it. A proposed
+`list_tracks` tool is therefore **not buildable** against Capsule's
+v2 API; it was declined on this basis rather than the assumption it
+could be added. The only mitigations for orphan accumulation remain
+(a) capture the track-instance id at `apply_track` time and
+`remove_track` it explicitly before deleting the parent, or (b) clean
+up in Capsule's web UI.
+
+### `DELETE /<entity>/tags/{id}` → 204 — tag DEFINITIONS are deletable
+
+A tag definition minted via `add_tag` was removed with
+**`DELETE /parties/tags/{id}` → 204`**, and a follow-up
+`GET /parties/tags` confirmed it was gone tenant-wide (not merely
+detached from one record). Tags are entity-namespaced (separate
+`/parties/tags`, `/opportunities/tags`, `/kases/tags` lists), so the
+delete path carries the entity prefix.
+
+This is distinct from the tag DETACH path used by `remove_tag_by_id`
+(`PUT /<entity>/{id}` with `{tags: [{id, _delete: true}]}`), which
+removes a tag from ONE record and leaves the definition intact.
+Definition-delete removes the definition from the namespace and from
+every record that shared it.
+
+**Where in our code:** [`src/tools/tags.ts`](src/tools/tags.ts)
+`deleteTagDefinition` (the `delete_tag_definition` tool, confirm-gated,
+idempotent on 404). Verified by `scripts/wire-trace-v167.ts`.
+
+**No Capsule docs page** documents either behaviour explicitly;
+both come from the live probe.
+
+---
+
 ## How to add to this file
 
 When you discover a new Capsule API quirk:

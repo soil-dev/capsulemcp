@@ -70,7 +70,7 @@ where the bytes flow; the semantics are identical.
                                       ▼
                           ┌────────────────────────┐
                           │ src/tools/*.ts         │
-                          │ (87 tools across the   │
+                          │ (88 tools across the   │
                           │  Capsule resource      │
                           │  graph — see README)   │
                           └────────────────────────┘

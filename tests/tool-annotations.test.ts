@@ -1,7 +1,7 @@
 /**
  * Tests for MCP tool annotations inference.
  *
- * Annotations are name-inferred at registration time so all 87 tools
+ * Annotations are name-inferred at registration time so all 88 tools
  * get accurate hints without per-call-site annotation declarations.
  * These tests pin three contracts:
  *
@@ -20,7 +20,7 @@
  *      we make every hint explicit and never rely on spec defaults.
  *
  *   3. Aggregate counts match the catalog: 49 read-only-and-not-
- *      destructive, 7 not-read-and-destructive, 31 not-read-and-not-
+ *      destructive, 8 not-read-and-destructive, 31 not-read-and-not-
  *      destructive (creates / updates / additive writes). Drift in
  *      any direction means a new tool is going to surprise users
  *      with an unexpected pre-call prompt (or, worse, an auto-
@@ -54,13 +54,14 @@ describe("inferAnnotations (pure helper)", () => {
     }
   });
 
-  it("marks the 7 destructive tools as not-read-only AND destructive (explicit)", () => {
+  it("marks the 8 destructive tools as not-read-only AND destructive (explicit)", () => {
     for (const name of [
       "delete_party",
       "delete_opportunity",
       "delete_project",
       "delete_task",
       "delete_entry",
+      "delete_tag_definition",
       "remove_track",
       "remove_additional_party",
     ]) {
@@ -161,13 +162,14 @@ describe("tools/list response carries inferred annotations", () => {
       expect(byName.get(r)?.annotations?.destructiveHint).toBe(false);
     }
 
-    // All 7 destructive tools.
+    // All 8 destructive tools.
     for (const dest of [
       "delete_party",
       "delete_opportunity",
       "delete_project",
       "delete_task",
       "delete_entry",
+      "delete_tag_definition",
       "remove_track",
       "remove_additional_party",
     ]) {
@@ -205,7 +207,7 @@ describe("tools/list response carries inferred annotations", () => {
     // Aggregate counts — the catalogue invariants we want CI to defend.
     // Three mutually-exclusive buckets:
     //   - readOnly+nondestructive (reads): 49
-    //   - notRead+destructive (delete_*, remove_track, remove_additional_party): 7
+    //   - notRead+destructive (delete_*, remove_track, remove_additional_party): 8
     //   - notRead+notDestructive (creates/updates/additive writes): 31
     let readOnly = 0;
     let destructive = 0;
@@ -220,9 +222,9 @@ describe("tools/list response carries inferred annotations", () => {
       // any tool landing there means inferAnnotations regressed.
     }
     expect(readOnly).toBe(49);
-    expect(destructive).toBe(7);
+    expect(destructive).toBe(8);
     expect(routineWrite).toBe(31);
     expect(readOnly + destructive + routineWrite).toBe(result.tools.length);
-    expect(result.tools.length).toBe(87);
+    expect(result.tools.length).toBe(88);
   });
 });

@@ -13,6 +13,19 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ### Added
 
+- **`delete_tag_definition` (write, destructive, confirm-gated).**
+  Deletes a tag DEFINITION from an entity type's tag namespace
+  (parties / opportunities / kases), removing it from every record
+  that shared it — distinct from `remove_tag_by_id`, which only
+  detaches a tag from one record and leaves the definition intact.
+  Closes the "stranded test / typo tag definitions can't be cleaned
+  up through the connector" gap. Endpoint verified empirically
+  (`scripts/wire-trace-v167.ts`): `DELETE /<entity>/tags/{id}` → 204,
+  with a follow-up read confirming tenant-wide removal. Idempotent on
+  404; mirrors the other `delete_*` tools' confirm gate and
+  destructive annotation. Tool catalog 87 → 88; destructive-hinted
+  tools 7 → 8.
+
 - **`GET /` now serves a small HTML landing page** — a short
   human-readable body pointing at `/mcp` and the GitHub repo, plus
   `<link rel="icon" type="image/svg+xml" href="/icon.svg">` and
@@ -109,6 +122,14 @@ versions adhere to [Semantic Versioning](https://semver.org).
   the `/people` endpoint shape, multi-party POST rejection, and the
   person-partyId no-op. Same `ZZZ-V166-*` test record tagging and
   full cleanup pattern as v164 / v165.
+
+- **NOTES-ON-CAPSULE-API.md §33 (new section)** records two
+  endpoint-existence findings from `scripts/wire-trace-v167.ts`:
+  `GET /tracks` → 405 (no tenant-wide track-instance list, so a
+  `list_tracks` tool is NOT buildable — orphan tracks per §25 stay
+  reachable only by known id), and `DELETE /<entity>/tags/{id}` → 204
+  (tag definitions ARE deletable tenant-wide, now exposed as
+  `delete_tag_definition`). The probe ships for re-runnability.
 
 ## [1.6.5] — 2026-05-25
 
