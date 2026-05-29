@@ -23,12 +23,17 @@ export const listPartyEntriesSchema = z.object({
     .describe(
       "When true AND `partyId` is an ORGANISATION, also include entries filed against the organisation's linked people (the persons whose `organisation` field references this org). The connector enumerates linked persons via `GET /parties/{orgId}/people`, fans out `GET /parties/{personId}/entries` in parallel (concurrency-capped, default 5 / configurable via `CAPSULE_MCP_BATCH_CONCURRENCY`), and merges into a single feed sorted by `entryAt` descending, deduped by entry id. " +
         "Default is `false` — single GET, existing behaviour unchanged. " +
-        "WHY THIS FLAG EXISTS: Capsule's API files each entry against exactly one party row (verified v1.6.6 wire-trace probe 4 — POST /entries rejects multi-party bodies with 422 'entry must be linked to either a party, opportunity or kase'). For an organisation with multiple contacts, captured emails almost always land on a person row, not the org. As a result, `list_party_entries(orgId)` with `includeLinkedPersons: false` will miss recent customer-facing email — even though the org's own `lastContactedAt` is updated by the activity. This flag is the correct call for any 'what's new with $ORG?' question. " +
+        "WHY THIS FLAG EXISTS: Capsule's API files each entry against exactly one party row (verified v1.7.0 wire-trace probe 4 — POST /entries rejects multi-party bodies with 422 'entry must be linked to either a party, opportunity or kase'). For an organisation with multiple contacts, captured emails almost always land on a person row, not the org. As a result, `list_party_entries(orgId)` with `includeLinkedPersons: false` will miss recent customer-facing email — even though the org's own `lastContactedAt` is updated by the activity. This flag is the correct call for any 'what's new with $ORG?' question. " +
         "WHEN `partyId` IS A PERSON: silently no-op — persons have no linked-people relationship in Capsule's data model, so the flag is functionally inert (the connector still issues a cheap `/people` check; the response is empty). " +
-        "LATENCY: 1 + N round trips for an org with N linked people, concurrency-capped (typical: 2-3 waves for N=10). Use `includeLinkedPersons: false` for fast pre-screen reads where you only need the org-row entries (e.g. invoice/contract notes that are typically filed at the org level). " +
-        "PAGINATION CAVEAT: `page` and `perPage` apply to the MERGED window. The connector fetches `perPage` entries from each party then slices the caller's window; for deep pagination (`page > 1` with a large multi-person org) the slice may be approximate — the latest entries are correct, but ordering deeper into the feed can lose entries from parties with many records. For LLM-driven 'what's the latest' queries (the typical use), this is invisible.",
+        "LATENCY: 1 + N round trips for an org with N linked people, concurrency-capped (typical: 2-3 waves for N=10). Linked-person enumeration reads the first 100 linked people; use list_employees for explicit pagination when an organisation has more contacts than that. Use `includeLinkedPersons: false` for fast pre-screen reads where you only need the org-row entries (e.g. invoice/contract notes that are typically filed at the org level). " +
+        "PAGINATION CAVEAT: `page` and `perPage` apply to the MERGED window. The connector fetches enough entries from each party to cover the requested merged window (up to Capsule's per-party cap of 100) then slices the caller's window; very deep pagination with a large multi-person org can still be approximate. For LLM-driven 'what's the latest' queries (the typical use), this is invisible.",
     ),
 });
+
+interface PartyEntriesPage {
+  entries: unknown[];
+  nextPage: number | undefined;
+}
 
 /**
  * Fetch `entries` arrays for multiple party ids in parallel,
@@ -40,9 +45,9 @@ async function fanOutPartyEntries(
   partyIds: number[],
   embed: string | undefined,
   perPage: number,
-): Promise<unknown[][]> {
+): Promise<PartyEntriesPage[]> {
   const concurrency = getBatchConcurrency();
-  const results: unknown[][] = new Array(partyIds.length);
+  const results: PartyEntriesPage[] = new Array(partyIds.length);
   let cursor = 0;
   async function worker(): Promise<void> {
     while (true) {
@@ -50,12 +55,15 @@ async function fanOutPartyEntries(
       cursor += 1;
       if (i >= partyIds.length) return;
       const id = partyIds[i]!;
-      const { data } = await capsuleGet<{ entries: unknown[] }>(`/parties/${id}/entries`, {
-        embed,
-        page: 1,
-        perPage,
-      });
-      results[i] = data.entries;
+      const { data, nextPage } = await capsuleGet<{ entries: unknown[] }>(
+        `/parties/${id}/entries`,
+        {
+          embed,
+          page: 1,
+          perPage,
+        },
+      );
+      results[i] = { entries: data.entries, nextPage };
     }
   }
   const workers: Promise<void>[] = [];
@@ -66,11 +74,35 @@ async function fanOutPartyEntries(
   return results;
 }
 
+function mergedTimelineCandidatePerParty(page: number, perPage: number): number {
+  return Math.min(page * perPage, 100);
+}
+
+function mergedTimelineNextPage(
+  page: number,
+  perPage: number,
+  mergedLength: number,
+  upstreamHasNextPage: boolean,
+): number | undefined {
+  const requestedWindowEnd = page * perPage;
+  if (mergedLength > requestedWindowEnd) return page + 1;
+
+  // When the requested window fits within the per-party fetch cap,
+  // an upstream Link rel=next means there are older entries beyond
+  // our candidate set even if the merged slice length is exactly
+  // `perPage`. Preserve that signal instead of falsely ending the
+  // merged feed at page 1.
+  const coveredRequestedWindow = requestedWindowEnd <= 100;
+  if (coveredRequestedWindow && upstreamHasNextPage) return page + 1;
+
+  return undefined;
+}
+
 export async function listPartyEntries(input: z.infer<typeof listPartyEntriesSchema>) {
   const { partyId, embed, page, perPage, includeLinkedPersons } = input;
 
   // Fast path: default behaviour, single GET — preserves the
-  // pre-v1.6.6 contract bit-for-bit.
+  // pre-v1.7.0 contract bit-for-bit.
   if (!includeLinkedPersons) {
     const { data, nextPage } = await capsuleGet<{ entries: unknown[] }>(
       `/parties/${partyId}/entries`,
@@ -81,7 +113,8 @@ export async function listPartyEntries(input: z.infer<typeof listPartyEntriesSch
 
   // Enumerate linked persons. perPage capped at 100 (Capsule's max);
   // tenants with >100 linked persons on a single org see partial
-  // coverage. Documented in the schema description.
+  // coverage. The schema description calls this out and points to
+  // list_employees for explicit linked-person pagination.
   const { data: peopleData } = await capsuleGet<{ parties?: { id: number }[] }>(
     `/parties/${partyId}/people`,
     { page: 1, perPage: 100 },
@@ -99,20 +132,24 @@ export async function listPartyEntries(input: z.infer<typeof listPartyEntriesSch
   }
 
   // Fan out: org's own entries + each linked person's entries.
-  // Fetch `perPage` from each — enough for page=1 to be exact; deeper
-  // pages slice from the same candidate pool (documented approximation).
+  // Fetch enough from each party to cover the requested merged window
+  // when possible (Capsule caps perPage at 100).
   const targetIds = [partyId, ...peopleIds];
-  const perPartyEntries = await fanOutPartyEntries(targetIds, embed, perPage);
+  const perPartyPages = await fanOutPartyEntries(
+    targetIds,
+    embed,
+    mergedTimelineCandidatePerParty(page, perPage),
+  );
 
   // Merge with dedup. Capsule's API files each entry against exactly
-  // one party (v1.6.6 wire-trace probe 4 — POST rejects multi-party),
+  // one party (v1.7.0 wire-trace probe 4 — POST rejects multi-party),
   // so naive concat is correctness-safe; the `Set<id>` dedup is
   // defensive against captured-email SMTP routing rules we can't
   // simulate in the probe and against any future API change.
   const seen = new Set<number>();
   const merged: Array<{ id: number; entryAt?: string }> = [];
-  for (const arr of perPartyEntries) {
-    for (const raw of arr) {
+  for (const { entries } of perPartyPages) {
+    for (const raw of entries) {
       const e = raw as { id: number; entryAt?: string };
       if (typeof e?.id !== "number") continue;
       if (seen.has(e.id)) continue;
@@ -134,7 +171,12 @@ export async function listPartyEntries(input: z.infer<typeof listPartyEntriesSch
   // Apply caller's pagination window over the merged feed.
   const start = (page - 1) * perPage;
   const slice = merged.slice(start, start + perPage);
-  const nextPage = merged.length > start + perPage ? page + 1 : undefined;
+  const nextPage = mergedTimelineNextPage(
+    page,
+    perPage,
+    merged.length,
+    perPartyPages.some((p) => p.nextPage !== undefined),
+  );
 
   return { entries: slice, ...(nextPage !== undefined ? { nextPage } : {}) };
 }
