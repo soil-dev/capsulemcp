@@ -3,7 +3,8 @@ import { setNullableRef, setRef } from "./body-helpers.js";
 import { defineDelete } from "./define-delete.js";
 import { positiveId } from "./shared-schemas.js";
 import { capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
-import { type BatchOpts, batchExecute, chunk } from "../capsule/batch.js";
+import { type BatchOpts, batchExecute } from "../capsule/batch.js";
+import { chunkedMultiGet } from "../capsule/multi-get.js";
 
 // ── Read ────────────────────────────────────────────────────────────────────
 
@@ -65,16 +66,7 @@ export const getTasksSchema = z.object({
 });
 
 export async function getTasks(input: z.infer<typeof getTasksSchema>) {
-  const { ids } = input;
-  if (ids.length <= 10) {
-    const { data } = await capsuleGet<{ tasks: unknown[] }>(`/tasks/${ids.join(",")}`);
-    return data;
-  }
-  const chunks = chunk(ids, 10);
-  const responses = await Promise.all(
-    chunks.map((chunkIds) => capsuleGet<{ tasks: unknown[] }>(`/tasks/${chunkIds.join(",")}`)),
-  );
-  return { tasks: responses.flatMap((r) => r.data.tasks) };
+  return chunkedMultiGet("/tasks", "tasks", input.ids);
 }
 
 // ── Write ───────────────────────────────────────────────────────────────────

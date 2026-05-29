@@ -6,7 +6,7 @@ import { defineDelete } from "./define-delete.js";
 import { readEntityRefs } from "./preserve-refs.js";
 import { positiveId } from "./shared-schemas.js";
 import { capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
-import { chunk } from "../capsule/batch.js";
+import { chunkedMultiGet } from "../capsule/multi-get.js";
 import { idempotentWithResult } from "../capsule/idempotent.js";
 import {
   CustomFieldWriteSchema,
@@ -195,24 +195,7 @@ export const getPartiesSchema = z.object({
 });
 
 export async function getParties(input: z.infer<typeof getPartiesSchema>) {
-  const { ids, embed } = input;
-  if (ids.length <= 10) {
-    // Single Capsule request — no fan-out needed.
-    const { data } = await capsuleGet<{ parties: unknown[] }>(`/parties/${ids.join(",")}`, {
-      embed,
-    });
-    return data;
-  }
-  // Split into 10-id chunks, run them in parallel, merge.
-  // At max 50 ids this is at most 5 parallel Capsule requests —
-  // well within polite-burst territory for a single tool call.
-  const chunks = chunk(ids, 10);
-  const responses = await Promise.all(
-    chunks.map((chunkIds) =>
-      capsuleGet<{ parties: unknown[] }>(`/parties/${chunkIds.join(",")}`, { embed }),
-    ),
-  );
-  return { parties: responses.flatMap((r) => r.data.parties) };
+  return chunkedMultiGet("/parties", "parties", input.ids, { embed: input.embed });
 }
 
 // ───────────────────────────────────────────────────────────────────────────
