@@ -23,10 +23,10 @@ export const listPartyEntriesSchema = z.object({
     .describe(
       "When true AND `partyId` is an ORGANISATION, also include entries filed against the organisation's linked people (the persons whose `organisation` field references this org). The connector enumerates linked persons via `GET /parties/{orgId}/people`, fans out `GET /parties/{personId}/entries` in parallel (concurrency-capped, default 5 / configurable via `CAPSULE_MCP_BATCH_CONCURRENCY`), and merges into a single feed sorted by `entryAt` descending, deduped by entry id. " +
         "Default is `false` — single GET, existing behaviour unchanged. " +
-        "WHY THIS FLAG EXISTS: Capsule's API files each entry against exactly one party row (verified v1.6.6 wire-trace probe 4 — POST /entries rejects multi-party bodies with 422 'entry must be linked to either a party, opportunity or kase'). For an organisation with multiple contacts, captured emails almost always land on a person row, not the org. As a result, `list_party_entries(orgId)` with `includeLinkedPersons: false` will miss recent customer-facing email — even though the org's own `lastContactedAt` is updated by the activity. This flag is the correct call for any 'what's new with $ORG?' question. " +
+        "WHY THIS FLAG EXISTS: Capsule's API files each entry against exactly one party row (verified v1.7.0 wire-trace probe 4 — POST /entries rejects multi-party bodies with 422 'entry must be linked to either a party, opportunity or kase'). For an organisation with multiple contacts, captured emails almost always land on a person row, not the org. As a result, `list_party_entries(orgId)` with `includeLinkedPersons: false` will miss recent customer-facing email — even though the org's own `lastContactedAt` is updated by the activity. This flag is the correct call for any 'what's new with $ORG?' question. " +
         "WHEN `partyId` IS A PERSON: silently no-op — persons have no linked-people relationship in Capsule's data model, so the flag is functionally inert (the connector still issues a cheap `/people` check; the response is empty). " +
         "LATENCY: 1 + N round trips for an org with N linked people, concurrency-capped (typical: 2-3 waves for N=10). Linked-person enumeration reads the first 100 linked people; use list_employees for explicit pagination when an organisation has more contacts than that. Use `includeLinkedPersons: false` for fast pre-screen reads where you only need the org-row entries (e.g. invoice/contract notes that are typically filed at the org level). " +
-        "PAGINATION CAVEAT: `page` and `perPage` apply to the MERGED window, and the merge has a hard ceiling — it reliably orders only the most-recent ~100 entries across the org + its people (each party is fetched at Capsule's per-party cap of 100, and a top-100-per-party merge is correct only up to global position 100). Paging past that ceiling (`page × perPage > 100`) returns no further entries and ends the feed; it does NOT continue into older history. To read a specific contact's full timeline beyond the merged ceiling, call `list_party_entries` on that person's id directly (the default single-GET path paginates natively with no ceiling). For the LLM-driven 'what's the latest with $ORG' query this is the typical use of, the first page is exact and the ceiling is never reached.",
+        "PAGINATION CAVEAT: `page` and `perPage` apply to the MERGED window, and the merge has a hard ceiling — it reliably orders only the most-recent ~100 entries across the org + its people (each party is fetched at Capsule's per-party cap of 100, and a top-100-per-party merge is correct only up to global position 100). Windows that cross the ceiling are truncated to the entries still inside that top-100 set; windows starting beyond it return no entries and end the feed. It does NOT continue into older history. To read a specific contact's full timeline beyond the merged ceiling, call `list_party_entries` on that person's id directly (the default single-GET path paginates natively with no ceiling). For the LLM-driven 'what's the latest with $ORG' query this is the typical use of, the first page is exact and the ceiling is never reached.",
     ),
 });
 
@@ -91,7 +91,7 @@ function mergedTimelineNextPage(
   // fetch cap (100), an upstream Link rel=next means there are older
   // entries beyond our candidate set even though the merged slice was
   // exactly full — preserve that signal instead of falsely ending the
-  // feed (the v1.6.6 regression this guards).
+  // feed (the v1.7.0 release-candidate regression this guards).
   //
   // Strict `<` (not `<=`): the merge of "top-100 per party" reliably
   // orders only the global top ~100 entries. At `requestedWindowEnd
@@ -110,7 +110,7 @@ export async function listPartyEntries(input: z.infer<typeof listPartyEntriesSch
   const { partyId, embed, page, perPage, includeLinkedPersons } = input;
 
   // Fast path: default behaviour, single GET — preserves the
-  // pre-v1.6.6 contract bit-for-bit.
+  // pre-v1.7.0 contract bit-for-bit.
   if (!includeLinkedPersons) {
     const { data, nextPage } = await capsuleGet<{ entries: unknown[] }>(
       `/parties/${partyId}/entries`,
@@ -150,7 +150,7 @@ export async function listPartyEntries(input: z.infer<typeof listPartyEntriesSch
   );
 
   // Merge with dedup. Capsule's API files each entry against exactly
-  // one party (v1.6.6 wire-trace probe 4 — POST rejects multi-party),
+  // one party (v1.7.0 wire-trace probe 4 — POST rejects multi-party),
   // so naive concat is correctness-safe; the `Set<id>` dedup is
   // defensive against captured-email SMTP routing rules we can't
   // simulate in the probe and against any future API change.

@@ -1,5 +1,5 @@
 /**
- * Wire-trace probes for the v1.6.6 candidate:
+ * Wire-trace probes for the v1.7.0 candidate:
  * `list_party_entries.includeLinkedPersons` (org-timeline-includes-people).
  *
  * Question the workflow wants answered: when a user asks "what's the
@@ -30,12 +30,12 @@
  *      person parties have no linked-people relationship in the data
  *      model. Confirms how the API responds.
  *
- * Pattern mirrors scripts/wire-trace-v164.ts and -v165.ts: ZZZ-V166-*
+ * Pattern mirrors scripts/wire-trace-v164.ts and -v165.ts: ZZZ-V170-ENT-*
  * labelled test records, full cleanup on exit, no tenant-specific
  * strings or IDs committed (everything discovered at runtime). Run
  * with:
  *
- *   CAPSULE_API_TOKEN=<write-scoped> npx tsx scripts/wire-trace-v166.ts
+ *   CAPSULE_API_TOKEN=<write-scoped> npx tsx scripts/wire-trace-v170-entries.ts
  */
 
 import { fetch } from "undici";
@@ -84,7 +84,7 @@ function partiesOf(result: ApiResult): Array<{ id: number; type?: string }> {
 }
 
 async function main() {
-  const tag = `ZZZ-V166-${Date.now()}`;
+  const tag = `ZZZ-V170-ENT-${Date.now()}`;
   const createdParties: number[] = [];
   const createdEntries: number[] = [];
 

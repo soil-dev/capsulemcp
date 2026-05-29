@@ -148,7 +148,7 @@ export async function removeTagById(input: z.infer<typeof removeTagByIdSchema>) 
 // record that shared it. That blast radius is why it's confirm-gated
 // and destructive-hinted (the `delete_` prefix auto-applies the hint).
 //
-// Endpoint verified empirically (scripts/wire-trace-v167.ts): a fresh
+// Endpoint verified empirically (scripts/wire-trace-v170-gaps.ts): a fresh
 // definition created via add_tag was removed with
 // `DELETE /parties/tags/{id}` → 204, and a follow-up read confirmed it
 // was gone tenant-wide. Tags are entity-namespaced (separate

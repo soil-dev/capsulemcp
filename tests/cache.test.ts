@@ -6,8 +6,9 @@
  *      invalidation, env-var control).
  *   2. capsuleGetCached integration — that a second call with the
  *      same path+params is served from cache and skips fetch.
- *   3. The tags-tools invalidation path — that `add_tag` and
- *      `remove_tag_by_id` drop the relevant list_tags cache entries.
+ *   3. The tags-tools invalidation path — that `add_tag`,
+ *      `remove_tag_by_id`, and `delete_tag_definition` drop the
+ *      relevant list_tags cache entries.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -270,6 +271,21 @@ describe("tag mutation invalidates list_tags cache", () => {
 
     mockFetch(200, { party: { id: 99 } });
     await removeTagById({ entity: "parties", entityId: 99, tagId: 5 });
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
+
+    mockFetch(200, { tags: [] });
+    await listTags({ entity: "parties", page: 1, perPage: 100 });
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(3);
+  });
+
+  it("delete_tag_definition also invalidates the cached list", async () => {
+    mockFetch(200, { tags: [{ id: 5, name: "Typo" }] });
+    const { listTags, deleteTagDefinition } = await import("../src/tools/tags.js");
+    await listTags({ entity: "parties", page: 1, perPage: 100 });
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+
+    mockFetch(204, {});
+    await deleteTagDefinition({ entity: "parties", tagId: 5, confirm: true });
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
 
     mockFetch(200, { tags: [] });

@@ -20,7 +20,7 @@ versions adhere to [Semantic Versioning](https://semver.org).
   detaches a tag from one record and leaves the definition intact.
   Closes the "stranded test / typo tag definitions can't be cleaned
   up through the connector" gap. Endpoint verified empirically
-  (`scripts/wire-trace-v167.ts`): `DELETE /<entity>/tags/{id}` → 204,
+  (`scripts/wire-trace-v170-gaps.ts`): `DELETE /<entity>/tags/{id}` → 204,
   with a follow-up read confirming tenant-wide removal. Idempotent on
   404; mirrors the other `delete_*` tools' confirm gate and
   destructive annotation. Tool catalog 87 → 88; destructive-hinted
@@ -110,11 +110,11 @@ versions adhere to [Semantic Versioning](https://semver.org).
   `false`).** Opt-in flag that surfaces entries filed against an
   organisation's linked people in addition to the org's own
   entries. Closes a long-standing workflow gap: Capsule's API files
-  each entry against exactly one party row (verified v1.6.6
+  each entry against exactly one party row (verified v1.7.0
   wire-trace probe 4 — `POST /entries` rejects multi-party bodies
   with 422 "entry must be linked to either a party, opportunity or
   kase"), so customer-facing emails typically land on a person row
-  and the org's `/entries` response misses them. Pre-v1.6.6, the
+  and the org's `/entries` response misses them. Pre-v1.7.0, the
   fix required a manual `get_party` → `list_party_entries(org)` →
   `list_employees(org)` → `list_party_entries(personN)` chain. With
   the flag, the connector enumerates linked persons via
@@ -126,7 +126,7 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
   Behaviour when `includeLinkedPersons: true` is passed against a
   PERSON party: silent no-op — persons have no linked-people
-  relationship in the data model (verified v1.6.6 probe 5,
+  relationship in the data model (verified v1.7.0 probe 5,
   `/parties/{personId}/people` returns 200 with an empty array).
   The flag is safe to default-on in callers without conditional
   branching.
@@ -140,18 +140,18 @@ versions adhere to [Semantic Versioning](https://semver.org).
 ### Documentation
 
 - **NOTES-ON-CAPSULE-API.md §32 (new section)** documenting the
-  per-row entries semantic, the v166 probe outcomes, and the
+  per-row entries semantic, the v1.7.0 entries-probe outcomes, and the
   connector-side mitigation. Same format as the existing §27 / §31
   sections.
 
-- **`scripts/wire-trace-v166.ts`** ships as the re-runnable probe
+- **`scripts/wire-trace-v170-entries.ts`** ships as the re-runnable probe
   harness — 5 probes covering the gap, cross-direction strictness,
   the `/people` endpoint shape, multi-party POST rejection, and the
-  person-partyId no-op. Same `ZZZ-V166-*` test record tagging and
-  full cleanup pattern as v164 / v165.
+  person-partyId no-op. Same `ZZZ-V170-ENT-*` test record tagging and
+  full cleanup pattern as the earlier v164 / v165 probes.
 
 - **NOTES-ON-CAPSULE-API.md §33 (new section)** records two
-  endpoint-existence findings from `scripts/wire-trace-v167.ts`:
+  endpoint-existence findings from `scripts/wire-trace-v170-gaps.ts`:
   `GET /tracks` → 405 (no tenant-wide track-instance list, so a
   `list_tracks` tool is NOT buildable — orphan tracks per §25 stay
   reachable only by known id), and `DELETE /<entity>/tags/{id}` → 204

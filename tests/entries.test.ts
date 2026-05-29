@@ -30,10 +30,10 @@ describe("listPartyEntries", () => {
     expect(result.entries).toHaveLength(2);
   });
 
-  // ── v1.6.6: includeLinkedPersons ────────────────────────────────────
+  // ── v1.7.0: includeLinkedPersons ────────────────────────────────────
   //
   // Capsule files each entry against exactly one party row (verified
-  // v1.6.6 wire-trace probe 4 — POST /entries rejects multi-party).
+  // v1.7.0 wire-trace probe 4 — POST /entries rejects multi-party).
   // For an org with multiple contacts, customer-facing email lands on
   // person rows; the org's own /entries response misses it. The
   // includeLinkedPersons flag tells the connector to enumerate linked
@@ -48,7 +48,7 @@ describe("listPartyEntries", () => {
 
     // Critical canary: when includeLinkedPersons is omitted, the
     // connector MUST NOT issue the /people lookup. That's the
-    // pre-v1.6.6 contract.
+    // pre-v1.7.0 contract.
     expect(vi.mocked(fetch).mock.calls).toHaveLength(1);
     expect(String(vi.mocked(fetch).mock.calls[0]![0])).toMatch(/\/parties\/7\/entries/);
   });
@@ -112,7 +112,7 @@ describe("listPartyEntries", () => {
 
   it("includeLinkedPersons + person partyId: no-op (no fan-out)", async () => {
     // A person partyId has no linked-people in Capsule's data model —
-    // /people returns an empty array (verified v1.6.6 wire-trace
+    // /people returns an empty array (verified v1.7.0 wire-trace
     // probe 5). Connector short-circuits to single GET; flag is
     // functionally inert.
     mockFetch(200, { parties: [] }); // /people on a person
@@ -134,7 +134,7 @@ describe("listPartyEntries", () => {
     // If Capsule's SMTP ingestion ever files the same captured-email
     // entry against both an org and a linked person, naive concat
     // would surface a duplicate. The connector dedups by entry.id.
-    // The probe (v166 #4) showed POST rejects multi-party, but
+    // The v1.7.0 entries probe #4 showed POST rejects multi-party, but
     // captured emails go through a separate code path we can't
     // simulate — dedup is belt-and-suspenders.
     mockFetch(200, { parties: [{ id: 8 }] });
@@ -278,6 +278,37 @@ describe("listPartyEntries", () => {
     expect(result.entries).toHaveLength(25);
     // No phantom page 5: the feed ends honestly at the ceiling even
     // though the person had an upstream rel=next.
+    expect((result as { nextPage?: number }).nextPage).toBeUndefined();
+  });
+
+  it("truncates a merged window that crosses the 100-entry ceiling and ends the feed", async () => {
+    mockFetch(200, { parties: [{ id: 8 }] });
+    mockFetch(200, { entries: [] });
+    const hundred = Array.from({ length: 100 }, (_v, i) => ({
+      id: 2000 - i,
+      type: "email",
+      entryAt: new Date(Date.UTC(2026, 4, 27, 0, 0, 0) + (100 - i) * 1000).toISOString(),
+    }));
+    mockFetch(
+      200,
+      { entries: hundred },
+      {
+        Link: '<https://api.capsulecrm.com/api/v2/parties/8/entries?page=2&perPage=100>; rel="next"',
+      },
+    );
+
+    const { listPartyEntries } = await import("../src/tools/entries.js");
+    const result = await listPartyEntries({
+      partyId: 7,
+      page: 2,
+      perPage: 75,
+      includeLinkedPersons: true,
+    });
+
+    // Page 2/perPage 75 asks for positions 76..150. Only 76..100 are
+    // inside the guaranteed top-100 merge ceiling, so return that tail
+    // and do not advertise page 3.
+    expect(result.entries).toHaveLength(25);
     expect((result as { nextPage?: number }).nextPage).toBeUndefined();
   });
 });

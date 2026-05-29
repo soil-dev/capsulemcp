@@ -1328,9 +1328,9 @@ describe `/{id}/entries` as "the list of entries linked to this
 party" without elaborating on the linked-persons case. Behaviour
 verified live, not from docs.
 
-### Verified empirically (v1.6.6 wire-trace)
+### Verified empirically (v1.7.0 wire-trace)
 
-`scripts/wire-trace-v166.ts` ran five probes against a live tenant
+`scripts/wire-trace-v170-entries.ts` ran five probes against a live tenant
 to confirm the semantic before designing the mitigation:
 
 - **Probe 1** — note filed on a linked person → org's `/entries`
@@ -1352,8 +1352,8 @@ to confirm the semantic before designing the mitigation:
 
 ### Connector-side mitigation
 
-`list_party_entries.includeLinkedPersons` (added v1.6.6, optional,
-default `false` — preserves the pre-v1.6.6 contract bit-for-bit).
+`list_party_entries.includeLinkedPersons` (added v1.7.0, optional,
+default `false` — preserves the pre-v1.7.0 contract bit-for-bit).
 When `true` and `partyId` is an organisation:
 
 1. Fetch `/parties/{orgId}/people` to enumerate linked persons.
@@ -1377,7 +1377,7 @@ default-on in callers without conditional logic.
 
 - [`src/tools/entries.ts`](src/tools/entries.ts) `listPartyEntries`
   — the `includeLinkedPersons` branch + `fanOutPartyEntries` helper.
-- [`scripts/wire-trace-v166.ts`](scripts/wire-trace-v166.ts) — the
+- [`scripts/wire-trace-v170-entries.ts`](scripts/wire-trace-v170-entries.ts) — the
   re-runnable probe harness.
 
 ---
@@ -1385,7 +1385,7 @@ default-on in callers without conditional logic.
 ## 33. No tenant-wide track-instance list; tag definitions ARE deletable
 
 Two endpoint-existence questions, settled empirically by
-[`scripts/wire-trace-v167.ts`](scripts/wire-trace-v167.ts) so that two
+[`scripts/wire-trace-v170-gaps.ts`](scripts/wire-trace-v170-gaps.ts) so that two
 proposed tools could be graded buildable-or-not before any code was
 written.
 
@@ -1426,7 +1426,7 @@ every record that shared it.
 
 **Where in our code:** [`src/tools/tags.ts`](src/tools/tags.ts)
 `deleteTagDefinition` (the `delete_tag_definition` tool, confirm-gated,
-idempotent on 404). Verified by `scripts/wire-trace-v167.ts`.
+idempotent on 404). Verified by `scripts/wire-trace-v170-gaps.ts`.
 
 **No Capsule docs page** documents either behaviour explicitly;
 both come from the live probe.

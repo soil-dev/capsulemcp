@@ -58,10 +58,10 @@ on record data and respecting Capsule's hourly rate-limit budget.
 - **Cap + eviction.** 64 entries max; Map iteration order = insertion
   order, so `.keys().next()` yields the oldest live entry for naïve
   eviction. No LRU bookkeeping — at our scale, unnecessary.
-- **Invalidation.** `add_tag` / `remove_tag_by_id` call
-  `invalidateByPrefix("/<entity>/tags")` after a mutation so the next
-  `list_tags` read sees fresh data. Other cached endpoints have no
-  write-side counterpart in our tool surface.
+- **Invalidation.** `add_tag`, `remove_tag_by_id`, and
+  `delete_tag_definition` call `invalidateByPrefix("/<entity>/tags")`
+  after a mutation so the next `list_tags` read sees fresh data. Other
+  cached endpoints have no write-side counterpart in our tool surface.
 
 ### Documented contract
 

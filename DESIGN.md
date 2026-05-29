@@ -458,10 +458,11 @@ Trade-offs:
   Worst-case staleness across N instances is still TTL (not
   TTL×N), but cache hit rates aren't shared either, so N instances
   each warm the cache independently.
-- **Tag mutation invalidation**: the connector's `add_tag` and
-  `remove_tag_by_id` calls drop the cached `list_tags` entry for
-  the affected entity type before returning. The catalogue is
-  always coherent within a single client conversation. Other
+- **Tag mutation invalidation**: the connector's `add_tag`,
+  `remove_tag_by_id`, and `delete_tag_definition` calls drop the
+  cached `list_tags` entry for the affected entity type before
+  returning. The catalogue is always coherent within a single client
+  conversation. Other
   cached endpoints have no write-side counterpart in our tool
   surface, so no invalidation is wired for them — staleness there
   is TTL-bounded only.

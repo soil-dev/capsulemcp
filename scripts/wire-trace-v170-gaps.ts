@@ -1,5 +1,5 @@
 /**
- * Wire-trace probes for the connector-gap audit (post-v1.6.6). Answers
+ * Wire-trace probes for the connector-gap audit (v1.7.0 candidate). Answers
  * the two questions that gate whether the proposed `list_tracks` and
  * `delete_tag_definition` tools are even BUILDABLE — i.e. whether
  * Capsule's v2 API exposes the upstream endpoints they'd need. The
@@ -27,15 +27,15 @@
  *     attempt deleting it. If NO delete endpoint works, that
  *     definition is stranded in the tenant (there's no API path to
  *     remove it — which is precisely the gap being measured). It is
- *     labelled `ZZZ-V167-DELME-*` so it's trivially findable for
+ *     labelled `ZZZ-V170-GAP-DELME-*` so it's trivially findable for
  *     manual web-UI cleanup. The probe reports whether it stranded.
  *
- * Pattern mirrors scripts/wire-trace-v164.ts … -v166.ts: ZZZ-V167-*
+ * Pattern mirrors scripts/wire-trace-v164.ts … v170-entries: ZZZ-V170-GAP-*
  * labelled test records, full cleanup on exit, no tenant-specific
  * strings or IDs committed (everything discovered at runtime). Run
  * with:
  *
- *   CAPSULE_API_TOKEN=<write-scoped> npx tsx scripts/wire-trace-v167.ts
+ *   CAPSULE_API_TOKEN=<write-scoped> npx tsx scripts/wire-trace-v170-gaps.ts
  */
 
 import { fetch } from "undici";
@@ -124,8 +124,8 @@ async function probeTagDefinitionDelete(): Promise<void> {
   console.log("PROBE 2: tag-definition deletion — DELETE /parties/tags/{id} then /tags/{id}");
   console.log("=========================================");
 
-  const tag = `ZZZ-V167-${Date.now()}`;
-  const tagName = `ZZZ-V167-DELME-${Date.now()}`;
+  const tag = `ZZZ-V170-GAP-${Date.now()}`;
+  const tagName = `ZZZ-V170-GAP-DELME-${Date.now()}`;
   let hostPartyId: number | undefined;
   let tagId: number | undefined;
   let stranded = true;
