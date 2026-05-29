@@ -67,7 +67,7 @@ That's it. The first launch fetches the package from npm (a few seconds); subseq
 | Tracks (workflow instances) | `list_track_definitions`, `list_entity_tracks`, `show_track` | `apply_track`, `update_track`, `remove_track` |
 | Saved filters | `list_saved_filters`, `run_saved_filter` | — |
 | Custom fields (schema) | `list_custom_fields`, `get_custom_field` | — |
-| Tags | `list_tags` | `add_tag`, `remove_tag_by_id` |
+| Tags | `list_tags` | `add_tag`, `remove_tag_by_id`, `delete_tag_definition` |
 | Users & teams | `list_users`, `get_current_user`, `list_teams` | — |
 | Reference metadata | `list_lostreasons`, `list_activitytypes`, `list_categories`, `list_goals`, `get_site` | — |
 

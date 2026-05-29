@@ -280,6 +280,42 @@ describe("listPartyEntries", () => {
     // though the person had an upstream rel=next.
     expect((result as { nextPage?: number }).nextPage).toBeUndefined();
   });
+
+  it("truncates a merged window that crosses the 100-entry ceiling and ends the feed", async () => {
+    // A window straddling position 100 returns only the in-ceiling tail
+    // (the entries still inside the guaranteed top-100 merge), then ends
+    // the feed — it does not advertise a further page into unmerged
+    // older history. Complements the boundary test above with the
+    // partial-window case.
+    mockFetch(200, { parties: [{ id: 8 }] });
+    mockFetch(200, { entries: [] });
+    const hundred = Array.from({ length: 100 }, (_v, i) => ({
+      id: 2000 - i,
+      type: "email",
+      entryAt: new Date(Date.UTC(2026, 4, 27, 0, 0, 0) + (100 - i) * 1000).toISOString(),
+    }));
+    mockFetch(
+      200,
+      { entries: hundred },
+      {
+        Link: '<https://api.capsulecrm.com/api/v2/parties/8/entries?page=2&perPage=100>; rel="next"',
+      },
+    );
+
+    const { listPartyEntries } = await import("../src/tools/entries.js");
+    const result = await listPartyEntries({
+      partyId: 7,
+      page: 2,
+      perPage: 75,
+      includeLinkedPersons: true,
+    });
+
+    // Page 2/perPage 75 asks for positions 76..150. Only 76..100 are
+    // inside the guaranteed top-100 merge ceiling, so return that tail
+    // (25 entries) and do not advertise page 3.
+    expect(result.entries).toHaveLength(25);
+    expect((result as { nextPage?: number }).nextPage).toBeUndefined();
+  });
 });
 
 describe("listOpportunityEntries", () => {
