@@ -263,6 +263,7 @@ async function fetchWithTimeout(
   options: Parameters<typeof fetch>[1],
 ): Promise<FetchResult> {
   const { options: opts, cleanup } = withTimeout(options);
+  const startedAt = Date.now();
   try {
     const res = await fetch(url, opts);
     return { res, cleanup };
@@ -270,9 +271,24 @@ async function fetchWithTimeout(
     // On the error path we own the timer — clear it now, since no
     // body-consumption phase follows.
     cleanup();
+    const isAbort =
+      err instanceof Error && (err.name === "AbortError" || /aborted/i.test(err.message));
+    // Fingerprint the failure BEFORE we throw. This is the one
+    // outbound-call path `consumeBody`/`emitCapsuleRequest` can never
+    // reach — it throws before the body phase — so without this emit an
+    // aborted-by-timeout or connection-refused/reset request leaves no
+    // structured trace at all. That blind spot is exactly what makes
+    // intermittent timeouts so hard to pin down. See emitCapsuleFailure.
+    emitCapsuleFailure(
+      (options?.method as string | undefined) ?? "GET",
+      url,
+      Date.now() - startedAt,
+      isAbort ? "timeout" : "network",
+      isAbort ? undefined : err,
+    );
     // Convert AbortError into a recognizable, actionable error rather
     // than a cryptic 'fetch failed' that the caller can't diagnose.
-    if (err instanceof Error && (err.name === "AbortError" || /aborted/i.test(err.message))) {
+    if (isAbort) {
       throw new CapsuleApiError(
         504,
         `Capsule API request timed out after ${REQUEST_TIMEOUT_MS / 1000}s. The Capsule API may be slow or hung; retry after a short wait. If the failed call was a write/delete, read the entity first to see whether the change actually applied before retrying.`,
@@ -397,6 +413,76 @@ function emitCapsuleRequest(
     responseBytes: Number.isFinite(responseBytes) ? responseBytes : 0,
     ...(retriedAfter429 ? { retriedAfter429: true } : {}),
   });
+}
+
+/**
+ * Emit a `capsule.timeout` or `capsule.error` event for an outbound
+ * call that failed at the fetch stage — i.e. BEFORE any response body
+ * could be read. `emitCapsuleRequest` fires from `consumeBody`, which
+ * only runs once headers have arrived; a request that times out waiting
+ * for headers, or whose connection is refused/reset, never reaches it.
+ * Without this emit such a request leaves NO structured trace, which is
+ * precisely the blind spot that makes "it times out sometimes" so hard
+ * to diagnose: you get a 504 surfaced to the caller, but no record of
+ * which endpoint hung or for how long.
+ *
+ * Forced (emitted regardless of `CAPSULE_MCP_LOG_VERBOSE`) — same
+ * rationale as `batch.complete`: rare, low-cardinality, and uniformly
+ * useful. An operator chasing intermittent hangs gets an endpoint +
+ * elapsed-time fingerprint in the log with zero configuration.
+ *
+ * Privacy: `path` runs through `redactPath` (numeric IDs → `:id`, query
+ * string dropped). For network errors we log only a stable, low-
+ * cardinality `code` (e.g. `ECONNRESET`, `ENOTFOUND`,
+ * `UND_ERR_CONNECT_TIMEOUT`) — never the raw error message or any
+ * response body, either of which could carry CRM data or the full URL.
+ */
+function emitCapsuleFailure(
+  method: string,
+  url: string,
+  elapsedMs: number,
+  reason: "timeout" | "network",
+  err?: unknown,
+): void {
+  let path = "";
+  try {
+    path = redactPath(new URL(url).pathname);
+  } catch {
+    path = "?";
+  }
+  if (reason === "timeout") {
+    logEvent(
+      "capsule.timeout",
+      { method, path, elapsedMs, timeoutMs: REQUEST_TIMEOUT_MS },
+      { force: true },
+    );
+    return;
+  }
+  const code = extractErrorCode(err);
+  logEvent(
+    "capsule.error",
+    { method, path, elapsedMs, ...(code ? { code } : {}) },
+    { force: true },
+  );
+}
+
+/**
+ * Pull a stable, low-cardinality error code from an undici fetch
+ * rejection without surfacing the (potentially URL-bearing) message.
+ * undici wraps the OS-level cause of a connection failure under
+ * `err.cause`, which typically carries a `.code` such as `ECONNRESET`
+ * or `UND_ERR_CONNECT_TIMEOUT`. Falls back to the error `name` when no
+ * code is present, and to `undefined` when there's nothing safe to log.
+ */
+function extractErrorCode(err: unknown): string | undefined {
+  const e = err as
+    | { code?: unknown; name?: unknown; cause?: { code?: unknown } }
+    | null
+    | undefined;
+  const code = e?.cause?.code ?? e?.code;
+  if (typeof code === "string") return code;
+  if (typeof e?.name === "string" && e.name !== "Error") return e.name;
+  return undefined;
 }
 
 /**

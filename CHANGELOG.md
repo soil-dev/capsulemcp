@@ -11,6 +11,23 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Added
+
+- Forced `capsule.timeout` and `capsule.error` observability events,
+  emitted the instant an outbound Capsule call fails at the fetch stage
+  — an abort at the 60s timeout ceiling, or a refused/reset connection
+  — *before* any response body is read. Until now such a failure threw
+  straight to the caller as a 504 with no structured trace, leaving the
+  one request path that `capsule.request` (emitted post-body) can never
+  cover invisible to log analysis — which is exactly what made
+  intermittent "it times out sometimes" reports so hard to pin down.
+  The events carry the redacted endpoint, `elapsedMs`, and either the
+  `timeoutMs` ceiling (timeouts) or a low-cardinality error `code` such
+  as `ECONNRESET` (connection failures). Forced/always-on like
+  `batch.complete` — rare, low-cardinality, and useful with zero
+  configuration. They also feed `tool.chain.capsuleCalls` so the
+  per-request aggregate stays accurate when a call never completes.
+
 ## [1.7.0] — 2026-05-29
 
 Minor release on top of v1.6.5 — first version to add net-new tools

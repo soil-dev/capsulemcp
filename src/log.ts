@@ -34,7 +34,9 @@
  *   batch.*    — complete (always-on; opts.force)
  *   task.*     — created, transition, rejected, evicted
  *   tool.*     — call, chain (per /mcp-request aggregate)
- *   capsule.*  — request (one per outbound Capsule API call)
+ *   capsule.*  — request (one per completed call); timeout / error
+ *                (one per fetch-stage failure — forced/always-on, so a
+ *                hung or connection-failed call is never invisible)
  *
  * Adding new areas follows the same shape: pick a verb, populate the
  * relevant fields, call logEvent. **Privacy invariant**: events MUST
@@ -84,6 +86,16 @@ const chainHandlers: Record<
     if (typeof f["tool"] === "string") ctx.tools.push(f["tool"] as string);
   },
   "capsule.request": (ctx) => {
+    ctx.capsuleCalls += 1;
+  },
+  // A timed-out or connection-failed call is still an attempt that
+  // never reaches the `capsule.request` emit (it throws at the fetch
+  // stage). Count it here so `tool.chain.capsuleCalls` stays honest and
+  // a chain whose duration ballooned is explained by a visible failure.
+  "capsule.timeout": (ctx) => {
+    ctx.capsuleCalls += 1;
+  },
+  "capsule.error": (ctx) => {
     ctx.capsuleCalls += 1;
   },
   // Cache-hit events feed the aggregate so the chain stat is right
