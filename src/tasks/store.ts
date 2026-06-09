@@ -109,11 +109,52 @@ export function registerAbortController(taskId: string, controller: AbortControl
   abortControllers.set(taskId, controller);
 }
 
+/**
+ * Per-task eviction timer handle + the clamped TTL it was scheduled
+ * with. The owners / abortControllers augment maps must be swept in
+ * lockstep with the SDK store's retention timer — and the SDK RESETS
+ * that timer to `now + ttl` on every terminal transition
+ * (`storeTaskResult`, and a terminal `updateTaskStatus`). The original
+ * one-shot sweep, scheduled only at createTime + ttl, therefore drifted:
+ * a task that ran a non-trivial fraction of its TTL before completing
+ * had its owner entry evicted while the SDK still held the result,
+ * making `getTaskResult` return "Task not found" to the legitimate
+ * owner for a result the server still has. We keep the handle + ttl so
+ * terminal transitions can reschedule in lockstep.
+ */
+const evictionTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const taskTtls = new Map<string, number>();
+
+/**
+ * (Re)schedule the augment-map eviction for `taskId` at `now + ttlMs`,
+ * clearing any prior timer first. `unref` so the timer never keeps the
+ * Node event loop alive (Cloud Run instances must be free to scale to
+ * zero). Mirrors the SDK store's own create/terminal-transition
+ * scheduling so the two maps evict together.
+ */
+function scheduleEviction(taskId: string, clientId: string, ttlMs: number): void {
+  const existing = evictionTimers.get(taskId);
+  if (existing) clearTimeout(existing);
+  taskTtls.set(taskId, ttlMs);
+  const timer = setTimeout(() => {
+    owners.delete(taskId);
+    abortControllers.delete(taskId);
+    evictionTimers.delete(taskId);
+    taskTtls.delete(taskId);
+    logEvent("task.evicted", { taskId, clientId, reason: "ttl" });
+  }, ttlMs);
+  timer.unref?.();
+  evictionTimers.set(taskId, timer);
+}
+
 /** Test-only reset hook. Clears the singleton and owner map. */
 export function _resetTaskStoreForTests(): void {
   _globalStore?.cleanup();
   _globalStore = null;
   owners.clear();
+  for (const timer of evictionTimers.values()) clearTimeout(timer);
+  evictionTimers.clear();
+  taskTtls.clear();
   for (const ctrl of abortControllers.values()) ctrl.abort();
   abortControllers.clear();
 }
@@ -211,16 +252,10 @@ export function createScopedTaskStore(clientId: string): TaskStore {
       );
       owners.set(task.taskId, clientId);
 
-      // Schedule augment-map cleanup at TTL. The SDK sweeps its own
-      // map; we sweep ours in lockstep so the maps don't drift. Use
-      // `unref` so this timer doesn't keep the Node event loop alive
-      // (Cloud Run instances must be free to scale to zero).
-      const timer = setTimeout(() => {
-        owners.delete(task.taskId);
-        abortControllers.delete(task.taskId);
-        logEvent("task.evicted", { taskId: task.taskId, clientId, reason: "ttl" });
-      }, clampedTtl);
-      timer.unref?.();
+      // Schedule augment-map cleanup at createTime + TTL; rescheduled in
+      // lockstep with the SDK store on terminal transitions (see
+      // scheduleEviction for why the original one-shot timer drifted).
+      scheduleEviction(task.taskId, clientId, clampedTtl);
 
       logEvent("task.created", {
         taskId: task.taskId,
@@ -255,6 +290,11 @@ export function createScopedTaskStore(clientId: string): TaskStore {
       }
       logEvent("task.transition", { taskId, clientId, status });
       await global.storeTaskResult(taskId, status, result, sessionId);
+      // The SDK resets its retention timer to now + ttl when the result
+      // is stored; reschedule ours to match so the owner can still read
+      // the result for the full retention window (not just until the
+      // original createTime + ttl).
+      scheduleEviction(taskId, clientId, taskTtls.get(taskId) ?? getTasksConfig().defaultTtlMs);
     },
 
     async getTaskResult(taskId: string, sessionId?: string): Promise<Result> {
@@ -290,6 +330,9 @@ export function createScopedTaskStore(clientId: string): TaskStore {
       // no need to keep aborting nothing.
       if (status === "completed" || status === "failed" || status === "cancelled") {
         abortControllers.delete(taskId);
+        // SDK resets its retention timer to now + ttl on terminal
+        // transitions; keep our augment-map eviction in lockstep.
+        scheduleEviction(taskId, clientId, taskTtls.get(taskId) ?? getTasksConfig().defaultTtlMs);
       }
     },
 

@@ -181,5 +181,35 @@ describe("createScopedTaskStore", () => {
       // SDK store is also gone — getTask returns null for evicted ids.
       expect(await a.getTask(t.taskId)).toBeNull();
     });
+
+    // P0 regression: the owner-map sweep must reschedule in lockstep
+    // with the SDK store on terminal transitions. The SDK resets its
+    // retention timer to completionTime + ttl on storeTaskResult; the
+    // original one-shot sweep stayed at createTime + ttl, so a task
+    // completing late in its TTL became "Task not found" to its own
+    // owner while the SDK still held the result. Real timers (fake
+    // timers don't play with the SDK's internal scheduling — see above).
+    it("keeps the result readable for the full window after a late completion", async () => {
+      process.env["MCP_TASKS_MAX_KEEP_ALIVE_MS"] = "1000";
+      const a = createScopedTaskStore("client-a");
+      const t = await a.createTask({ ttl: 1000 }, 1, FAKE_REQUEST);
+
+      // Run ~70% of the TTL, then transition working -> completed. The
+      // SDK resets its retention timer to ~now + ttl (~1700ms from
+      // create); our owner-map sweep must move with it.
+      await new Promise((r) => setTimeout(r, 700));
+      await a.updateTaskStatus(t.taskId, "working");
+      await a.storeTaskResult(t.taskId, "completed", {
+        content: [{ type: "text", text: "ok" }],
+      });
+
+      // Now past createTime + ttl (1000ms) but well before
+      // completionTime + ttl (~1700ms). Pre-fix the owner entry was
+      // evicted at 1000ms and the next line threw "Task not found".
+      await new Promise((r) => setTimeout(r, 650)); // ~1350ms from create
+      expect(_ownersSnapshot().has(t.taskId)).toBe(true);
+      const result = await a.getTaskResult(t.taskId);
+      expect(result).toEqual({ content: [{ type: "text", text: "ok" }] });
+    });
   });
 });
