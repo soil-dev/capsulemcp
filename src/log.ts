@@ -34,9 +34,13 @@
  *   batch.*    — complete (always-on; opts.force)
  *   task.*     — created, transition, rejected, evicted
  *   tool.*     — call, chain (per /mcp-request aggregate)
- *   capsule.*  — request (one per completed call); timeout / error
- *                (one per fetch-stage failure — forced/always-on, so a
- *                hung or connection-failed call is never invisible)
+ *   capsule.*  — request (one per completed call); timeout / error /
+ *                ratelimit (one per failed call — forced/always-on, so a
+ *                hung, connection-failed, or rate-limited call is never
+ *                invisible). timeout covers BOTH the fetch stage and a
+ *                mid-body stall; ratelimit fires when the single 429
+ *                retry is also throttled. All three feed
+ *                `tool.chain.capsuleCalls`.
  *
  * Adding new areas follows the same shape: pick a verb, populate the
  * relevant fields, call logEvent. **Privacy invariant**: events MUST
@@ -96,6 +100,12 @@ const chainHandlers: Record<
     ctx.capsuleCalls += 1;
   },
   "capsule.error": (ctx) => {
+    ctx.capsuleCalls += 1;
+  },
+  // A request that exhausted its 429 retry is a real (doubly-attempted)
+  // outbound call that throws before `capsule.request` fires — count it
+  // so a chain whose latency ballooned on rate-limit backoff is explained.
+  "capsule.ratelimit": (ctx) => {
     ctx.capsuleCalls += 1;
   },
   // Cache-hit events feed the aggregate so the chain stat is right

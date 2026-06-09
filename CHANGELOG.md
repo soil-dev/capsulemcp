@@ -13,20 +13,32 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ### Added
 
-- Forced `capsule.timeout` and `capsule.error` observability events,
-  emitted the instant an outbound Capsule call fails at the fetch stage
-  — an abort at the 60s timeout ceiling, or a refused/reset connection
-  — *before* any response body is read. Until now such a failure threw
-  straight to the caller as a 504 with no structured trace, leaving the
-  one request path that `capsule.request` (emitted post-body) can never
-  cover invisible to log analysis — which is exactly what made
-  intermittent "it times out sometimes" reports so hard to pin down.
-  The events carry the redacted endpoint, `elapsedMs`, and either the
-  `timeoutMs` ceiling (timeouts) or a low-cardinality error `code` such
-  as `ECONNRESET` (connection failures). Forced/always-on like
-  `batch.complete` — rare, low-cardinality, and useful with zero
-  configuration. They also feed `tool.chain.capsuleCalls` so the
-  per-request aggregate stays accurate when a call never completes.
+- Forced `capsule.timeout`, `capsule.error`, and `capsule.ratelimit`
+  observability events, emitted the instant an outbound Capsule call
+  fails on a path that `capsule.request` (emitted post-body) can never
+  cover — leaving such failures invisible to log analysis, which is
+  exactly what made intermittent "it times out sometimes" reports so
+  hard to pin down. Coverage:
+  - `capsule.timeout` — the 60s `AbortController` fired, **at the fetch
+    stage *or* mid-body** (`res.json()`/stream read). The mid-body case
+    previously surfaced as a misleading `capsule.request status=200`
+    with a ~60s duration (and, since `capsule.request` is verbose-gated
+    while `capsule.timeout` is forced, was invisible under default
+    logging); it now shares the forced timeout fingerprint.
+  - `capsule.error` — the fetch rejected before headers (connection
+    refused/reset/DNS), with a low-cardinality `code` (`ECONNRESET`,
+    `UND_ERR_CONNECT_TIMEOUT`, …) — never the raw message.
+  - `capsule.ratelimit` — the single 429 retry was also throttled
+    (after up to 60s of backoff); previously this terminal path threw
+    with no trace at all.
+
+  All carry the redacted endpoint + `elapsedMs` and feed
+  `tool.chain.capsuleCalls`, so a `/mcp` request whose latency ballooned
+  on a hang or backoff is explained rather than silently uncounted.
+  Forced/always-on like `batch.complete` — rare, low-cardinality,
+  useful with zero configuration. Internally, the duplicated 504 timeout
+  message is now a single `CapsuleTimeoutError` type (which is also how
+  the body-stage timeout is told apart from a genuine upstream 504).
 
 ## [1.7.0] — 2026-05-29
 
