@@ -117,6 +117,29 @@ describe("logEvent + RequestContext aggregation", () => {
       expect(getRequestContext()?.capsuleCalls).toBe(0);
     });
   });
+
+  it("counts capsule.timeout, capsule.error, and capsule.ratelimit toward ctx.capsuleCalls", async () => {
+    // These three events all throw before capsule.request would fire, so
+    // the chain aggregate must still count them or a failed/throttled call
+    // (which may have eaten up to 60s) would silently vanish from the
+    // per-/mcp-request capsuleCalls total.
+    await withRequestContext({ clientId: "c" }, async () => {
+      logEvent("capsule.timeout", { method: "GET", path: "/parties/:id", elapsedMs: 60000 });
+      logEvent("capsule.error", {
+        method: "GET",
+        path: "/parties",
+        elapsedMs: 5,
+        code: "ECONNRESET",
+      });
+      logEvent("capsule.ratelimit", {
+        method: "GET",
+        path: "/parties",
+        elapsedMs: 60000,
+        status: 429,
+      });
+      expect(getRequestContext()?.capsuleCalls).toBe(3);
+    });
+  });
 });
 
 describe("end-to-end: tool.call, capsule.request, tool.chain via the MCP wire", () => {
@@ -296,6 +319,27 @@ describe("end-to-end: tool.call, capsule.request, tool.chain via the MCP wire", 
     // "this batch of N identical calls only hit Capsule once".
     expect(Number(c["capsuleCalls"])).toBe(1);
     expect(Number(c["cacheHits"])).toBe(1);
+  });
+
+  it("emits tool.call with outcome:error when the handler throws", async () => {
+    const { client, log, mockFetch } = await spawn("err-client");
+    // 500 from Capsule -> CapsuleApiError in the handler -> register-tool
+    // emits tool.call outcome:error and rethrows (SDK returns an isError
+    // result, so callTool resolves rather than rejects).
+    mockFetch.mockImplementation(
+      async () =>
+        new Response(JSON.stringify({ message: "boom" }), {
+          status: 500,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+
+    await log.withRequestContext({ clientId: "err-client" }, async () => {
+      await client.callTool({ name: "get_party", arguments: { id: 1 } }).catch(() => {});
+    });
+
+    const toolCalls = parseEvents("tool.call");
+    expect(toolCalls.some((t) => t["tool"] === "get_party" && t["outcome"] === "error")).toBe(true);
   });
 });
 

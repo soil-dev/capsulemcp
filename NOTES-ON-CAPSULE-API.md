@@ -354,8 +354,12 @@ For parties, opportunities, projects, and tasks, you can fetch up to
 10 records by id in one round trip with `GET /<entity>/{id1},{id2},…`.
 Sending 11 or more returns "too many ids".
 
-**Where in our code:** the four `get_<entity>s` (plural) tools, each
-schema-validated to `min(1).max(10)`. See for example
+**Where in our code:** the four `get_<entity>s` (plural) tools are
+schema-validated to `min(1).max(50)`; `chunkedMultiGet`
+([`src/capsule/multi-get.ts`](src/capsule/multi-get.ts)) then splits the
+ids into 10-id chunks, fans them out in parallel, and concatenates the
+responses — so a caller can pass up to 50 while still honouring
+Capsule's per-request cap of 10. See for example
 [`src/tools/parties.ts`](src/tools/parties.ts) `getParties()`.
 
 **Quote** — Capsule's Party docs at
@@ -475,9 +479,10 @@ proactively before hitting 429.
 `parseRateLimitDelay()` honours `X-RateLimit-Reset` first, falls
 back to `Retry-After` defensively, then to a 5-second default. The
 delay is clamped at 60 seconds so a far-future reset can't block a
-Cloud Run request indefinitely; if Capsule says "wait 50 minutes"
-we surface the 429 and let the caller decide rather than holding
-the connection open.
+Cloud Run request indefinitely; if Capsule says "wait 50 minutes" we
+wait the clamped 60 s, retry once, and surface the 429 only if that
+retry is also throttled — we never hold the connection open for the
+full reset window.
 
 **Quote** — Capsule's response-handling docs at
 <https://developer.capsulecrm.com/v2/overview/handling-api-responses>:
@@ -567,7 +572,10 @@ Example payload combining all three (verbatim from the same page):
 
 The same rules apply uniformly to `addresses`, `phoneNumbers`,
 `websites`, `emailAddresses`, and custom `fields` on Party,
-Opportunity, and Project.
+Opportunity, and Project. The `addresses` case was wire-traced
+directly: a `PUT {addresses:[{id, _delete:true}]}` removed the row in
+~270 ms and a re-read confirmed it gone — same shape, same behaviour as
+the others.
 
 ---
 

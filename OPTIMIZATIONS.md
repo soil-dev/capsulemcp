@@ -494,7 +494,66 @@ the LLM actually hits before adding tool-catalogue surface for them.
 
 ---
 
-## 4. Planned candidates *(not yet landed)*
+## 4. Failure-mode observability *(landed)*
+
+### What
+
+Three **forced** (always-on, regardless of `CAPSULE_MCP_LOG_VERBOSE`)
+single-line JSON events that fingerprint an outbound Capsule call that
+did *not* complete normally — the paths that throw before the
+`capsule.request` emit and would otherwise leave no trace:
+
+| Event | Fires when | Fields |
+|---|---|---|
+| `capsule.timeout` | the 60s `AbortController` fires — waiting for headers (fetch stage) **or** mid-body (`res.json()` / stream read) | `method`, `path` (redacted), `elapsedMs`, `timeoutMs` |
+| `capsule.error` | the fetch rejects before headers (connection refused/reset/DNS) | `method`, `path`, `elapsedMs`, `code?` (e.g. `ECONNRESET`, `UND_ERR_CONNECT_TIMEOUT`) |
+| `capsule.ratelimit` | the single 429 retry is also throttled (after up to 60s of backoff) | `method`, `path`, `elapsedMs`, `status: 429` |
+
+All three also increment `tool.chain.capsuleCalls`, so a `/mcp` request
+whose latency ballooned on a hang or backoff is explained rather than
+silently uncounted.
+
+### Why
+
+`capsule.request` is emitted *after* the response body is read (to
+capture full-lifecycle `durationMs`), so any call that throws before
+that — a fetch-stage timeout, a refused connection, or a
+retry-exhausted 429 — produced no structured trace. That blind spot
+made intermittent "it times out sometimes" reports impossible to
+localise from logs. These events close it with zero configuration
+(forced, like `batch.complete`). Privacy: `path` is `redactPath`-ed
+(IDs → `:id`, query dropped); network errors log only a stable `code`,
+never the raw message or URL.
+
+### How to observe
+
+```sh
+# Every hang/failure in the last 24h, by endpoint:
+gcloud logging read \
+  'jsonPayload.event=("capsule.timeout" OR "capsule.error" OR "capsule.ratelimit")' \
+  --project=<your-gcp-project> --freshness=24h --limit=1000 \
+  --format='value(jsonPayload.event, jsonPayload.method, jsonPayload.path, jsonPayload.elapsedMs, jsonPayload.code)'
+
+# Just the timeouts, grouped by endpoint (which Capsule endpoint hangs?):
+gcloud logging read 'jsonPayload.event="capsule.timeout"' \
+  --project=<your-gcp-project> --freshness=24h --limit=1000 \
+  --format='value(jsonPayload.path)' | sort | uniq -c | sort -rn
+```
+
+On the stdio transport the same lines land on the MCP host's
+server-stderr log. Covered by `tests/capsule-failure-events.test.ts`
+(fetch-stage + body-stage timeout, network `code` extraction,
+double-429) and the `capsuleCalls` aggregation test in
+`tests/log-events.test.ts`.
+
+### Cost
+
+Negligible — these events fire only on failure (rare). No tool-count
+change; just the client emit helpers.
+
+---
+
+## 5. Planned candidates *(not yet landed)*
 
 Ranked by expected ROI. Each has a brief sketch; if/when one lands,
 move its row into a numbered section above with a real "what / why /

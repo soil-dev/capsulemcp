@@ -11,7 +11,7 @@ npm install
 npm test
 ```
 
-543 tests, all mocked — no Capsule API calls happen, no token needed. The suite has three layers:
+552 tests, all mocked — no Capsule API calls happen, no token needed. The suite has three layers:
 
 - **Per-tool unit tests** (e.g. `tests/parties.test.ts`): import the tool function, mock `undici.fetch`, assert on the URL, method, body, and response handling. Most tests live here.
 - **MCP-protocol integration tests** (`tests/mcp-integration.test.ts`): drive a real `McpServer` through the wire protocol via the SDK's in-memory transport pair, with `undici.fetch` still mocked. Catches the layer between "tool function works" and "MCP correctly registers and dispatches the tool". Includes the `get_attachment` content-type routing logic (which lives in `server.ts`, not the tool function).
@@ -275,7 +275,7 @@ discovers a regression.
 - [ ] **`#vX.Y.Z` pins in `README.md` and `INSTALL.md`** point to the new tag. Three locations in each file (the JSON snippet, the `claude mcp add` line, the export-then-add line in INSTALL).
 - [ ] **CHANGELOG `[Unreleased]` is empty** after the cut — its content should now live under `[vX.Y.Z]`.
 - [ ] **HOWTO test count and bundle sizes** reflect reality (greppable: `npm test 2>&1 | tail -3` and `npm run build 2>&1 | tail -5`).
-- [ ] **README "N tools / N read-only" counts** still match — bumping a tool count without bumping these numbers silently drifts. `grep -c "registerTool(server" src/server.ts` and `awk` over `if (!readOnly)` blocks.
+- [ ] **README "N tools / N read-only" counts** still match — bumping a tool count without bumping these numbers silently drifts. The source of truth is `tests/tool-annotations.test.ts`, which asserts the live catalog size (`result.tools.length`, currently 88) and the read-only subset (`readOnly === 49`); run `npm test` and reconcile the README/CHANGELOG numbers with those assertions. (A raw `grep` over `src/server.ts` undercounts — registrations span `registerTool` / `registerBatchTool` / `registerToolTask` / `server.tool`, often multi-line.)
 - [ ] **After npm publish, verify the registry state**: `npm view capsulemcp dist-tags version versions --json` includes the new version and the intended dist-tag (`latest`, `beta`, or `next`). Git tags alone don't make `npx capsulemcp@X.Y.Z` installable.
 - [ ] **Tag exists before triggering downstream builds**: any image-build pipeline that takes a git ref expects the tag to already be on GitHub.
 - [ ] **Verify the image-build workflow's `conclusion`, not just exit status.** Piping `gh run watch --exit-status` through `tail` (or any non-pipefail shell) silently swallows the non-zero exit. Use `gh run view <id> --json conclusion --jq .conclusion` or `gh run list --workflow=... --limit=1 --json conclusion --jq '.[0].conclusion'` after the watch returns, and gate the deploy on the result being `"success"`. The beta.1/beta.2 deploys both shipped because the workflow had `conclusion: failure` but the local `tail` pipe masked the exit code.
