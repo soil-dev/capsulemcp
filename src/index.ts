@@ -15,7 +15,16 @@ if (!process.env["CAPSULE_API_TOKEN"]) {
   process.exit(1);
 }
 
-const server = createCapsuleMcpServer();
+// MCP Tasks (SEP-1686) require a per-caller `clientId` for the task
+// store's tenant-isolation boundary — which is why the HTTP transport
+// derives it from OAuth. The stdio transport is inherently single-tenant
+// (one local process, one user), so we supply a fixed synthetic clientId
+// here; that's the correct scope, and it's the only thing that was
+// keeping `MCP_TASKS_ENABLED=1` from wiring tasks on stdio. Harmless when
+// tasks are disabled (the default): `createCapsuleMcpServer` only
+// consults clientId when `MCP_TASKS_ENABLED` is set.
+const STDIO_CLIENT_ID = "stdio-local";
+const server = createCapsuleMcpServer({ clientId: STDIO_CLIENT_ID });
 const transport = new StdioServerTransport();
 
 if (isReadOnly()) {

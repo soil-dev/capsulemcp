@@ -173,3 +173,64 @@ describe("stdio entry — built bundle smoke test", () => {
     expect(stderr).toMatch(/CAPSULE_API_TOKEN/);
   });
 });
+
+describe("stdio entry — MCP Tasks wiring (SEP-1686)", () => {
+  let taskChild: ChildProcessWithoutNullStreams;
+  let initResult: Record<string, unknown> | undefined;
+
+  beforeAll(async () => {
+    // Write mode (CAPSULE_MCP_READONLY explicitly empty) so the
+    // task-augmented batch_* tools register, plus MCP_TASKS_ENABLED=1.
+    // The stdio entry now supplies a synthetic clientId, so tasks wire —
+    // pre-change stdio passed no clientId and tasks stayed off here.
+    taskChild = spawn("node", [DIST_INDEX], {
+      env: {
+        ...process.env,
+        CAPSULE_API_TOKEN: "test-token",
+        CAPSULE_MCP_READONLY: "",
+        MCP_TASKS_ENABLED: "1",
+      },
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    const resp = await rpc(taskChild, {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: "2024-11-05",
+        capabilities: {},
+        clientInfo: { name: "stdio-tasks", version: "1.0.0" },
+      },
+    });
+    initResult = resp["result"] as Record<string, unknown>;
+    taskChild.stdin.write(
+      `${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`,
+    );
+  });
+
+  afterAll(() => {
+    if (taskChild && !taskChild.killed) taskChild.kill();
+  });
+
+  it("advertises the tasks server capability when MCP_TASKS_ENABLED=1", () => {
+    const caps = initResult?.["capabilities"] as Record<string, unknown> | undefined;
+    expect(caps?.["tasks"]).toBeTruthy();
+  });
+
+  it("registers batch_* writes as task-augmented (execution.taskSupport === 'optional')", async () => {
+    const resp = await rpc(taskChild, {
+      jsonrpc: "2.0",
+      id: 2,
+      method: "tools/list",
+      params: {},
+    });
+    const tools = (
+      resp["result"] as {
+        tools: Array<{ name: string; execution?: { taskSupport?: string } }>;
+      }
+    ).tools;
+    const batch = tools.find((t) => t.name === "batch_update_party");
+    expect(batch).toBeTruthy();
+    expect(batch?.execution?.taskSupport).toBe("optional");
+  });
+});

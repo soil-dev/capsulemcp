@@ -13,6 +13,14 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ### Added
 
+- MCP Tasks (SEP-1686) now work on the **stdio transport**, not just
+  HTTP. The stdio entry supplies a fixed synthetic `clientId`
+  (`stdio-local`) for the task store's single-tenant scope, so
+  `MCP_TASKS_ENABLED=1` wires the task-augmented `batch_*` tools when
+  running locally (e.g. `npx capsulemcp` in Claude Desktop), exactly as
+  it already did over OAuth/HTTP. Off by default; unchanged when the flag
+  is unset.
+
 - Forced `capsule.timeout`, `capsule.error`, and `capsule.ratelimit`
   observability events, emitted the instant an outbound Capsule call
   fails on a path that `capsule.request` (emitted post-body) can never
