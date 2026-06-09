@@ -74,6 +74,27 @@ export class CapsuleApiError extends Error {
   }
 }
 
+/**
+ * The outbound request timed out — either waiting for response headers
+ * (fetch stage) or mid-body (the AbortController firing during
+ * `res.json()` / stream read). A `CapsuleApiError` subclass with status
+ * 504, so existing `instanceof CapsuleApiError` and `.status === 504`
+ * handling is unaffected — but typed distinctly so `consumeBody` can
+ * tell a *client-side* timeout apart from a genuine upstream HTTP 504
+ * and emit the right observability event (`capsule.timeout` vs a
+ * status-504 `capsule.request`). Centralizes the actionable retry
+ * message that was previously duplicated across the two abort sites.
+ */
+export class CapsuleTimeoutError extends CapsuleApiError {
+  constructor() {
+    super(
+      504,
+      `Capsule API request timed out after ${REQUEST_TIMEOUT_MS / 1000}s. The Capsule API may be slow or hung; retry after a short wait. If the failed call was a write/delete, read the entity first to see whether the change actually applied before retrying.`,
+    );
+    this.name = "CapsuleTimeoutError";
+  }
+}
+
 export interface PagedResult<T> {
   data: T;
   nextPage: number | undefined;
@@ -249,10 +270,7 @@ async function mapAbort<T>(p: Promise<T>): Promise<T> {
     return await p;
   } catch (err) {
     if (err instanceof Error && (err.name === "AbortError" || /aborted/i.test(err.message))) {
-      throw new CapsuleApiError(
-        504,
-        `Capsule API request timed out after ${REQUEST_TIMEOUT_MS / 1000}s. The Capsule API may be slow or hung; retry after a short wait. If the failed call was a write/delete, read the entity first to see whether the change actually applied before retrying.`,
-      );
+      throw new CapsuleTimeoutError();
     }
     throw err;
   }
@@ -263,6 +281,7 @@ async function fetchWithTimeout(
   options: Parameters<typeof fetch>[1],
 ): Promise<FetchResult> {
   const { options: opts, cleanup } = withTimeout(options);
+  const startedAt = Date.now();
   try {
     const res = await fetch(url, opts);
     return { res, cleanup };
@@ -270,13 +289,25 @@ async function fetchWithTimeout(
     // On the error path we own the timer — clear it now, since no
     // body-consumption phase follows.
     cleanup();
+    const isAbort =
+      err instanceof Error && (err.name === "AbortError" || /aborted/i.test(err.message));
+    // Fingerprint the failure BEFORE we throw. This is the one
+    // outbound-call path `consumeBody`/`emitCapsuleRequest` can never
+    // reach — it throws before the body phase — so without this emit an
+    // aborted-by-timeout or connection-refused/reset request leaves no
+    // structured trace at all. That blind spot is exactly what makes
+    // intermittent timeouts so hard to pin down. See emitCapsuleFailure.
+    emitCapsuleFailure(
+      (options?.method as string | undefined) ?? "GET",
+      url,
+      Date.now() - startedAt,
+      isAbort ? "timeout" : "network",
+      isAbort ? undefined : err,
+    );
     // Convert AbortError into a recognizable, actionable error rather
     // than a cryptic 'fetch failed' that the caller can't diagnose.
-    if (err instanceof Error && (err.name === "AbortError" || /aborted/i.test(err.message))) {
-      throw new CapsuleApiError(
-        504,
-        `Capsule API request timed out after ${REQUEST_TIMEOUT_MS / 1000}s. The Capsule API may be slow or hung; retry after a short wait. If the failed call was a write/delete, read the entity first to see whether the change actually applied before retrying.`,
-      );
+    if (isAbort) {
+      throw new CapsuleTimeoutError();
     }
     throw err;
   }
@@ -319,6 +350,14 @@ async function doFetch(url: string, options: Parameters<typeof fetch>[1]): Promi
     const retried = await fetchWithTimeout(url, options);
     if (retried.res.status === 429) {
       retried.cleanup();
+      // This terminal 429 throws before `consumeBody`, so without an
+      // explicit emit it leaves no structured trace and never counts
+      // toward `tool.chain.capsuleCalls` — the same blind spot the
+      // capsule.timeout/error events close for fetch-stage failures. A
+      // request that exhausted its retry (and may have burned up to 60s
+      // of backoff) is exactly the rate-limit-pressure signal we want
+      // visible. Forced, like the failure events.
+      emitCapsuleRateLimited(method, url, Date.now() - startedAt);
       throw new CapsuleApiError(
         429,
         "Rate limit exceeded after one retry. Please slow down your requests.",
@@ -331,17 +370,25 @@ async function doFetch(url: string, options: Parameters<typeof fetch>[1]): Promi
 }
 
 /**
- * Wrap body consumption in the `capsule.request` emit boundary so that
- * `durationMs` reflects the FULL request lifecycle (request issued →
- * body fully read), not just headers received. Fires on success and
- * on error during body parsing (4xx/5xx that read the error body,
- * malformed JSON, mid-stream timeouts, etc.) — analytics see every
- * outbound call, including the slow ones.
+ * Wrap body consumption in the emit boundary so that `durationMs`
+ * reflects the FULL request lifecycle (request issued → body fully
+ * read), not just headers received. Emits exactly once:
+ *
+ *   - success / 4xx / 5xx (incl. genuine upstream HTTP 504) →
+ *     `capsule.request` with the real `start.res.status`.
+ *   - a body-stage timeout (the AbortController fired during the body
+ *     read, surfacing as `CapsuleTimeoutError` from `mapAbort`) →
+ *     `capsule.timeout`, NOT a `capsule.request`. Headers had already
+ *     arrived (`start.res.status` is 2xx), so emitting the usual row
+ *     would mislabel a 60s hang as a fast 2xx — and because
+ *     `capsule.request` is verbose-gated while `capsule.timeout` is
+ *     forced, under default logging the hang would otherwise be
+ *     invisible. This gives body-stage stalls the same forced timeout
+ *     fingerprint as fetch-stage timeouts (`fetchWithTimeout`).
  */
 async function consumeBody<T>(start: RequestStart, body: () => Promise<T>): Promise<T> {
   try {
-    return await body();
-  } finally {
+    const result = await body();
     emitCapsuleRequest(
       start.method,
       start.url,
@@ -349,6 +396,20 @@ async function consumeBody<T>(start: RequestStart, body: () => Promise<T>): Prom
       Date.now() - start.startedAt,
       start.retriedAfter429,
     );
+    return result;
+  } catch (err) {
+    if (err instanceof CapsuleTimeoutError) {
+      emitCapsuleFailure(start.method, start.url, Date.now() - start.startedAt, "timeout");
+    } else {
+      emitCapsuleRequest(
+        start.method,
+        start.url,
+        start.res,
+        Date.now() - start.startedAt,
+        start.retriedAfter429,
+      );
+    }
+    throw err;
   }
 }
 
@@ -371,6 +432,21 @@ async function consumeBody<T>(start: RequestStart, body: () => Promise<T>): Prom
  * only on its retry; the no-retry success path emits once with
  * `retried=false`.)
  */
+/**
+ * Extract just the pathname from an outbound URL and run it through
+ * `redactPath` (numeric IDs → `:id`, query string dropped). Shared by
+ * every capsule.* emitter so a specific party/opportunity id or search
+ * term can never reach a log aggregator. Falls back to `"?"` on an
+ * unparseable URL.
+ */
+function redactedPath(url: string): string {
+  try {
+    return redactPath(new URL(url).pathname);
+  } catch {
+    return "?";
+  }
+}
+
 function emitCapsuleRequest(
   method: string,
   url: string,
@@ -378,13 +454,7 @@ function emitCapsuleRequest(
   durationMs: number,
   retriedAfter429: boolean,
 ): void {
-  // Extract just the path from the URL; redact IDs.
-  let path = "";
-  try {
-    path = redactPath(new URL(url).pathname);
-  } catch {
-    path = "?";
-  }
+  const path = redactedPath(url);
   // Content-Length is usually present on Capsule responses; if not,
   // fall back to 0 — we don't want to read the body just for size.
   const lenHeader = res.headers.get("content-length");
@@ -397,6 +467,90 @@ function emitCapsuleRequest(
     responseBytes: Number.isFinite(responseBytes) ? responseBytes : 0,
     ...(retriedAfter429 ? { retriedAfter429: true } : {}),
   });
+}
+
+/**
+ * Emit a `capsule.timeout` or `capsule.error` event for an outbound
+ * call that failed at the fetch stage — i.e. BEFORE any response body
+ * could be read. `emitCapsuleRequest` fires from `consumeBody`, which
+ * only runs once headers have arrived; a request that times out waiting
+ * for headers, or whose connection is refused/reset, never reaches it.
+ * Without this emit such a request leaves NO structured trace, which is
+ * precisely the blind spot that makes "it times out sometimes" so hard
+ * to diagnose: you get a 504 surfaced to the caller, but no record of
+ * which endpoint hung or for how long.
+ *
+ * Forced (emitted regardless of `CAPSULE_MCP_LOG_VERBOSE`) — same
+ * rationale as `batch.complete`: rare, low-cardinality, and uniformly
+ * useful. An operator chasing intermittent hangs gets an endpoint +
+ * elapsed-time fingerprint in the log with zero configuration.
+ *
+ * Privacy: `path` runs through `redactPath` (numeric IDs → `:id`, query
+ * string dropped). For network errors we log only a stable, low-
+ * cardinality `code` (e.g. `ECONNRESET`, `ENOTFOUND`,
+ * `UND_ERR_CONNECT_TIMEOUT`) — never the raw error message or any
+ * response body, either of which could carry CRM data or the full URL.
+ */
+function emitCapsuleFailure(
+  method: string,
+  url: string,
+  elapsedMs: number,
+  reason: "timeout" | "network",
+  err?: unknown,
+): void {
+  const path = redactedPath(url);
+  if (reason === "timeout") {
+    logEvent(
+      "capsule.timeout",
+      { method, path, elapsedMs, timeoutMs: REQUEST_TIMEOUT_MS },
+      { force: true },
+    );
+    return;
+  }
+  const code = extractErrorCode(err);
+  logEvent(
+    "capsule.error",
+    { method, path, elapsedMs, ...(code ? { code } : {}) },
+    { force: true },
+  );
+}
+
+/**
+ * Emit a forced `capsule.ratelimit` event for a request that exhausted
+ * its single 429 retry. Like the terminal timeout/error paths this
+ * throws inside `doFetch` before `consumeBody`, so without this emit the
+ * call — which may have burned up to 60s of backoff waiting on
+ * Capsule's rate-limit reset — would be invisible and uncounted in
+ * `tool.chain.capsuleCalls`. Forced + redacted path, same discipline as
+ * `emitCapsuleFailure`. `elapsedMs` spans both attempts plus the
+ * backoff, so a single `capsule.ratelimit` row explains a ballooned
+ * chain latency on its own.
+ */
+function emitCapsuleRateLimited(method: string, url: string, elapsedMs: number): void {
+  logEvent(
+    "capsule.ratelimit",
+    { method, path: redactedPath(url), elapsedMs, status: 429 },
+    { force: true },
+  );
+}
+
+/**
+ * Pull a stable, low-cardinality error code from an undici fetch
+ * rejection without surfacing the (potentially URL-bearing) message.
+ * undici wraps the OS-level cause of a connection failure under
+ * `err.cause`, which typically carries a `.code` such as `ECONNRESET`
+ * or `UND_ERR_CONNECT_TIMEOUT`. Falls back to the error `name` when no
+ * code is present, and to `undefined` when there's nothing safe to log.
+ */
+function extractErrorCode(err: unknown): string | undefined {
+  const e = err as
+    | { code?: unknown; name?: unknown; cause?: { code?: unknown } }
+    | null
+    | undefined;
+  const code = e?.cause?.code ?? e?.code;
+  if (typeof code === "string") return code;
+  if (typeof e?.name === "string" && e.name !== "Error") return e.name;
+  return undefined;
 }
 
 /**
