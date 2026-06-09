@@ -40,6 +40,19 @@ versions adhere to [Semantic Versioning](https://semver.org).
   message is now a single `CapsuleTimeoutError` type (which is also how
   the body-stage timeout is told apart from a genuine upstream 504).
 
+### Fixed
+
+- Task store (MCP Tasks, `MCP_TASKS_ENABLED=1` — off by default): the
+  per-client `owners`/`abortControllers` augment-map eviction timer was
+  scheduled once at `createTime + ttl` and never reset, while the SDK
+  store resets its own retention timer to `completionTime + ttl` on
+  terminal transitions. A task that completed late in its TTL therefore
+  had its owner entry evicted while the SDK still held the result —
+  `tasks/get` / `tasks/result` returned "Task not found" to the
+  legitimate owner for a result the server still had, for a window up to
+  one TTL wide. The augment-map sweep now reschedules in lockstep with
+  the SDK on `storeTaskResult` and terminal `updateTaskStatus`.
+
 ## [1.7.0] — 2026-05-29
 
 Minor release on top of v1.6.5 — first version to add net-new tools
