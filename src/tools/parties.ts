@@ -4,8 +4,8 @@ import { defineBatch } from "./define-batch.js";
 import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
 import { defineDelete } from "./define-delete.js";
 import { readEntityRefs } from "./preserve-refs.js";
-import { positiveId } from "./shared-schemas.js";
-import { capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
+import { positiveId, paginationFields } from "./shared-schemas.js";
+import { capsuleGet, capsulePost, capsulePut, capsuleGetList } from "../capsule/client.js";
 import { chunkedMultiGet } from "../capsule/multi-get.js";
 import { idempotentWithResult } from "../capsule/idempotent.js";
 import {
@@ -143,21 +143,19 @@ const WebsiteSchema = z
 export const searchPartiesSchema = z.object({
   q: z.string().optional().describe("Free-text search query"),
   embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
-  page: z.number().int().positive().optional().default(1),
-  perPage: z.number().int().min(1).max(100).optional().default(25),
+  ...paginationFields,
 });
 
 export async function searchParties(input: z.infer<typeof searchPartiesSchema>) {
   // Capsule uses a dedicated /parties/search endpoint when filtering by query.
   // Plain GET /parties ignores `q` and returns the full list, so we must route.
   const path = input.q ? "/parties/search" : "/parties";
-  const { data, nextPage } = await capsuleGet<{ parties: unknown[] }>(path, {
+  return capsuleGetList<{ parties: unknown[] }>(path, {
     q: input.q,
     embed: input.embed,
     page: input.page,
     perPage: input.perPage,
   });
-  return { ...data, nextPage };
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -202,32 +200,28 @@ export async function getParties(input: z.infer<typeof getPartiesSchema>) {
 
 export const listPartyOpportunitiesSchema = z.object({
   partyId: positiveId,
-  page: z.number().int().positive().optional().default(1),
-  perPage: z.number().int().min(1).max(100).optional().default(25),
+  ...paginationFields,
 });
 
 export async function listPartyOpportunities(input: z.infer<typeof listPartyOpportunitiesSchema>) {
-  const { data, nextPage } = await capsuleGet<{ opportunities: unknown[] }>(
-    `/parties/${input.partyId}/opportunities`,
-    { page: input.page, perPage: input.perPage },
-  );
-  return { ...data, nextPage };
+  return capsuleGetList<{ opportunities: unknown[] }>(`/parties/${input.partyId}/opportunities`, {
+    page: input.page,
+    perPage: input.perPage,
+  });
 }
 
 // ───────────────────────────────────────────────────────────────────────────
 
 export const listPartyProjectsSchema = z.object({
   partyId: positiveId,
-  page: z.number().int().positive().optional().default(1),
-  perPage: z.number().int().min(1).max(100).optional().default(25),
+  ...paginationFields,
 });
 
 export async function listPartyProjects(input: z.infer<typeof listPartyProjectsSchema>) {
-  const { data, nextPage } = await capsuleGet<{ kases: unknown[] }>(
-    `/parties/${input.partyId}/kases`,
-    { page: input.page, perPage: input.perPage },
-  );
-  return { ...data, nextPage };
+  return capsuleGetList<{ kases: unknown[] }>(`/parties/${input.partyId}/kases`, {
+    page: input.page,
+    perPage: input.perPage,
+  });
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -422,6 +416,62 @@ export const { schema: deletePartySchema, handler: deleteParty } = defineDelete(
 // deletes (`delete_party`, `delete_opportunity`, ...) carry the
 // confirm requirement.
 
+/**
+ * Factory for the four `remove_party_<row>_by_id` tools, which differ
+ * only by the embedded-array key and the caller-facing id field name.
+ * Encodes Capsule's `{id, _delete: true}` deletion shape (the field is
+ * `_delete`, NOT Rails-style `_destroy` — NOTES-ON-CAPSULE-API.md §18)
+ * and the idempotent already-removed envelope exactly once.
+ *
+ * The localized cast on the schema shape is required because a
+ * computed property key (`[opts.idField]`) degrades TypeScript's
+ * inference to an index signature; the cast restores the precise
+ * per-tool field name for `z.infer` consumers.
+ */
+function definePartySubResourceRemove(opts: {
+  arrayKey: string;
+  idField: string;
+  rowNoun: string;
+}) {
+  // Computed property keys degrade TS inference, so the shape is typed
+  // as a uniform string-keyed record — the runtime shape (exactly
+  // `partyId` + the per-tool id field, both positiveId) is what the MCP
+  // layer serializes and validates.
+  const shape: Record<string, typeof positiveId> = {
+    partyId: positiveId,
+    [opts.idField]: positiveId.describe(
+      `Capsule's id for the ${opts.rowNoun} row. Read it from get_party (each entry in ${opts.arrayKey} carries an id).`,
+    ),
+  };
+  const schema = z.object(shape);
+
+  async function handler(input: z.infer<typeof schema>) {
+    const partyId = input["partyId"] as number;
+    const rowId = input[opts.idField] as number;
+    return idempotentWithResult(
+      () =>
+        capsulePut<{ party: unknown }>(`/parties/${partyId}`, {
+          party: { [opts.arrayKey]: [{ id: rowId, _delete: true }] },
+        }),
+      (result): Record<string, unknown> => ({
+        removed: true,
+        alreadyRemoved: false,
+        partyId,
+        [opts.idField]: rowId,
+        ...result,
+      }),
+      (): Record<string, unknown> => ({
+        removed: true,
+        alreadyRemoved: true,
+        partyId,
+        [opts.idField]: rowId,
+      }),
+    );
+  }
+
+  return { schema, handler };
+}
+
 // emailAddresses ─────────────────────────────────────────────────────
 
 export const addPartyEmailAddressSchema = z.object({
@@ -439,32 +489,13 @@ export async function addPartyEmailAddress(input: z.infer<typeof addPartyEmailAd
   });
 }
 
-export const removePartyEmailAddressByIdSchema = z.object({
-  partyId: positiveId,
-  emailAddressId: positiveId.describe(
-    "Capsule's id for the email-address row. Read it from get_party (each entry in emailAddresses carries an id).",
-  ),
+const removePartyEmailAddress = definePartySubResourceRemove({
+  arrayKey: "emailAddresses",
+  idField: "emailAddressId",
+  rowNoun: "email-address",
 });
-
-export async function removePartyEmailAddressById(
-  input: z.infer<typeof removePartyEmailAddressByIdSchema>,
-) {
-  const { partyId, emailAddressId } = input;
-  return idempotentWithResult(
-    () =>
-      capsulePut<{ party: unknown }>(`/parties/${partyId}`, {
-        party: { emailAddresses: [{ id: emailAddressId, _delete: true }] },
-      }),
-    (result) => ({
-      removed: true,
-      alreadyRemoved: false,
-      partyId,
-      emailAddressId,
-      ...result,
-    }),
-    () => ({ removed: true, alreadyRemoved: true, partyId, emailAddressId }),
-  );
-}
+export const removePartyEmailAddressByIdSchema = removePartyEmailAddress.schema;
+export const removePartyEmailAddressById = removePartyEmailAddress.handler;
 
 // phoneNumbers ───────────────────────────────────────────────────────
 
@@ -483,32 +514,13 @@ export async function addPartyPhoneNumber(input: z.infer<typeof addPartyPhoneNum
   });
 }
 
-export const removePartyPhoneNumberByIdSchema = z.object({
-  partyId: positiveId,
-  phoneNumberId: positiveId.describe(
-    "Capsule's id for the phone-number row. Read it from get_party (each entry in phoneNumbers carries an id).",
-  ),
+const removePartyPhoneNumber = definePartySubResourceRemove({
+  arrayKey: "phoneNumbers",
+  idField: "phoneNumberId",
+  rowNoun: "phone-number",
 });
-
-export async function removePartyPhoneNumberById(
-  input: z.infer<typeof removePartyPhoneNumberByIdSchema>,
-) {
-  const { partyId, phoneNumberId } = input;
-  return idempotentWithResult(
-    () =>
-      capsulePut<{ party: unknown }>(`/parties/${partyId}`, {
-        party: { phoneNumbers: [{ id: phoneNumberId, _delete: true }] },
-      }),
-    (result) => ({
-      removed: true,
-      alreadyRemoved: false,
-      partyId,
-      phoneNumberId,
-      ...result,
-    }),
-    () => ({ removed: true, alreadyRemoved: true, partyId, phoneNumberId }),
-  );
-}
+export const removePartyPhoneNumberByIdSchema = removePartyPhoneNumber.schema;
+export const removePartyPhoneNumberById = removePartyPhoneNumber.handler;
 
 // addresses ──────────────────────────────────────────────────────────
 
@@ -533,30 +545,13 @@ export async function addPartyAddress(input: z.infer<typeof addPartyAddressSchem
   });
 }
 
-export const removePartyAddressByIdSchema = z.object({
-  partyId: positiveId,
-  addressId: positiveId.describe(
-    "Capsule's id for the address row. Read it from get_party (each entry in addresses carries an id).",
-  ),
+const removePartyAddress = definePartySubResourceRemove({
+  arrayKey: "addresses",
+  idField: "addressId",
+  rowNoun: "address",
 });
-
-export async function removePartyAddressById(input: z.infer<typeof removePartyAddressByIdSchema>) {
-  const { partyId, addressId } = input;
-  return idempotentWithResult(
-    () =>
-      capsulePut<{ party: unknown }>(`/parties/${partyId}`, {
-        party: { addresses: [{ id: addressId, _delete: true }] },
-      }),
-    (result) => ({
-      removed: true,
-      alreadyRemoved: false,
-      partyId,
-      addressId,
-      ...result,
-    }),
-    () => ({ removed: true, alreadyRemoved: true, partyId, addressId }),
-  );
-}
+export const removePartyAddressByIdSchema = removePartyAddress.schema;
+export const removePartyAddressById = removePartyAddress.handler;
 
 // websites ───────────────────────────────────────────────────────────
 
@@ -582,27 +577,10 @@ export async function addPartyWebsite(input: z.infer<typeof addPartyWebsiteSchem
   });
 }
 
-export const removePartyWebsiteByIdSchema = z.object({
-  partyId: positiveId,
-  websiteId: positiveId.describe(
-    "Capsule's id for the website row. Read it from get_party (each entry in websites carries an id).",
-  ),
+const removePartyWebsite = definePartySubResourceRemove({
+  arrayKey: "websites",
+  idField: "websiteId",
+  rowNoun: "website",
 });
-
-export async function removePartyWebsiteById(input: z.infer<typeof removePartyWebsiteByIdSchema>) {
-  const { partyId, websiteId } = input;
-  return idempotentWithResult(
-    () =>
-      capsulePut<{ party: unknown }>(`/parties/${partyId}`, {
-        party: { websites: [{ id: websiteId, _delete: true }] },
-      }),
-    (result) => ({
-      removed: true,
-      alreadyRemoved: false,
-      partyId,
-      websiteId,
-      ...result,
-    }),
-    () => ({ removed: true, alreadyRemoved: true, partyId, websiteId }),
-  );
-}
+export const removePartyWebsiteByIdSchema = removePartyWebsite.schema;
+export const removePartyWebsiteById = removePartyWebsite.handler;

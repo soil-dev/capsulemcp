@@ -4,8 +4,8 @@ import { defineBatch } from "./define-batch.js";
 import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
 import { defineDelete } from "./define-delete.js";
 import { readEntityRefs } from "./preserve-refs.js";
-import { positiveId } from "./shared-schemas.js";
-import { capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
+import { positiveId, paginationFields } from "./shared-schemas.js";
+import { capsuleGet, capsulePost, capsulePut, capsuleGetList } from "../capsule/client.js";
 import { chunkedMultiGet } from "../capsule/multi-get.js";
 import {
   CustomFieldWriteSchema,
@@ -18,18 +18,16 @@ import {
 export const listProjectsSchema = z.object({
   status: z.enum(["OPEN", "CLOSED"]).optional(),
   embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
-  page: z.number().int().positive().optional().default(1),
-  perPage: z.number().int().min(1).max(100).optional().default(25),
+  ...paginationFields,
 });
 
 export async function listProjects(input: z.infer<typeof listProjectsSchema>) {
-  const { data, nextPage } = await capsuleGet<{ kases: unknown[] }>("/kases", {
+  return capsuleGetList<{ kases: unknown[] }>("/kases", {
     status: input.status,
     embed: input.embed,
     page: input.page,
     perPage: input.perPage,
   });
-  return { ...data, nextPage };
 }
 
 // ───────────────────────────────────────────────────────────────────────────

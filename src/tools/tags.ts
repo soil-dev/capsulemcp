@@ -32,8 +32,8 @@
 import { z } from "zod";
 import { confirmFlag } from "./confirm-flag.js";
 import { defineBatch } from "./define-batch.js";
-import { positiveId } from "./shared-schemas.js";
-import { capsuleDelete, capsuleGetCached, capsulePut } from "../capsule/client.js";
+import { positiveId, paginationFieldsNoDefaults } from "./shared-schemas.js";
+import { capsuleDelete, capsuleGetCachedList, capsulePut } from "../capsule/client.js";
 import { invalidateByPrefix } from "../capsule/cache.js";
 import { idempotent, idempotentWithResult, isCapsuleTagNotFound } from "../capsule/idempotent.js";
 
@@ -61,17 +61,15 @@ export const listTagsSchema = z.object({
   entity: z
     .enum(["parties", "opportunities", "kases"])
     .describe("The resource type to list tags for"),
-  page: z.number().int().positive().optional(),
-  perPage: z.number().int().min(1).max(100).optional(),
+  ...paginationFieldsNoDefaults,
 });
 
 export async function listTags(input: z.infer<typeof listTagsSchema>) {
   const path = TAG_LIST_PATH[input.entity];
-  const { data, nextPage } = await capsuleGetCached<{ tags: unknown[] }>(path, {
+  return capsuleGetCachedList<{ tags: unknown[] }>(path, {
     page: input.page ?? 1,
     perPage: input.perPage ?? 100,
   });
-  return { ...data, nextPage };
 }
 
 // ── add_tag (write) ───────────────────────────────────────────────────────

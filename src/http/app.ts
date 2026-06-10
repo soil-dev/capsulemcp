@@ -330,8 +330,10 @@ a{color:#1e3a8a}
     next();
   };
 
-  app.post(
-    "/mcp",
+  // One guard chain for every /mcp verb — origin check, bearer auth,
+  // per-client rate limit, protocol-version check — built once so the
+  // three routes can't drift apart.
+  const mcpGuards: express.RequestHandler[] = [
     guardOrigin,
     requireBearerAuth({
       verifier: oauthProvider,
@@ -339,99 +341,76 @@ a{color:#1e3a8a}
     }),
     mcpRateLimit,
     guardProtocolVersion,
-    express.json({ limit: jsonLimit }),
-    async (req, res) => {
-      try {
-        // Forward the authenticated OAuth client_id so the McpServer
-        // factory can scope its task store to this caller. Without
-        // this, the in-memory tasks subsystem would be globally
-        // readable across clients (see src/tasks/store.ts). The
-        // requireBearerAuth middleware above guarantees `req.auth`
-        // is populated before we reach here.
-        const clientId = req.auth?.clientId;
-        const server = createCapsuleMcpServer({ clientId });
-        const transport = new StreamableHTTPServerTransport({});
+  ];
 
-        res.on("close", () => {
-          void transport.close();
-          void server.close();
-        });
+  const methodNotAllowed: express.RequestHandler = (_req, res) => {
+    res.set("Allow", "POST").status(405).json({
+      error: "method_not_allowed",
+      message: "Use POST for MCP requests; this server runs in stateless mode.",
+    });
+  };
 
-        // Per-request observability frame. `tool.call`,
-        // `capsule.request`, and `cache.hit` events emitted within
-        // implicitly populate the chain accumulator; `tool.chain`
-        // is emitted by `withRequestContext` on scope exit (success
-        // OR error). AsyncLocalStorage propagates through every
-        // await the handler chain spawns, so this catches the
-        // synchronous tool-call path AND the SDK's auto-poll
-        // fallback for task-augmented tools. Augmented (with
-        // `params.task`) callers see a short chain since the actual
-        // handler work runs in a void IIFE that outlives this
-        // frame — that's by design; the IIFE's standalone
-        // `tool.call` event carries the clientId for post-hoc
-        // joining.
-        await withRequestContext({ clientId }, async () => {
-          await server.connect(transport);
-          await transport.handleRequest(req, res, req.body);
-        });
-      } catch (err) {
-        // Log a low-cardinality summary to stderr (operator-visible) but
-        // return only a generic shape to the caller. The full err.message
-        // can include Capsule response bodies (party names, validation
-        // strings, ...) which is operator-visible PII we don't want
-        // smearing across log aggregators by default. Set
-        // MCP_HTTP_DEBUG=1 to opt in to the verbose form on this path.
-        const name = err instanceof Error ? err.name : typeof err;
-        const status =
-          err && typeof err === "object" && "status" in err
-            ? Number((err as { status: number }).status)
-            : undefined;
-        const summary = status !== undefined ? `${name} ${status}` : name;
-        if (process.env["MCP_HTTP_DEBUG"] === "1") {
-          const message = err instanceof Error ? err.message : String(err);
-          console.error(`[capsulemcp] /mcp error: ${summary} — ${message}`);
-        } else {
-          console.error(`[capsulemcp] /mcp error: ${summary}`);
-        }
-        if (!res.headersSent) {
-          res.status(500).json({ error: "internal_error" });
-        }
+  app.post("/mcp", ...mcpGuards, express.json({ limit: jsonLimit }), async (req, res) => {
+    try {
+      // Forward the authenticated OAuth client_id so the McpServer
+      // factory can scope its task store to this caller. Without
+      // this, the in-memory tasks subsystem would be globally
+      // readable across clients (see src/tasks/store.ts). The
+      // requireBearerAuth middleware above guarantees `req.auth`
+      // is populated before we reach here.
+      const clientId = req.auth?.clientId;
+      const server = createCapsuleMcpServer({ clientId });
+      const transport = new StreamableHTTPServerTransport({});
+
+      res.on("close", () => {
+        void transport.close();
+        void server.close();
+      });
+
+      // Per-request observability frame. `tool.call`,
+      // `capsule.request`, and `cache.hit` events emitted within
+      // implicitly populate the chain accumulator; `tool.chain`
+      // is emitted by `withRequestContext` on scope exit (success
+      // OR error). AsyncLocalStorage propagates through every
+      // await the handler chain spawns, so this catches the
+      // synchronous tool-call path AND the SDK's auto-poll
+      // fallback for task-augmented tools. Augmented (with
+      // `params.task`) callers see a short chain since the actual
+      // handler work runs in a void IIFE that outlives this
+      // frame — that's by design; the IIFE's standalone
+      // `tool.call` event carries the clientId for post-hoc
+      // joining.
+      await withRequestContext({ clientId }, async () => {
+        await server.connect(transport);
+        await transport.handleRequest(req, res, req.body);
+      });
+    } catch (err) {
+      // Log a low-cardinality summary to stderr (operator-visible) but
+      // return only a generic shape to the caller. The full err.message
+      // can include Capsule response bodies (party names, validation
+      // strings, ...) which is operator-visible PII we don't want
+      // smearing across log aggregators by default. Set
+      // MCP_HTTP_DEBUG=1 to opt in to the verbose form on this path.
+      const name = err instanceof Error ? err.name : typeof err;
+      const status =
+        err && typeof err === "object" && "status" in err
+          ? Number((err as { status: number }).status)
+          : undefined;
+      const summary = status !== undefined ? `${name} ${status}` : name;
+      if (process.env["MCP_HTTP_DEBUG"] === "1") {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`[capsulemcp] /mcp error: ${summary} — ${message}`);
+      } else {
+        console.error(`[capsulemcp] /mcp error: ${summary}`);
       }
-    },
-  );
+      if (!res.headersSent) {
+        res.status(500).json({ error: "internal_error" });
+      }
+    }
+  });
 
-  app.get(
-    "/mcp",
-    guardOrigin,
-    requireBearerAuth({
-      verifier: oauthProvider,
-      resourceMetadataUrl: mcpResourceMetadataUrl,
-    }),
-    mcpRateLimit,
-    guardProtocolVersion,
-    (_req, res) => {
-      res.set("Allow", "POST").status(405).json({
-        error: "method_not_allowed",
-        message: "Use POST for MCP requests; this server runs in stateless mode.",
-      });
-    },
-  );
-  app.delete(
-    "/mcp",
-    guardOrigin,
-    requireBearerAuth({
-      verifier: oauthProvider,
-      resourceMetadataUrl: mcpResourceMetadataUrl,
-    }),
-    mcpRateLimit,
-    guardProtocolVersion,
-    (_req, res) => {
-      res.set("Allow", "POST").status(405).json({
-        error: "method_not_allowed",
-        message: "Use POST for MCP requests; this server runs in stateless mode.",
-      });
-    },
-  );
+  app.get("/mcp", ...mcpGuards, methodNotAllowed);
+  app.delete("/mcp", ...mcpGuards, methodNotAllowed);
 
   return app;
 }

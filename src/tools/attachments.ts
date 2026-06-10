@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { positiveId } from "./shared-schemas.js";
+import { assertSingleParentRef, setRef } from "./body-helpers.js";
 import { capsuleGetBinary, capsulePost, capsulePostBinary } from "../capsule/client.js";
 
 // Attachments — the only tool surface in capsulemcp that handles binary
@@ -133,12 +134,7 @@ function decodedBase64Size(s: string): number {
 }
 
 export async function uploadAttachment(input: z.infer<typeof uploadAttachmentSchema>) {
-  const linked = [input.partyId, input.opportunityId, input.projectId].filter(Boolean);
-  if (linked.length !== 1) {
-    throw new Error(
-      "upload_attachment: provide exactly one of partyId, opportunityId, or projectId",
-    );
-  }
+  assertSingleParentRef("upload_attachment", input, { required: true });
   if (!isValidBase64(input.dataBase64)) {
     throw new Error(
       "upload_attachment: dataBase64 is not valid base64 — Node's tolerant decoder would silently produce corrupt bytes. Verify the encoding (RFC 4648, padded with '=' to a multiple of 4 chars).",
@@ -169,9 +165,9 @@ export async function uploadAttachment(input: z.infer<typeof uploadAttachmentSch
     content: input.content ?? "[attachment]",
     attachments: [{ token }],
   };
-  if (input.partyId) entryBody["party"] = { id: input.partyId };
-  if (input.opportunityId) entryBody["opportunity"] = { id: input.opportunityId };
-  if (input.projectId) entryBody["kase"] = { id: input.projectId };
+  setRef(entryBody, "party", input.partyId);
+  setRef(entryBody, "opportunity", input.opportunityId);
+  setRef(entryBody, "kase", input.projectId);
 
   return capsulePost<{ entry: unknown }>("/entries", { entry: entryBody });
 }

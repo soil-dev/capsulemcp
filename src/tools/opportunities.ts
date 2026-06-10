@@ -4,8 +4,8 @@ import { defineBatch } from "./define-batch.js";
 import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
 import { defineDelete } from "./define-delete.js";
 import { readEntityRefs } from "./preserve-refs.js";
-import { positiveId } from "./shared-schemas.js";
-import { capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
+import { positiveId, paginationFields } from "./shared-schemas.js";
+import { capsuleGet, capsulePost, capsulePut, capsuleGetList } from "../capsule/client.js";
 import { chunkedMultiGet } from "../capsule/multi-get.js";
 import {
   CustomFieldWriteSchema,
@@ -41,20 +41,18 @@ const OpportunityValueSchema = z.object({
 export const searchOpportunitiesSchema = z.object({
   q: z.string().optional().describe("Free-text search query"),
   embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
-  page: z.number().int().positive().optional().default(1),
-  perPage: z.number().int().min(1).max(100).optional().default(25),
+  ...paginationFields,
 });
 
 export async function searchOpportunities(input: z.infer<typeof searchOpportunitiesSchema>) {
   // GET /opportunities ignores `q`; the search sub-resource is required for filtering.
   const path = input.q ? "/opportunities/search" : "/opportunities";
-  const { data, nextPage } = await capsuleGet<{ opportunities: unknown[] }>(path, {
+  return capsuleGetList<{ opportunities: unknown[] }>(path, {
     q: input.q,
     embed: input.embed,
     page: input.page,
     perPage: input.perPage,
   });
-  return { ...data, nextPage };
 }
 
 // ───────────────────────────────────────────────────────────────────────────

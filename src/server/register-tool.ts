@@ -190,23 +190,19 @@ export function registerTool<Schema extends z.ZodObject<ZodRawShape>>(
   ) => void;
 
   const annotations = inferAnnotations(name);
-  registerWithSchema(
-    name,
-    { description, inputSchema: schema, ...(annotations ? { annotations } : {}) },
-    async (input) => {
-      const startedAt = Date.now();
-      const argFields = argFieldNames(input);
-      const clientId = getRequestContext()?.clientId;
-      try {
-        const result = await handler(input);
-        emitToolCall({ tool: name, clientId, argFields, startedAt, outcome: "success" });
-        return wrapAsText(result);
-      } catch (err) {
-        emitToolCall({ tool: name, clientId, argFields, startedAt, outcome: "error" });
-        throw err;
-      }
-    },
-  );
+  registerWithSchema(name, { description, inputSchema: schema, annotations }, async (input) => {
+    const startedAt = Date.now();
+    const argFields = argFieldNames(input);
+    const clientId = getRequestContext()?.clientId;
+    try {
+      const result = await handler(input);
+      emitToolCall({ tool: name, clientId, argFields, startedAt, outcome: "success" });
+      return wrapAsText(result);
+    } catch (err) {
+      emitToolCall({ tool: name, clientId, argFields, startedAt, outcome: "error" });
+      throw err;
+    }
+  });
 }
 
 /**
@@ -281,7 +277,7 @@ export function registerToolTask<Schema extends z.ZodObject<ZodRawShape>>(
       description,
       inputSchema: schema,
       execution: { taskSupport: "optional" },
-      ...(annotations ? { annotations } : {}),
+      annotations,
     },
     {
       createTask: async (input: z.infer<Schema>, extra: CreateTaskRequestHandlerExtra) => {

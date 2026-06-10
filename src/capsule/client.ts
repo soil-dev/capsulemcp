@@ -601,6 +601,31 @@ export async function capsuleGet<T>(path: string, params?: QueryParams): Promise
 }
 
 /**
+ * GET a list endpoint and flatten the result into Capsule's body with
+ * `nextPage` merged in — the `{ ...data, nextPage }` shape every list
+ * tool returns. One definition for the destructure-and-respread
+ * plumbing that was previously repeated in ~30 handlers. Use
+ * `capsuleGet` directly when `data` and `nextPage` are needed
+ * separately (merged-timeline fan-out, binary reads).
+ */
+export async function capsuleGetList<T extends Record<string, unknown>>(
+  path: string,
+  params?: QueryParams,
+): Promise<T & { nextPage: number | undefined }> {
+  const { data, nextPage } = await capsuleGet<T>(path, params);
+  return { ...data, nextPage };
+}
+
+/** `capsuleGetList`, but through the reference-data cache (`capsuleGetCached`). */
+export async function capsuleGetCachedList<T extends Record<string, unknown>>(
+  path: string,
+  params?: QueryParams,
+): Promise<T & { nextPage: number | undefined }> {
+  const { data, nextPage } = await capsuleGetCached<T>(path, params);
+  return { ...data, nextPage };
+}
+
+/**
  * GET with TTL caching for near-static reference data (pipelines,
  * boards, custom-field schemas, …). See src/capsule/cache.ts for
  * the full rationale and the list of opted-in tools. Falls through

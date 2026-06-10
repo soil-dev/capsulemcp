@@ -1,16 +1,15 @@
 import { z } from "zod";
-import { positiveId } from "./shared-schemas.js";
-import { setRef } from "./body-helpers.js";
+import { positiveId, paginationFields } from "./shared-schemas.js";
+import { assertSingleParentRef, setRef } from "./body-helpers.js";
 import { EMBED_ATTACHMENTS_PARTICIPANTS_DESCRIPTION } from "./descriptions.js";
 import { defineDelete } from "./define-delete.js";
-import { capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
-import { getBatchConcurrency } from "../capsule/batch.js";
+import { capsuleGet, capsulePost, capsulePut, capsuleGetList } from "../capsule/client.js";
+import { getBatchConcurrency, mapWithConcurrency } from "../capsule/batch.js";
 
 // ── Read ────────────────────────────────────────────────────────────────────
 
 const listEntriesPagination = {
-  page: z.number().int().positive().optional().default(1),
-  perPage: z.number().int().min(1).max(100).optional().default(25),
+  ...paginationFields,
   embed: z.string().optional().describe(EMBED_ATTACHMENTS_PARTICIPANTS_DESCRIPTION),
 };
 
@@ -36,46 +35,37 @@ interface PartyEntriesPage {
 }
 
 /**
+ * Capsule's per-request `perPage` ceiling — the most entries one
+ * `GET /parties/:id/entries` call can return, and therefore the
+ * per-party candidate cap the merged-timeline math is built around
+ * (see `mergedTimelineNextPage` for why the merge is only reliable up
+ * to this global position).
+ */
+const PER_PARTY_FETCH_CAP = 100;
+
+/**
  * Fetch `entries` arrays for multiple party ids in parallel,
- * concurrency-capped by `getBatchConcurrency()`. Throws on the first
- * failure — read-path orchestration is correctness-strict (a partial
- * timeline is worse than a clean error).
+ * concurrency-capped by `getBatchConcurrency()`. Rejects on the first
+ * failure (mapWithConcurrency propagates) — read-path orchestration is
+ * correctness-strict: a partial timeline is worse than a clean error.
  */
 async function fanOutPartyEntries(
   partyIds: number[],
   embed: string | undefined,
   perPage: number,
 ): Promise<PartyEntriesPage[]> {
-  const concurrency = getBatchConcurrency();
-  const results: PartyEntriesPage[] = new Array(partyIds.length);
-  let cursor = 0;
-  async function worker(): Promise<void> {
-    while (true) {
-      const i = cursor;
-      cursor += 1;
-      if (i >= partyIds.length) return;
-      const id = partyIds[i]!;
-      const { data, nextPage } = await capsuleGet<{ entries: unknown[] }>(
-        `/parties/${id}/entries`,
-        {
-          embed,
-          page: 1,
-          perPage,
-        },
-      );
-      results[i] = { entries: data.entries, nextPage };
-    }
-  }
-  const workers: Promise<void>[] = [];
-  for (let w = 0; w < Math.min(concurrency, partyIds.length); w++) {
-    workers.push(worker());
-  }
-  await Promise.all(workers);
-  return results;
+  return mapWithConcurrency(partyIds, getBatchConcurrency(), async (id) => {
+    const { data, nextPage } = await capsuleGet<{ entries: unknown[] }>(`/parties/${id}/entries`, {
+      embed,
+      page: 1,
+      perPage,
+    });
+    return { entries: data.entries, nextPage };
+  });
 }
 
 function mergedTimelineCandidatePerParty(page: number, perPage: number): number {
-  return Math.min(page * perPage, 100);
+  return Math.min(page * perPage, PER_PARTY_FETCH_CAP);
 }
 
 function mergedTimelineNextPage(
@@ -100,7 +90,7 @@ function mergedTimelineNextPage(
   // phantom empty page. End honestly at the ceiling instead; the
   // schema description directs deeper per-contact history to
   // list_party_entries on the specific person.
-  const nextWindowWithinCap = requestedWindowEnd < 100;
+  const nextWindowWithinCap = requestedWindowEnd < PER_PARTY_FETCH_CAP;
   if (nextWindowWithinCap && upstreamHasNextPage) return page + 1;
 
   return undefined;
@@ -112,11 +102,11 @@ export async function listPartyEntries(input: z.infer<typeof listPartyEntriesSch
   // Fast path: default behaviour, single GET — preserves the
   // pre-v1.6.6 contract bit-for-bit.
   if (!includeLinkedPersons) {
-    const { data, nextPage } = await capsuleGet<{ entries: unknown[] }>(
-      `/parties/${partyId}/entries`,
-      { embed, page, perPage },
-    );
-    return { ...data, nextPage };
+    return capsuleGetList<{ entries: unknown[] }>(`/parties/${partyId}/entries`, {
+      embed,
+      page,
+      perPage,
+    });
   }
 
   // Enumerate linked persons. perPage capped at 100 (Capsule's max);
@@ -125,18 +115,18 @@ export async function listPartyEntries(input: z.infer<typeof listPartyEntriesSch
   // list_employees for explicit linked-person pagination.
   const { data: peopleData } = await capsuleGet<{ parties?: { id: number }[] }>(
     `/parties/${partyId}/people`,
-    { page: 1, perPage: 100 },
+    { page: 1, perPage: PER_PARTY_FETCH_CAP },
   );
   const peopleIds = (peopleData.parties ?? []).map((p) => p.id);
 
   // Person partyId no-op + org-with-no-linked-people short-circuit.
   // Both collapse to the single-GET fast path: no fan-out needed.
   if (peopleIds.length === 0) {
-    const { data, nextPage } = await capsuleGet<{ entries: unknown[] }>(
-      `/parties/${partyId}/entries`,
-      { embed, page, perPage },
-    );
-    return { ...data, nextPage };
+    return capsuleGetList<{ entries: unknown[] }>(`/parties/${partyId}/entries`, {
+      embed,
+      page,
+      perPage,
+    });
   }
 
   // Fan out: org's own entries + each linked person's entries.
@@ -195,11 +185,11 @@ export const listOpportunityEntriesSchema = z.object({
 });
 
 export async function listOpportunityEntries(input: z.infer<typeof listOpportunityEntriesSchema>) {
-  const { data, nextPage } = await capsuleGet<{ entries: unknown[] }>(
-    `/opportunities/${input.opportunityId}/entries`,
-    { embed: input.embed, page: input.page, perPage: input.perPage },
-  );
-  return { ...data, nextPage };
+  return capsuleGetList<{ entries: unknown[] }>(`/opportunities/${input.opportunityId}/entries`, {
+    embed: input.embed,
+    page: input.page,
+    perPage: input.perPage,
+  });
 }
 
 export const listProjectEntriesSchema = z.object({
@@ -208,11 +198,11 @@ export const listProjectEntriesSchema = z.object({
 });
 
 export async function listProjectEntries(input: z.infer<typeof listProjectEntriesSchema>) {
-  const { data, nextPage } = await capsuleGet<{ entries: unknown[] }>(
-    `/kases/${input.projectId}/entries`,
-    { embed: input.embed, page: input.page, perPage: input.perPage },
-  );
-  return { ...data, nextPage };
+  return capsuleGetList<{ entries: unknown[] }>(`/kases/${input.projectId}/entries`, {
+    embed: input.embed,
+    page: input.page,
+    perPage: input.perPage,
+  });
 }
 
 export const getEntrySchema = z.object({
@@ -239,12 +229,11 @@ export const listEntriesSchema = z.object({
 });
 
 export async function listEntries(input: z.infer<typeof listEntriesSchema>) {
-  const { data, nextPage } = await capsuleGet<{ entries: unknown[] }>("/entries", {
+  return capsuleGetList<{ entries: unknown[] }>("/entries", {
     embed: input.embed,
     page: input.page,
     perPage: input.perPage,
   });
-  return { ...data, nextPage };
 }
 
 // ── Write ───────────────────────────────────────────────────────────────────
@@ -278,10 +267,7 @@ export const addNoteSchema = z.object({
 export async function addNote(input: z.infer<typeof addNoteSchema>) {
   const { content, partyId, opportunityId, projectId, entryAt } = input;
 
-  const linked = [partyId, opportunityId, projectId].filter(Boolean);
-  if (linked.length !== 1) {
-    throw new Error("Provide exactly one of partyId, opportunityId, or projectId");
-  }
+  assertSingleParentRef("add_note", input, { required: true });
 
   const body: Record<string, unknown> = { type: "note", content };
   setRef(body, "party", partyId);
