@@ -11,6 +11,21 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.8.0] — 2026-06-10
+
+Minor release on top of v1.7.0 — observability and reliability hardening
+from a full codebase audit, plus broader MCP Tasks support. Highlights:
+forced `capsule.timeout` / `capsule.error` / `capsule.ratelimit` events
+make a hung, connection-failed, or rate-limited outbound Capsule call
+visible in the logs (timeouts now cover the mid-body stall too); MCP
+Tasks (SEP-1686) work on the stdio transport, not just HTTP; and the task
+store's result-retention window, a `chunkedMultiGet` response-shape
+asymmetry, and 429 connection-pool hygiene are all fixed. Internally:
+the transitive dependency advisories were cleared, the Node engine floor
+corrected to match undici, and the OAuth refresh / `redirect_uri` /
+auth-code-expiry paths gained test coverage. Catalog unchanged at 88
+tools (49 in read-only mode), 8 confirm-gated destructive; 560 tests.
+
 ### Added
 
 - MCP Tasks (SEP-1686) now work on the **stdio transport**, not just
