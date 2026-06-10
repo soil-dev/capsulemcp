@@ -788,6 +788,42 @@ describe("getParties (batch)", () => {
     expect(result.parties.map((p) => p.id)).toEqual(ids);
   });
 
+  it("rejects the whole call if any chunk fails (Promise.all is all-or-nothing)", async () => {
+    // 25 ids -> 3 chunks; the middle chunk 500s. Pin the contract: one
+    // failed chunk rejects the entire getParties call (no partial result).
+    mockFetch(200, { parties: Array.from({ length: 10 }, (_, i) => ({ id: i + 1 })) });
+    mockFetch(500, { message: "server error" });
+    mockFetch(200, { parties: Array.from({ length: 5 }, (_, i) => ({ id: i + 21 })) });
+
+    const { getParties } = await import("../src/tools/parties.js");
+    const ids = Array.from({ length: 25 }, (_, i) => i + 1);
+    await expect(getParties({ ids })).rejects.toThrow(/Capsule API error 500/);
+  });
+
+  it("preserves non-array sibling keys on the multi-chunk path (shape-symmetric with single-chunk)", async () => {
+    // Capsule's multi-id GET returns only { parties: [...] } today, but the
+    // single-chunk path returns the body verbatim — so the fan-out path
+    // must carry any sibling keys too (from the first chunk) rather than
+    // projecting down to just the array. 13 ids -> 2 chunks (10 + 3).
+    mockFetch(200, {
+      parties: Array.from({ length: 10 }, (_, i) => ({ id: i + 1 })),
+      meta: "x",
+    });
+    mockFetch(200, {
+      parties: Array.from({ length: 3 }, (_, i) => ({ id: i + 11 })),
+      meta: "y",
+    });
+
+    const { getParties } = await import("../src/tools/parties.js");
+    const ids = Array.from({ length: 13 }, (_, i) => i + 1);
+    const result = (await getParties({ ids })) as {
+      parties: Array<{ id: number }>;
+      meta?: string;
+    };
+    expect(result.parties).toHaveLength(13);
+    expect(result.meta).toBe("x"); // sibling preserved, from the first chunk
+  });
+
   it("uses a single Capsule call for 1-10 ids (no fan-out overhead)", async () => {
     mockFetch(200, { parties: [{ id: 1 }, { id: 2 }] });
     const { getParties } = await import("../src/tools/parties.js");

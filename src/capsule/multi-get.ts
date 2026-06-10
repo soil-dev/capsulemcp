@@ -51,5 +51,11 @@ export async function chunkedMultiGet(
       capsuleGet<Record<string, unknown[]>>(`${base}/${chunkIds.join(",")}`, params),
     ),
   );
-  return { [responseKey]: responses.flatMap((r) => r.data[responseKey] ?? []) };
+  // Preserve any non-array sibling keys (from the first chunk) so the
+  // fan-out path returns the SAME shape as the single-chunk path above,
+  // which hands back Capsule's body verbatim. In practice Capsule's
+  // multi-id GET returns only `{ [responseKey]: [...] }`, but matching
+  // the shape removes a count-dependent surprise.
+  const merged = responses.flatMap((r) => r.data[responseKey] ?? []);
+  return { ...(responses[0]?.data ?? {}), [responseKey]: merged };
 }
