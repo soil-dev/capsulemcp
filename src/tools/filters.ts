@@ -71,8 +71,11 @@ export type FilterInput = z.infer<typeof FilterInputSchema>;
 
 // ── Implementation ──────────────────────────────────────────────────────────
 
-async function runFilter<T>(entityPath: string, input: FilterInput): Promise<T> {
-  const { data, nextPage } = await capsuleSearch<T & object>(
+async function runFilter<T extends object>(
+  entityPath: string,
+  input: FilterInput,
+): Promise<T & { nextPage: number | undefined }> {
+  const { data, nextPage } = await capsuleSearch<T>(
     `/${entityPath}/filters/results`,
     { filter: { conditions: input.conditions } },
     {
@@ -81,7 +84,7 @@ async function runFilter<T>(entityPath: string, input: FilterInput): Promise<T> 
       embed: input.embed,
     },
   );
-  return { ...data, nextPage } as T;
+  return { ...data, nextPage };
 }
 
 // ── Tool exports ────────────────────────────────────────────────────────────
@@ -99,7 +102,7 @@ export async function filterParties(input: FilterInput) {
   //     [{field: "tag", operator: "is", value: "VIP"}]
   //   "Has at least one tag" (filter out untagged auto-imports):
   //     [{field: "hasTags", operator: "is", value: true}]
-  return runFilter<{ parties: unknown[]; nextPage: number | undefined }>("parties", input);
+  return runFilter<{ parties: unknown[] }>("parties", input);
 }
 
 export const filterOpportunitiesSchema = FilterInputSchema;
@@ -114,10 +117,7 @@ export async function filterOpportunities(input: FilterInput) {
   //     [{field: "isStale", operator: "is", value: true}]
   //   "Closing this quarter":
   //     [{field: "expectedCloseOn", operator: "is within next", value: 90}]
-  return runFilter<{ opportunities: unknown[]; nextPage: number | undefined }>(
-    "opportunities",
-    input,
-  );
+  return runFilter<{ opportunities: unknown[] }>("opportunities", input);
 }
 
 export const filterProjectsSchema = FilterInputSchema;
@@ -132,5 +132,5 @@ export async function filterProjects(input: FilterInput) {
   //      {field: "closedOn", operator: "is within last", value: N}]
   //
   // Capsule's API uses the legacy `/kases` path for projects (cases).
-  return runFilter<{ kases: unknown[]; nextPage: number | undefined }>("kases", input);
+  return runFilter<{ kases: unknown[] }>("kases", input);
 }

@@ -219,57 +219,43 @@ async function parseErrorBody(res: Response): Promise<string> {
  * against DNS hiccups, TCP keepalive holes, and slow-failing
  * Capsule responses.
  *
- * Reaches into the `signal` slot on the fetch options unless the
- * caller already provided one. Tests that need to bypass the
- * timeout (e.g. fake-timer tests that drive the 429-retry delay)
- * can pass their own signal.
+ * Implemented with `AbortSignal.timeout` (Node ≥22.19, our engines
+ * floor): the signal stays armed across BOTH the header phase and
+ * body consumption (`res.json()` / `res.arrayBuffer()` /
+ * `reader.read()`), and its internal timer is unref'd and
+ * self-cleaning. This replaces a hand-rolled AbortController +
+ * setTimeout + mandatory-cleanup contract whose "release the timer
+ * only after the body is fully consumed" rule existed to keep
+ * mid-stream stalls abortable — a real DoS vector caught in the
+ * pre-GA security review. With `AbortSignal.timeout` that property
+ * holds by construction: there is no timer to clean up and no way
+ * for future code to forget it. A timeout firing after a response
+ * was already consumed is a harmless no-op.
  */
 const REQUEST_TIMEOUT_MS = 60_000;
 
-function withTimeout(options: Parameters<typeof fetch>[1]): {
-  options: Parameters<typeof fetch>[1];
-  cleanup: () => void;
-} {
-  if (options && (options as { signal?: AbortSignal }).signal !== undefined) {
-    // Caller-provided signal — respect it, don't double-bind.
-    return { options, cleanup: () => {} };
-  }
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  // Don't hold up Node process exit on a pending timer.
-  timer.unref();
-  return {
-    options: { ...(options ?? {}), signal: controller.signal },
-    cleanup: () => clearTimeout(timer),
-  };
+/** True for the errors a fired request-timeout signal produces. */
+function isTimeoutAbort(err: unknown): err is Error {
+  return (
+    err instanceof Error &&
+    // AbortSignal.timeout rejects with a DOMException named
+    // "TimeoutError"; plain aborts (and older undici paths) surface
+    // as "AbortError" or carry "aborted" in the message.
+    (err.name === "TimeoutError" || err.name === "AbortError" || /aborted/i.test(err.message))
+  );
 }
 
 /**
- * Result of an outbound Capsule fetch. The `cleanup` callback MUST be
- * invoked once the response body has been fully consumed (or the call
- * is abandoned) — it clears the timeout timer that's keeping the
- * AbortController alive. Releasing it earlier would let a mid-stream
- * stall on `res.body.getReader().read()`, `res.arrayBuffer()`, or
- * `res.json()` hang indefinitely, since undici's body-read primitives
- * are only abortable while the controller's signal is unfired. Pre-v1
- * this was a real DoS vector caught in the pre-GA security review.
- */
-interface FetchResult {
-  res: Response;
-  cleanup: () => void;
-}
-
-/**
- * Map an AbortError thrown during body consumption into the same clean
- * 504 the fetch-stage abort produces. Without this, a timer-driven
- * abort firing during `res.json()` / `res.arrayBuffer()` /
- * `reader.read()` surfaces as a cryptic Node-internal AbortError.
+ * Map a timeout abort thrown during body consumption into the same
+ * clean 504 the fetch-stage abort produces. Without this, the signal
+ * firing during `res.json()` / `res.arrayBuffer()` / `reader.read()`
+ * surfaces as a cryptic Node-internal TimeoutError/AbortError.
  */
 async function mapAbort<T>(p: Promise<T>): Promise<T> {
   try {
     return await p;
   } catch (err) {
-    if (err instanceof Error && (err.name === "AbortError" || /aborted/i.test(err.message))) {
+    if (isTimeoutAbort(err)) {
       throw new CapsuleTimeoutError();
     }
     throw err;
@@ -279,18 +265,15 @@ async function mapAbort<T>(p: Promise<T>): Promise<T> {
 async function fetchWithTimeout(
   url: string,
   options: Parameters<typeof fetch>[1],
-): Promise<FetchResult> {
-  const { options: opts, cleanup } = withTimeout(options);
+): Promise<Response> {
   const startedAt = Date.now();
   try {
-    const res = await fetch(url, opts);
-    return { res, cleanup };
+    return await fetch(url, {
+      ...(options ?? {}),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
   } catch (err) {
-    // On the error path we own the timer — clear it now, since no
-    // body-consumption phase follows.
-    cleanup();
-    const isAbort =
-      err instanceof Error && (err.name === "AbortError" || /aborted/i.test(err.message));
+    const isAbort = isTimeoutAbort(err);
     // Fingerprint the failure BEFORE we throw. This is the one
     // outbound-call path `consumeBody`/`emitCapsuleRequest` can never
     // reach — it throws before the body phase — so without this emit an
@@ -298,7 +281,7 @@ async function fetchWithTimeout(
     // structured trace at all. That blind spot is exactly what makes
     // intermittent timeouts so hard to pin down. See emitCapsuleFailure.
     emitCapsuleFailure(
-      (options?.method as string | undefined) ?? "GET",
+      options?.method ?? "GET",
       url,
       Date.now() - startedAt,
       isAbort ? "timeout" : "network",
@@ -326,7 +309,6 @@ async function fetchWithTimeout(
  */
 interface RequestStart {
   res: Response;
-  cleanup: () => void;
   startedAt: number;
   method: string;
   url: string;
@@ -351,25 +333,22 @@ async function drainBody(res: Response): Promise<void> {
 
 async function doFetch(url: string, options: Parameters<typeof fetch>[1]): Promise<RequestStart> {
   const startedAt = Date.now();
-  const method = (options?.method as string | undefined) ?? "GET";
+  const method = options?.method ?? "GET";
 
   const first = await fetchWithTimeout(url, options);
 
-  if (first.res.status === 429) {
-    const delay = parseRateLimitDelay(first.res);
-    // Release the first fetch's timer before sleeping — the body of
-    // the 429 response is not consumed, and we don't want a phantom
-    // timer firing during the back-off window.
-    first.cleanup();
+  if (first.status === 429) {
+    const delay = parseRateLimitDelay(first);
     // Cancel the unread 429 body so the connection returns to the pool
-    // now, rather than being pinned through the back-off window.
-    await drainBody(first.res);
+    // now, rather than being pinned through the back-off window. (Each
+    // fetch gets its own AbortSignal.timeout, so the back-off sleep
+    // can't be cut short by the first attempt's signal.)
+    await drainBody(first);
     await new Promise((resolve) => setTimeout(resolve, delay));
 
     const retried = await fetchWithTimeout(url, options);
-    if (retried.res.status === 429) {
-      retried.cleanup();
-      await drainBody(retried.res);
+    if (retried.status === 429) {
+      await drainBody(retried);
       // This terminal 429 throws before `consumeBody`, so without an
       // explicit emit it leaves no structured trace and never counts
       // toward `tool.chain.capsuleCalls` — the same blind spot the
@@ -383,10 +362,10 @@ async function doFetch(url: string, options: Parameters<typeof fetch>[1]): Promi
         "Rate limit exceeded after one retry. Please slow down your requests.",
       );
     }
-    return { ...retried, startedAt, method, url, retriedAfter429: true };
+    return { res: retried, startedAt, method, url, retriedAfter429: true };
   }
 
-  return { ...first, startedAt, method, url, retriedAfter429: false };
+  return { res: first, startedAt, method, url, retriedAfter429: false };
 }
 
 /**
@@ -614,15 +593,11 @@ export async function capsuleGet<T>(path: string, params?: QueryParams): Promise
   const token = getToken();
   const url = buildUrl(path, params);
   const start = await doFetch(url, { headers: baseHeaders(token) });
-  try {
-    return await consumeBody(start, async () => {
-      const data = await handleResponse<T>(start.res);
-      const nextPage = parseNextPage(start.res.headers.get("Link"));
-      return { data, nextPage };
-    });
-  } finally {
-    start.cleanup();
-  }
+  return consumeBody(start, async () => {
+    const data = await handleResponse<T>(start.res);
+    const nextPage = parseNextPage(start.res.headers.get("Link"));
+    return { data, nextPage };
+  });
 }
 
 /**
@@ -677,11 +652,7 @@ export async function capsulePost<T>(path: string, body: unknown): Promise<T> {
     headers: { ...baseHeaders(token), "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  try {
-    return await consumeBody(start, () => handleResponse<T>(start.res));
-  } finally {
-    start.cleanup();
-  }
+  return consumeBody(start, () => handleResponse<T>(start.res));
 }
 
 /**
@@ -699,16 +670,12 @@ export async function capsulePostNoContent(path: string): Promise<void> {
     method: "POST",
     headers: baseHeaders(token),
   });
-  try {
-    await consumeBody(start, async () => {
-      if (start.res.status === 204) return;
-      await throwForStatus(start.res);
-      // 2xx-but-not-204: drain the body so the connection can be reused.
-      await mapAbort(start.res.text());
-    });
-  } finally {
-    start.cleanup();
-  }
+  await consumeBody(start, async () => {
+    if (start.res.status === 204) return;
+    await throwForStatus(start.res);
+    // 2xx-but-not-204: drain the body so the connection can be reused.
+    await mapAbort(start.res.text());
+  });
 }
 
 /**
@@ -731,15 +698,11 @@ export async function capsuleSearch<T>(
     headers: { ...baseHeaders(token), "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  try {
-    return await consumeBody(start, async () => {
-      const data = await handleResponse<T>(start.res);
-      const nextPage = parseNextPage(start.res.headers.get("Link"));
-      return { data, nextPage };
-    });
-  } finally {
-    start.cleanup();
-  }
+  return consumeBody(start, async () => {
+    const data = await handleResponse<T>(start.res);
+    const nextPage = parseNextPage(start.res.headers.get("Link"));
+    return { data, nextPage };
+  });
 }
 
 export async function capsulePut<T>(path: string, body: unknown): Promise<T> {
@@ -751,11 +714,7 @@ export async function capsulePut<T>(path: string, body: unknown): Promise<T> {
     headers: { ...baseHeaders(token), "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  try {
-    return await consumeBody(start, () => handleResponse<T>(start.res));
-  } finally {
-    start.cleanup();
-  }
+  return consumeBody(start, () => handleResponse<T>(start.res));
 }
 
 /**
@@ -784,66 +743,62 @@ export async function capsuleGetBinary(path: string, maxBytes?: number): Promise
   const token = getToken();
   const url = buildUrl(path);
   const start = await doFetch(url, { headers: baseHeaders(token) });
-  try {
-    return await consumeBody(start, async (): Promise<BinaryResult> => {
-      const res = start.res;
-      await throwForStatus(res);
-      const contentType = res.headers.get("Content-Type") ?? "application/octet-stream";
+  return consumeBody(start, async (): Promise<BinaryResult> => {
+    const res = start.res;
+    await throwForStatus(res);
+    const contentType = res.headers.get("Content-Type") ?? "application/octet-stream";
 
-      // Pre-buffer cap check. If Content-Length is advertised and exceeds
-      // the cap, refuse to read the body at all.
-      const declared = res.headers.get("Content-Length");
-      const declaredBytes = declared ? Number(declared) : NaN;
-      if (maxBytes !== undefined && Number.isFinite(declaredBytes) && declaredBytes > maxBytes) {
-        // Drain (cancel) the body so the connection can be released.
-        if (res.body) await res.body.cancel().catch(() => {});
+    // Pre-buffer cap check. If Content-Length is advertised and exceeds
+    // the cap, refuse to read the body at all.
+    const declared = res.headers.get("Content-Length");
+    const declaredBytes = declared ? Number(declared) : NaN;
+    if (maxBytes !== undefined && Number.isFinite(declaredBytes) && declaredBytes > maxBytes) {
+      // Drain (cancel) the body so the connection can be released.
+      if (res.body) await res.body.cancel().catch(() => {});
+      return {
+        contentType,
+        buffer: Buffer.alloc(0),
+        truncated: true,
+        sizeBytes: declaredBytes,
+      };
+    }
+
+    // Streaming cap check. Even when Content-Length is absent or honest,
+    // abort the read once we've accumulated more than the cap. The
+    // per-chunk read is wrapped in mapAbort so a mid-stream timeout
+    // surfaces as the same clean 504 a fetch-stage timeout does.
+    if (maxBytes !== undefined && res.body) {
+      const reader = res.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let total = 0;
+      let truncated = false;
+      while (true) {
+        const { done, value } = await mapAbort(reader.read());
+        if (done) break;
+        total += value.byteLength;
+        if (total > maxBytes) {
+          truncated = true;
+          await reader.cancel().catch(() => {});
+          break;
+        }
+        chunks.push(value);
+      }
+      if (truncated) {
         return {
           contentType,
           buffer: Buffer.alloc(0),
           truncated: true,
-          sizeBytes: declaredBytes,
+          sizeBytes: total,
         };
       }
-
-      // Streaming cap check. Even when Content-Length is absent or honest,
-      // abort the read once we've accumulated more than the cap. The
-      // per-chunk read is wrapped in mapAbort so a mid-stream timeout
-      // surfaces as the same clean 504 a fetch-stage timeout does.
-      if (maxBytes !== undefined && res.body) {
-        const reader = res.body.getReader();
-        const chunks: Uint8Array[] = [];
-        let total = 0;
-        let truncated = false;
-        while (true) {
-          const { done, value } = await mapAbort(reader.read());
-          if (done) break;
-          total += value.byteLength;
-          if (total > maxBytes) {
-            truncated = true;
-            await reader.cancel().catch(() => {});
-            break;
-          }
-          chunks.push(value);
-        }
-        if (truncated) {
-          return {
-            contentType,
-            buffer: Buffer.alloc(0),
-            truncated: true,
-            sizeBytes: total,
-          };
-        }
-        const buffer = Buffer.concat(chunks.map((c) => Buffer.from(c)));
-        return { contentType, buffer, sizeBytes: buffer.length };
-      }
-
-      const arrayBuffer = await mapAbort(res.arrayBuffer());
-      const buffer = Buffer.from(arrayBuffer);
+      const buffer = Buffer.concat(chunks.map((c) => Buffer.from(c)));
       return { contentType, buffer, sizeBytes: buffer.length };
-    });
-  } finally {
-    start.cleanup();
-  }
+    }
+
+    const arrayBuffer = await mapAbort(res.arrayBuffer());
+    const buffer = Buffer.from(arrayBuffer);
+    return { contentType, buffer, sizeBytes: buffer.length };
+  });
 }
 
 /**
@@ -873,11 +828,7 @@ export async function capsulePostBinary<T>(
     },
     body,
   });
-  try {
-    return await consumeBody(start, () => handleResponse<T>(start.res));
-  } finally {
-    start.cleanup();
-  }
+  return consumeBody(start, () => handleResponse<T>(start.res));
 }
 
 /**
@@ -893,15 +844,11 @@ export async function capsuleDelete(path: string): Promise<void> {
     method: "DELETE",
     headers: baseHeaders(token),
   });
-  try {
-    await consumeBody(start, async () => {
-      if (start.res.status === 204) return;
-      await throwForStatus(start.res);
+  await consumeBody(start, async () => {
+    if (start.res.status === 204) return;
+    await throwForStatus(start.res);
 
-      // 2xx-but-not-204: drain the body so the connection can be reused.
-      await mapAbort(start.res.text());
-    });
-  } finally {
-    start.cleanup();
-  }
+    // 2xx-but-not-204: drain the body so the connection can be reused.
+    await mapAbort(start.res.text());
+  });
 }

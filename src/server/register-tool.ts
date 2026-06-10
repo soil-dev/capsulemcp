@@ -378,7 +378,7 @@ export function registerToolTask<Schema extends z.ZodObject<ZodRawShape>>(
             const result = await handler(input, {
               signal: abortController.signal,
             });
-            payload = wrapAsText(result) as CallToolResult;
+            payload = wrapAsText(result);
           } catch (err) {
             if (abortController.signal.aborted) return;
             outcome = "error";
@@ -431,6 +431,10 @@ export function registerToolTask<Schema extends z.ZodObject<ZodRawShape>>(
         extra.taskStore.getTask(extra.taskId),
       getTaskResult: async (_input: z.infer<Schema>, extra: TaskRequestHandlerExtra) => {
         const r = await extra.taskStore.getTaskResult(extra.taskId);
+        // Not a no-op: the store returns the SDK's loose `Result` shape,
+        // but this handler's signature requires CallToolResult (with
+        // `content`). Our runner only ever stores wrapAsText payloads or
+        // structured error contents, so the narrowing holds at runtime.
         return r as CallToolResult;
       },
     },

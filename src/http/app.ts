@@ -124,10 +124,9 @@ export function createApp(opts: AppOptions): express.Express {
     };
 
     const body = (req.body ?? {}) as Record<string, unknown>;
-    const clientId =
-      typeof body["client_id"] === "string" ? (body["client_id"] as string) : undefined;
+    const clientId = typeof body["client_id"] === "string" ? body["client_id"] : undefined;
     const providedSecret =
-      typeof body["client_secret"] === "string" ? (body["client_secret"] as string) : undefined;
+      typeof body["client_secret"] === "string" ? body["client_secret"] : undefined;
 
     if (!clientId) {
       sendInvalidClient("client credentials required");
@@ -295,7 +294,7 @@ a{color:#1e3a8a}
     standardHeaders: "draft-7",
     legacyHeaders: false,
     keyGenerator: (req) => {
-      const clientId = (req as { auth?: { clientId?: string } }).auth?.clientId;
+      const clientId = req.auth?.clientId;
       if (clientId) return clientId;
       // Fallback to IP for unauthenticated paths (shouldn't reach here
       // post-requireBearerAuth, but defensive). Use express-rate-limit's
@@ -349,7 +348,7 @@ a{color:#1e3a8a}
         // readable across clients (see src/tasks/store.ts). The
         // requireBearerAuth middleware above guarantees `req.auth`
         // is populated before we reach here.
-        const clientId = (req as { auth?: { clientId?: string } }).auth?.clientId;
+        const clientId = req.auth?.clientId;
         const server = createCapsuleMcpServer({ clientId });
         const transport = new StreamableHTTPServerTransport({});
 
