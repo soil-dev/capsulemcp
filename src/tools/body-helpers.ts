@@ -46,3 +46,42 @@ export function setNullableRef(
   if (id === null) body[key] = null;
   else if (id !== undefined) body[key] = { id };
 }
+
+/**
+ * Enforce Capsule's at-most-one-parent invariant for entities that can
+ * link to a party, opportunity, OR project — but never more than one
+ * (Capsule rejects multi-parent writes with a 422 "can be related to at
+ * most one entity"). One canonical definition so the four handlers that
+ * need it (create_task, update_task, add_note, upload_attachment) can't
+ * drift in predicate or wording again.
+ *
+ * Counts only `number` values: `undefined` (omitted) never counts, and
+ * `null` never counts either — update-side tools use `null` to mean
+ * "detach/swap this parent", which is exactly one parent on the wire.
+ * The positive-integer Zod schemas guarantee 0 can't reach us.
+ *
+ * `opts.required` switches the rule from "at most one" (updates, where
+ * omitting all three means "leave parentage alone") to "exactly one"
+ * (creates of inherently-parented records like notes and attachments).
+ */
+export function assertSingleParentRef(
+  toolName: string,
+  refs: {
+    partyId?: number | null;
+    opportunityId?: number | null;
+    projectId?: number | null;
+  },
+  opts: { required?: boolean } = {},
+): void {
+  const set = [refs.partyId, refs.opportunityId, refs.projectId].filter(
+    (v) => typeof v === "number",
+  ).length;
+  if (opts.required && set !== 1) {
+    throw new Error(`${toolName}: provide exactly one of partyId, opportunityId, or projectId`);
+  }
+  if (set > 1) {
+    throw new Error(
+      `${toolName}: provide at most one of partyId, opportunityId, or projectId — Capsule allows a record to be related to at most one entity`,
+    );
+  }
+}

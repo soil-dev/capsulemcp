@@ -37,3 +37,32 @@ export const positiveId = z.preprocess((input) => {
   const trimmed = input.trim();
   return /^\d+$/.test(trimmed) ? Number(trimmed) : input;
 }, z.number().int().positive());
+
+/**
+ * The standard pagination pair for list/filter/search tools, with the
+ * connector-side defaults applied (`page: 1`, `perPage: 25`). Spread
+ * into the tool's `z.object({...})` shape:
+ *
+ *   z.object({ q: z.string(), ...paginationFields })
+ *
+ * One definition so Capsule's `perPage` ceiling (100) and our defaults
+ * can't drift between tools, and so an LLM-facing description tweak
+ * lands everywhere at once. Deliberately strict (no string coercion) —
+ * see the positiveId note above for why page numbers stay strictly
+ * typed.
+ */
+export const paginationFields = {
+  page: z.number().int().positive().optional().default(1),
+  perPage: z.number().int().min(1).max(100).optional().default(25),
+};
+
+/**
+ * Pagination pair WITHOUT connector-side defaults — for reference-data
+ * tools whose handlers apply their own default (e.g. `perPage: 100` on
+ * small dictionary endpoints) and for schemas where an omitted value
+ * should reach the handler as `undefined` rather than `1`/`25`.
+ */
+export const paginationFieldsNoDefaults = {
+  page: z.number().int().positive().optional(),
+  perPage: z.number().int().min(1).max(100).optional(),
+};

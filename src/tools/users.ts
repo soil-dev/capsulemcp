@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { capsuleGet, capsuleGetCached } from "../capsule/client.js";
+import { paginationFieldsNoDefaults } from "./shared-schemas.js";
+import { capsuleGet, capsuleGetCachedList } from "../capsule/client.js";
 
 // Capsule's default page size is 50 — most accounts have fewer than 50
 // users so a single call returns everything, but a larger team would
@@ -7,16 +8,14 @@ import { capsuleGet, capsuleGetCached } from "../capsule/client.js";
 // reason as the metadata tools.
 
 export const listUsersSchema = z.object({
-  page: z.number().int().positive().optional(),
-  perPage: z.number().int().min(1).max(100).optional(),
+  ...paginationFieldsNoDefaults,
 });
 
 export async function listUsers(input: z.infer<typeof listUsersSchema>) {
-  const { data, nextPage } = await capsuleGetCached<{ users: unknown[] }>("/users", {
+  return capsuleGetCachedList<{ users: unknown[] }>("/users", {
     page: input.page ?? 1,
     perPage: input.perPage ?? 100,
   });
-  return { ...data, nextPage };
 }
 
 // ── Current user ────────────────────────────────────────────────────────────

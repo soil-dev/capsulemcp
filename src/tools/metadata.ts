@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { capsuleGetCached } from "../capsule/client.js";
+import { paginationFieldsNoDefaults } from "./shared-schemas.js";
+import { capsuleGetCached, capsuleGetCachedList } from "../capsule/client.js";
 
 // Reference-data endpoints. Most accounts have a small number of each
 // (a handful of teams, ~10 loss reasons, etc.) so a single call typically
@@ -15,14 +16,10 @@ import { capsuleGetCached } from "../capsule/client.js";
 // the inferred input types keep page/perPage optional for callers.
 
 const paginationFields = {
-  page: z.number().int().positive().optional(),
-  perPage: z
-    .number()
-    .int()
-    .min(1)
-    .max(100)
-    .optional()
-    .describe("Page size, max 100. Defaults to 100 for reference data."),
+  ...paginationFieldsNoDefaults,
+  perPage: paginationFieldsNoDefaults.perPage.describe(
+    "Page size, max 100. Defaults to 100 for reference data.",
+  ),
 };
 
 // ── Teams ───────────────────────────────────────────────────────────────────
@@ -30,11 +27,10 @@ const paginationFields = {
 export const listTeamsSchema = z.object({ ...paginationFields });
 
 export async function listTeams(input: z.infer<typeof listTeamsSchema>) {
-  const { data, nextPage } = await capsuleGetCached<{ teams: unknown[] }>("/teams", {
+  return capsuleGetCachedList<{ teams: unknown[] }>("/teams", {
     page: input.page ?? 1,
     perPage: input.perPage ?? 100,
   });
-  return { ...data, nextPage };
 }
 
 // ── Loss reasons ────────────────────────────────────────────────────────────
@@ -43,11 +39,10 @@ export const listLostReasonsSchema = z.object({ ...paginationFields });
 
 export async function listLostReasons(input: z.infer<typeof listLostReasonsSchema>) {
   // Note response key: `lostReasons` (camelCase plural).
-  const { data, nextPage } = await capsuleGetCached<{ lostReasons: unknown[] }>("/lostreasons", {
+  return capsuleGetCachedList<{ lostReasons: unknown[] }>("/lostreasons", {
     page: input.page ?? 1,
     perPage: input.perPage ?? 100,
   });
-  return { ...data, nextPage };
 }
 
 // ── Activity types ──────────────────────────────────────────────────────────
@@ -56,14 +51,10 @@ export const listActivityTypesSchema = z.object({ ...paginationFields });
 
 export async function listActivityTypes(input: z.infer<typeof listActivityTypesSchema>) {
   // Note response key: `activityTypes` (camelCase plural).
-  const { data, nextPage } = await capsuleGetCached<{ activityTypes: unknown[] }>(
-    "/activitytypes",
-    {
-      page: input.page ?? 1,
-      perPage: input.perPage ?? 100,
-    },
-  );
-  return { ...data, nextPage };
+  return capsuleGetCachedList<{ activityTypes: unknown[] }>("/activitytypes", {
+    page: input.page ?? 1,
+    perPage: input.perPage ?? 100,
+  });
 }
 
 // ── Site (account info) ─────────────────────────────────────────────────────
@@ -94,11 +85,10 @@ export async function listTrackDefinitions(input: z.infer<typeof listTrackDefini
   // Note response key: `trackDefinitions` (camelCase plural). Each entry
   // includes nested taskDefinitions describing the auto-tasks the track
   // creates when applied.
-  const { data, nextPage } = await capsuleGetCached<{ trackDefinitions: unknown[] }>(
-    "/trackdefinitions",
-    { page: input.page ?? 1, perPage: input.perPage ?? 100 },
-  );
-  return { ...data, nextPage };
+  return capsuleGetCachedList<{ trackDefinitions: unknown[] }>("/trackdefinitions", {
+    page: input.page ?? 1,
+    perPage: input.perPage ?? 100,
+  });
 }
 
 // ── Categories (entry/task categorisation) ──────────────────────────────────
@@ -110,11 +100,10 @@ export async function listTrackDefinitions(input: z.infer<typeof listTrackDefini
 export const listCategoriesSchema = z.object({ ...paginationFields });
 
 export async function listCategories(input: z.infer<typeof listCategoriesSchema>) {
-  const { data, nextPage } = await capsuleGetCached<{ categories: unknown[] }>("/categories", {
+  return capsuleGetCachedList<{ categories: unknown[] }>("/categories", {
     page: input.page ?? 1,
     perPage: input.perPage ?? 100,
   });
-  return { ...data, nextPage };
 }
 
 // ── Goals (sales targets) ───────────────────────────────────────────────────
@@ -126,9 +115,8 @@ export async function listCategories(input: z.infer<typeof listCategoriesSchema>
 export const listGoalsSchema = z.object({ ...paginationFields });
 
 export async function listGoals(input: z.infer<typeof listGoalsSchema>) {
-  const { data, nextPage } = await capsuleGetCached<{ goals: unknown[] }>("/goals", {
+  return capsuleGetCachedList<{ goals: unknown[] }>("/goals", {
     page: input.page ?? 1,
     perPage: input.perPage ?? 100,
   });
-  return { ...data, nextPage };
 }

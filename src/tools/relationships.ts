@@ -1,11 +1,11 @@
 import { z } from "zod";
-import { positiveId } from "./shared-schemas.js";
+import { positiveId, paginationFields } from "./shared-schemas.js";
 import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
 import { confirmFlag } from "./confirm-flag.js";
 import {
   CapsuleApiError,
   capsuleDelete,
-  capsuleGet,
+  capsuleGetList,
   capsulePostNoContent,
 } from "../capsule/client.js";
 import { idempotent } from "../capsule/idempotent.js";
@@ -40,16 +40,15 @@ export const listAdditionalPartiesSchema = z.object({
   entity: RelationshipEntity,
   entityId: positiveId.describe("ID of the opportunity or project."),
   embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
-  page: z.number().int().positive().optional().default(1),
-  perPage: z.number().int().min(1).max(100).optional().default(25),
+  ...paginationFields,
 });
 
 export async function listAdditionalParties(input: z.infer<typeof listAdditionalPartiesSchema>) {
-  const { data, nextPage } = await capsuleGet<{ parties: unknown[] }>(
-    `/${input.entity}/${input.entityId}/parties`,
-    { embed: input.embed, page: input.page, perPage: input.perPage },
-  );
-  return { ...data, nextPage };
+  return capsuleGetList<{ parties: unknown[] }>(`/${input.entity}/${input.entityId}/parties`, {
+    embed: input.embed,
+    page: input.page,
+    perPage: input.perPage,
+  });
 }
 
 // ── Add additional party ────────────────────────────────────────────────────
@@ -145,15 +144,14 @@ export async function removeAdditionalParty(input: z.infer<typeof removeAddition
 export const listAssociatedProjectsSchema = z.object({
   opportunityId: positiveId,
   embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
-  page: z.number().int().positive().optional().default(1),
-  perPage: z.number().int().min(1).max(100).optional().default(25),
+  ...paginationFields,
 });
 
 export async function listAssociatedProjects(input: z.infer<typeof listAssociatedProjectsSchema>) {
   // Capsule's API uses /kases for projects.
-  const { data, nextPage } = await capsuleGet<{ kases: unknown[] }>(
-    `/opportunities/${input.opportunityId}/kases`,
-    { embed: input.embed, page: input.page, perPage: input.perPage },
-  );
-  return { ...data, nextPage };
+  return capsuleGetList<{ kases: unknown[] }>(`/opportunities/${input.opportunityId}/kases`, {
+    embed: input.embed,
+    page: input.page,
+    perPage: input.perPage,
+  });
 }

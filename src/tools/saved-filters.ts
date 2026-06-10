@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { positiveId } from "./shared-schemas.js";
+import { positiveId, paginationFields } from "./shared-schemas.js";
 import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
-import { capsuleGet, capsuleGetCached } from "../capsule/client.js";
+import { capsuleGetCached, capsuleGetList } from "../capsule/client.js";
 
 // Saved filters are filters created and stored in Capsule's web UI. Unlike
 // the ad-hoc `filter_*` tools (which use POST /<entity>/filters/results),
@@ -42,14 +42,13 @@ export const runSavedFilterSchema = z.object({
   entity: EntitySchema,
   id: positiveId.describe("The saved filter id (from list_saved_filters)."),
   embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
-  page: z.number().int().positive().optional().default(1),
-  perPage: z.number().int().min(1).max(100).optional().default(25),
+  ...paginationFields,
 });
 
 export async function runSavedFilter(input: z.infer<typeof runSavedFilterSchema>) {
-  const { data, nextPage } = await capsuleGet<Record<string, unknown>>(
-    `/${input.entity}/filters/${input.id}/results`,
-    { page: input.page, perPage: input.perPage, embed: input.embed },
-  );
-  return { ...data, nextPage };
+  return capsuleGetList<Record<string, unknown>>(`/${input.entity}/filters/${input.id}/results`, {
+    page: input.page,
+    perPage: input.perPage,
+    embed: input.embed,
+  });
 }

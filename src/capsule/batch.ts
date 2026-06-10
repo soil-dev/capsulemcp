@@ -116,6 +116,38 @@ export function getBatchConcurrency(): number {
  * the summary's `failed` count. This is what gets wired when a
  * `tasks/cancel` arrives mid-batch.
  */
+/**
+ * Map `items` through `fn` with bounded parallelism, preserving input
+ * order in the results. The pool skeleton (cursor walk, worker spawn,
+ * `Math.min(limit, length)` cap) used to be duplicated between
+ * `batchExecute` and the merged-timeline fan-out in
+ * `src/tools/entries.ts`; this is the single tested copy. A rejection
+ * from `fn` rejects the whole map — callers that need per-item error
+ * capture (like `batchExecute`) wrap their `fn` in a try/catch.
+ */
+export async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let cursor = 0;
+  async function worker(): Promise<void> {
+    while (true) {
+      const i = cursor;
+      cursor += 1;
+      if (i >= items.length) return;
+      results[i] = await fn(items[i] as T, i);
+    }
+  }
+  const workers: Promise<void>[] = [];
+  for (let w = 0; w < Math.min(limit, items.length); w++) {
+    workers.push(worker());
+  }
+  await Promise.all(workers);
+  return results;
+}
+
 export async function batchExecute<TInput, TOutput>(
   tool: string,
   items: TInput[],
@@ -123,43 +155,26 @@ export async function batchExecute<TInput, TOutput>(
   options: BatchOpts = {},
 ): Promise<BatchResponse<TOutput>> {
   const concurrency = getBatchConcurrency();
-  const results: BatchItemResult<TOutput>[] = new Array(items.length);
   const startedAt = Date.now();
   const signal = options.signal;
 
-  // Simple promise-pool: a pointer walks the input array, N
-  // workers each grab the next unclaimed index. No external
-  // dependency needed; the indirection cost is negligible at N <
-  // ~100 items.
-  let cursor = 0;
-  async function worker(): Promise<void> {
-    while (true) {
-      const i = cursor;
-      cursor += 1;
-      if (i >= items.length) return;
-      // Pre-flight cancellation check. Items past this point in
-      // the cursor get a synthetic "cancelled" error rather than
-      // running.
+  const results = await mapWithConcurrency(
+    items,
+    concurrency,
+    async (item, i): Promise<BatchItemResult<TOutput>> => {
+      // Pre-flight cancellation check. Items past this point in the
+      // cursor get a synthetic "cancelled" error rather than running.
       if (signal?.aborted) {
-        results[i] = {
-          ok: false,
-          error: { message: "cancelled by tasks/cancel" },
-        };
-        continue;
+        return { ok: false, error: { message: "cancelled by tasks/cancel" } };
       }
       try {
-        const result = await action(items[i] as TInput, i);
-        results[i] = { ok: true, result };
+        const result = await action(item, i);
+        return { ok: true, result };
       } catch (err) {
-        results[i] = { ok: false, error: extractError(err) };
+        return { ok: false, error: extractError(err) };
       }
-    }
-  }
-  const workers: Promise<void>[] = [];
-  for (let w = 0; w < Math.min(concurrency, items.length); w++) {
-    workers.push(worker());
-  }
-  await Promise.all(workers);
+    },
+  );
 
   const succeeded = results.filter((r) => r.ok).length;
   const failed = results.length - succeeded;

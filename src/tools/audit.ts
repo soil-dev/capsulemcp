@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { positiveId } from "./shared-schemas.js";
+import { positiveId, paginationFields } from "./shared-schemas.js";
 import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
-import { capsuleGet } from "../capsule/client.js";
+import { capsuleGetList } from "../capsule/client.js";
 
 // Audit & navigation tools that don't fit cleanly under a single entity.
 //
@@ -22,17 +22,16 @@ export const listEmployeesSchema = z.object({
   partyId: positiveId.describe(
     "The organisation's party id. Returns the people whose `organisation` field links to this party.",
   ),
-  page: z.number().int().positive().optional().default(1),
-  perPage: z.number().int().min(1).max(100).optional().default(25),
+  ...paginationFields,
   embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
 });
 
 export async function listEmployees(input: z.infer<typeof listEmployeesSchema>) {
-  const { data, nextPage } = await capsuleGet<{ parties: unknown[] }>(
-    `/parties/${input.partyId}/people`,
-    { page: input.page, perPage: input.perPage, embed: input.embed },
-  );
-  return { ...data, nextPage };
+  return capsuleGetList<{ parties: unknown[] }>(`/parties/${input.partyId}/people`, {
+    page: input.page,
+    perPage: input.perPage,
+    embed: input.embed,
+  });
 }
 
 // ── Deleted entities (audit) ────────────────────────────────────────────────
@@ -45,14 +44,13 @@ const DeletedSinceSchema = z
 
 const DeletedPagination = {
   since: DeletedSinceSchema,
-  page: z.number().int().positive().optional().default(1),
-  perPage: z.number().int().min(1).max(100).optional().default(25),
+  ...paginationFields,
 };
 
 export const listDeletedPartiesSchema = z.object(DeletedPagination);
 
 export async function listDeletedParties(input: z.infer<typeof listDeletedPartiesSchema>) {
-  const { data, nextPage } = await capsuleGet<{
+  return capsuleGetList<{
     parties: unknown[];
     restrictedParties?: unknown[];
   }>("/parties/deleted", {
@@ -60,7 +58,6 @@ export async function listDeletedParties(input: z.infer<typeof listDeletedPartie
     page: input.page,
     perPage: input.perPage,
   });
-  return { ...data, nextPage };
 }
 
 export const listDeletedOpportunitiesSchema = z.object(DeletedPagination);
@@ -68,7 +65,7 @@ export const listDeletedOpportunitiesSchema = z.object(DeletedPagination);
 export async function listDeletedOpportunities(
   input: z.infer<typeof listDeletedOpportunitiesSchema>,
 ) {
-  const { data, nextPage } = await capsuleGet<{
+  return capsuleGetList<{
     opportunities: unknown[];
     restrictedOpportunities?: unknown[];
   }>("/opportunities/deleted", {
@@ -76,14 +73,13 @@ export async function listDeletedOpportunities(
     page: input.page,
     perPage: input.perPage,
   });
-  return { ...data, nextPage };
 }
 
 export const listDeletedProjectsSchema = z.object(DeletedPagination);
 
 export async function listDeletedProjects(input: z.infer<typeof listDeletedProjectsSchema>) {
   // Capsule's API uses /kases for projects.
-  const { data, nextPage } = await capsuleGet<{
+  return capsuleGetList<{
     kases: unknown[];
     restrictedKases?: unknown[];
   }>("/kases/deleted", {
@@ -91,5 +87,4 @@ export async function listDeletedProjects(input: z.infer<typeof listDeletedProje
     page: input.page,
     perPage: input.perPage,
   });
-  return { ...data, nextPage };
 }

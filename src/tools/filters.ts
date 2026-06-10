@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { paginationFields } from "./shared-schemas.js";
 import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
 import { capsuleSearch } from "../capsule/client.js";
 
@@ -63,8 +64,7 @@ const FilterInputSchema = z.object({
       "Array of filter conditions. All conditions are ANDed together. To get newest records, use a date condition like {field: 'addedOn', operator: 'is within last', value: 7} and pick the highest-id row from the result (Capsule IDs are monotonic).",
     ),
   embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
-  page: z.number().int().positive().optional().default(1),
-  perPage: z.number().int().min(1).max(100).optional().default(25),
+  ...paginationFields,
 });
 
 export type FilterInput = z.infer<typeof FilterInputSchema>;

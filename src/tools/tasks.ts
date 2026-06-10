@@ -1,8 +1,8 @@
 import { z } from "zod";
-import { setNullableRef, setRef } from "./body-helpers.js";
+import { assertSingleParentRef, setNullableRef, setRef } from "./body-helpers.js";
 import { defineDelete } from "./define-delete.js";
-import { positiveId } from "./shared-schemas.js";
-import { capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
+import { positiveId, paginationFields } from "./shared-schemas.js";
+import { capsuleGet, capsulePost, capsulePut, capsuleGetList } from "../capsule/client.js";
 import { type BatchOpts, batchExecute } from "../capsule/batch.js";
 import { chunkedMultiGet } from "../capsule/multi-get.js";
 
@@ -22,12 +22,11 @@ export const listTasksSchema = z.object({
       "Defaults to OPEN when omitted. Pass COMPLETED to filter to completed tasks, or 'OPEN' explicitly.",
     ),
   ownerId: positiveId.optional().describe("Filter to tasks owned by this user ID"),
-  page: z.number().int().positive().optional().default(1),
-  perPage: z.number().int().min(1).max(100).optional().default(25),
+  ...paginationFields,
 });
 
 export async function listTasks(input: z.infer<typeof listTasksSchema>) {
-  const { data, nextPage } = await capsuleGet<{ tasks: unknown[] }>("/tasks", {
+  return capsuleGetList<{ tasks: unknown[] }>("/tasks", {
     // Default 'OPEN' applied here (not via zod .default()) so that
     // z.infer keeps `status` optional for callers that omit it.
     status: input.status ?? "OPEN",
@@ -36,7 +35,6 @@ export async function listTasks(input: z.infer<typeof listTasksSchema>) {
     page: input.page,
     perPage: input.perPage,
   });
-  return { ...data, nextPage };
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -102,10 +100,7 @@ export const createTaskSchema = z.object({
 });
 
 export async function createTask(input: z.infer<typeof createTaskSchema>) {
-  const linked = [input.partyId, input.opportunityId, input.projectId].filter(Boolean);
-  if (linked.length > 1) {
-    throw new Error("Provide at most one of partyId, opportunityId, or projectId");
-  }
+  assertSingleParentRef("create_task", input);
   const { ownerId, partyId, opportunityId, projectId, ...rest } = input;
 
   const body: Record<string, unknown> = { ...rest };
@@ -171,18 +166,12 @@ export const updateTaskSchema = z.object({
 export async function updateTask(input: z.infer<typeof updateTaskSchema>) {
   const { id, ownerId, partyId, opportunityId, projectId, ...rest } = input;
 
-  // XOR check on the three parent-ref fields. Capsule's API enforces
-  // "at most one related entity" with a 422 on the PUT itself; this
-  // client-side check mirrors create_task's pattern (lines ~111-115)
-  // so callers get a cleaner error before the HTTP round-trip.
-  // `null` (explicit unlink) does NOT count toward the cap — callers
-  // can pass `partyId: null, opportunityId: 123` to swap parent type.
-  const setCount = [partyId, opportunityId, projectId].filter((v) => typeof v === "number").length;
-  if (setCount > 1) {
-    throw new Error(
-      "update_task: provide at most one of partyId, opportunityId, or projectId (Capsule rejects multi-parent tasks with 422 'task can be related to at most one entity')",
-    );
-  }
+  // Capsule enforces "at most one related entity" with a 422 on the PUT
+  // itself; the shared client-side check gives callers a cleaner error
+  // before the HTTP round-trip. `null` (explicit unlink) does NOT count
+  // toward the cap — callers can pass `partyId: null, opportunityId: 123`
+  // to swap parent type.
+  assertSingleParentRef("update_task", { partyId, opportunityId, projectId });
 
   const body: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(rest)) {

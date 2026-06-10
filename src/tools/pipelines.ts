@@ -1,33 +1,26 @@
 import { z } from "zod";
-import { positiveId } from "./shared-schemas.js";
-import { capsuleGetCached } from "../capsule/client.js";
+import { positiveId, paginationFieldsNoDefaults } from "./shared-schemas.js";
+import { capsuleGetCachedList } from "../capsule/client.js";
 
-const paginationFields = {
-  page: z.number().int().positive().optional(),
-  perPage: z.number().int().min(1).max(100).optional(),
-};
-
-export const listPipelinesSchema = z.object({ ...paginationFields });
+export const listPipelinesSchema = z.object({ ...paginationFieldsNoDefaults });
 
 export async function listPipelines(input: z.infer<typeof listPipelinesSchema>) {
-  const { data, nextPage } = await capsuleGetCached<{ pipelines: unknown[] }>("/pipelines", {
+  return capsuleGetCachedList<{ pipelines: unknown[] }>("/pipelines", {
     page: input.page ?? 1,
     perPage: input.perPage ?? 100,
   });
-  return { ...data, nextPage };
 }
 
 // ───────────────────────────────────────────────────────────────────────────
 
 export const listMilestonesSchema = z.object({
   pipelineId: positiveId,
-  ...paginationFields,
+  ...paginationFieldsNoDefaults,
 });
 
 export async function listMilestones(input: z.infer<typeof listMilestonesSchema>) {
-  const { data, nextPage } = await capsuleGetCached<{ milestones: unknown[] }>(
+  return capsuleGetCachedList<{ milestones: unknown[] }>(
     `/pipelines/${input.pipelineId}/milestones`,
     { page: input.page ?? 1, perPage: input.perPage ?? 100 },
   );
-  return { ...data, nextPage };
 }
