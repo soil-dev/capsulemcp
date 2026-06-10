@@ -172,6 +172,36 @@ describe("stdio entry — built bundle smoke test", () => {
     expect(exitCode).toBe(1);
     expect(stderr).toMatch(/CAPSULE_API_TOKEN/);
   });
+
+  it("exits cleanly (0) when the client closes stdin (disconnect)", async () => {
+    // The whole point of the disconnect-exit wiring: an instance whose
+    // pipe the host closed must terminate, not linger as a zombie.
+    const proc = spawn("node", [DIST_INDEX], {
+      env: { ...process.env, CAPSULE_API_TOKEN: "test-token", CAPSULE_MCP_READONLY: "1" },
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    // Fully connect first, then close stdin (EOF on the child's stdin).
+    await rpc(proc, {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: "2024-11-05",
+        capabilities: {},
+        clientInfo: { name: "disc", version: "0" },
+      },
+    });
+    const exited = new Promise<number | null>((resolve) =>
+      proc.on("exit", (code) => resolve(code)),
+    );
+    proc.stdin.end();
+    const result = await Promise.race([
+      exited,
+      new Promise<string>((r) => setTimeout(() => r("TIMEOUT"), 5000)),
+    ]);
+    if (result === "TIMEOUT") proc.kill();
+    expect(result).toBe(0);
+  });
 });
 
 describe("stdio entry — MCP Tasks wiring (SEP-1686)", () => {

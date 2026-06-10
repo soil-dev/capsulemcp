@@ -11,6 +11,21 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Fixed
+
+- stdio transport now exits cleanly when the MCP client disconnects —
+  stdin EOF/close/error, a broken stdout pipe (EPIPE), or being
+  reparented to init (the host process died). Previously the stdio entry
+  wired no disconnect handling and the SDK transport never watches stdin
+  for EOF, so an instance abandoned by the host (e.g. during a Claude
+  Desktop reconnect flap) lingered indefinitely as a zombie —
+  accumulating duplicates that pin resources and can confuse the host's
+  next connection, surfacing as client-side timeouts. Mitigation, not a
+  full cure: it can't stop a host from spawning a duplicate or force-exit
+  an idle instance whose pipes the host still holds open (both host-side),
+  but a genuinely disconnected instance now terminates promptly. HTTP
+  transport unaffected.
+
 ## [1.8.0] — 2026-06-10
 
 Minor release on top of v1.7.0 — observability and reliability hardening
