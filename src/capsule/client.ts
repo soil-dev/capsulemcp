@@ -333,6 +333,22 @@ interface RequestStart {
   retriedAfter429: boolean;
 }
 
+/**
+ * Cancel an unconsumed response body so undici returns the underlying
+ * connection to its pool promptly, instead of holding it until GC.
+ * Used for the 429 responses we never read — the first attempt before
+ * the back-off sleep, and the retry on a double-429. Best-effort: a
+ * cancel failure is swallowed (the connection is reclaimed by GC
+ * regardless, and there's nothing actionable to surface).
+ */
+async function drainBody(res: Response): Promise<void> {
+  try {
+    await res.body?.cancel();
+  } catch {
+    // ignore
+  }
+}
+
 async function doFetch(url: string, options: Parameters<typeof fetch>[1]): Promise<RequestStart> {
   const startedAt = Date.now();
   const method = (options?.method as string | undefined) ?? "GET";
@@ -345,11 +361,15 @@ async function doFetch(url: string, options: Parameters<typeof fetch>[1]): Promi
     // the 429 response is not consumed, and we don't want a phantom
     // timer firing during the back-off window.
     first.cleanup();
+    // Cancel the unread 429 body so the connection returns to the pool
+    // now, rather than being pinned through the back-off window.
+    await drainBody(first.res);
     await new Promise((resolve) => setTimeout(resolve, delay));
 
     const retried = await fetchWithTimeout(url, options);
     if (retried.res.status === 429) {
       retried.cleanup();
+      await drainBody(retried.res);
       // This terminal 429 throws before `consumeBody`, so without an
       // explicit emit it leaves no structured trace and never counts
       // toward `tool.chain.capsuleCalls` — the same blind spot the

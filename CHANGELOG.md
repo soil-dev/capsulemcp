@@ -61,6 +61,18 @@ versions adhere to [Semantic Versioning](https://semver.org).
   one TTL wide. The augment-map sweep now reschedules in lockstep with
   the SDK on `storeTaskResult` and terminal `updateTaskStatus`.
 
+- `chunkedMultiGet` (the `get_parties` / `get_opportunities` /
+  `get_projects` / `get_tasks` fan-out) now returns the same shape on the
+  multi-chunk path as on the single-chunk path — non-array sibling keys
+  from the first chunk are preserved rather than dropped, removing a
+  count-dependent surprise. No observable change today (Capsule's
+  multi-id GET returns only the array), but the contract is now uniform.
+
+- The Capsule client cancels the unread body of a `429` response before
+  the back-off sleep (and before throwing on a double-429), so the
+  underlying connection returns to undici's pool promptly instead of
+  being pinned until GC.
+
 ## [1.7.0] — 2026-05-29
 
 Minor release on top of v1.6.5 — first version to add net-new tools

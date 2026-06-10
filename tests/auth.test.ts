@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { createHash } from "node:crypto";
 import {
   issueToken,
@@ -207,6 +207,78 @@ describe("OAuthProvider in auto-approve mode (open DCR)", () => {
     await expect(p.exchangeRefreshToken(b, tokens.refresh_token!)).rejects.toThrow(
       /different client/,
     );
+  });
+
+  it("exchangeRefreshToken rotates to a fresh, verifiable token pair and preserves the resource audience", async () => {
+    const p = autoApproveProvider(KEY);
+    const client = await p.clientsStore.registerClient!({ redirect_uris: ["http://x/cb"] });
+    let redirected: string | undefined;
+    await p.authorize(
+      client,
+      {
+        codeChallenge: PKCE_CHALLENGE,
+        redirectUri: "http://x/cb",
+        resource: new URL("https://app.example/mcp"),
+      },
+      {
+        redirect: (u: string) => {
+          redirected = u;
+        },
+      } as never,
+    );
+    const code = new URL(redirected!).searchParams.get("code")!;
+    const first = await p.exchangeAuthorizationCode(client, code, PKCE_VERIFIER);
+
+    const refreshed = await p.exchangeRefreshToken(client, first.refresh_token!);
+    expect(refreshed.access_token).toBeTruthy();
+    expect(refreshed.refresh_token).toBeTruthy();
+    // The rotated access token verifies as a real access token for this client.
+    const auth = await p.verifyAccessToken(refreshed.access_token);
+    expect(auth.clientId).toBe(client.client_id);
+    // RFC 8707 audience binding survives the refresh.
+    const firstClaims = verifyToken(first.access_token, KEY);
+    const refreshedClaims = verifyToken(refreshed.access_token, KEY);
+    expect(refreshedClaims.resource).toBeTruthy();
+    expect(refreshedClaims.resource).toBe(firstClaims.resource);
+  });
+
+  it("exchangeAuthorizationCode rejects a redirect_uri that doesn't match the authorize request", async () => {
+    const p = autoApproveProvider(KEY);
+    const client = await p.clientsStore.registerClient!({ redirect_uris: ["http://x/cb"] });
+    let redirected: string | undefined;
+    await p.authorize(client, { codeChallenge: PKCE_CHALLENGE, redirectUri: "http://x/cb" }, {
+      redirect: (u: string) => {
+        redirected = u;
+      },
+    } as never);
+    const code = new URL(redirected!).searchParams.get("code")!;
+    // 4th arg is redirect_uri — different from the one bound at authorize.
+    await expect(
+      p.exchangeAuthorizationCode(client, code, PKCE_VERIFIER, "http://evil/cb"),
+    ).rejects.toThrow(/redirect_uri mismatch/);
+  });
+
+  it("exchangeAuthorizationCode rejects an expired authorization code", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+      const p = autoApproveProvider(KEY);
+      const client = await p.clientsStore.registerClient!({ redirect_uris: ["http://x/cb"] });
+      let redirected: string | undefined;
+      await p.authorize(client, { codeChallenge: PKCE_CHALLENGE, redirectUri: "http://x/cb" }, {
+        redirect: (u: string) => {
+          redirected = u;
+        },
+      } as never);
+      const code = new URL(redirected!).searchParams.get("code")!;
+      // Jump well past any auth-code TTL (codes are short-lived).
+      vi.advanceTimersByTime(60 * 60 * 1000);
+      await expect(p.exchangeAuthorizationCode(client, code, PKCE_VERIFIER)).rejects.toThrow(
+        /invalid or expired/,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("verifyAccessToken rejects refresh tokens (wrong type)", async () => {
