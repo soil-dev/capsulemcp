@@ -87,7 +87,7 @@ const chainHandlers: Record<
   (ctx: RequestContext, fields: Record<string, unknown>) => void
 > = {
   "tool.call": (ctx, f) => {
-    if (typeof f["tool"] === "string") ctx.tools.push(f["tool"] as string);
+    if (typeof f["tool"] === "string") ctx.tools.push(f["tool"]);
   },
   "capsule.request": (ctx) => {
     ctx.capsuleCalls += 1;
