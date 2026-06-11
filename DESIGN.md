@@ -70,7 +70,7 @@ where the bytes flow; the semantics are identical.
                                       ▼
                           ┌────────────────────────┐
                           │ src/tools/*.ts         │
-                          │ (88 tools across the   │
+                          │ (89 tools across the   │
                           │  Capsule resource      │
                           │  graph — see README)   │
                           └────────────────────────┘
@@ -110,9 +110,12 @@ Everything hinges on these holding for `/api/v2`:
 - **Endpoint paths** stay where they are: `/parties`, `/opportunities`,
   `/kases`, `/entries`, `/attachments/{id}`, the structured-filter
   endpoints, etc.
-- **Response shape keys** stay where they are: `parties[]`,
+- **Raw API response shape keys** stay where they are: `parties[]`,
   `opportunities[]`, `kases[]`, `entry`, `track`, `lostReasons[]`
-  (camelCase). Tool implementations hardcode these.
+  (camelCase). The client boundary normalizes project response keys
+  (`kase`/`kases`/`restrictedKases`) to the connector's public
+  `project`/`projects`/`restrictedProjects` vocabulary before tool
+  handlers return data.
 - **Path syntax for batch fetches** (`GET /<entity>/<id1>,<id2>,...`)
   stays the same and stays capped at 10.
 - **Pagination contract** (`page`, `perPage`, RFC 5988 `Link` header
@@ -122,9 +125,10 @@ Everything hinges on these holding for `/api/v2`:
   (`createdAt`, `updatedAt`, `lastContactedAt`).
 
 If any of these break, a new major version reshapes the affected tools.
-We don't try to abstract over Capsule's quirks (`/kases` for projects,
-`lostReasons` camelCase, etc.) — the connector exposes them faithfully
-so the mapping to Capsule's docs is one-to-one and debuggable.
+We keep Capsule's path/body quirks explicit at the wire boundary
+(`/kases` for projects, `lostReasons` camelCase, etc.) so debugging
+against Capsule's docs stays straightforward, while the public tool
+surface consistently says "project".
 
 ### A2. PAT-based authentication is sufficient
 
@@ -492,7 +496,8 @@ listed below. Specifically:
   (including connector-level batch fetches up to 50 ids for parties,
   opportunities, projects, and tasks; entries remain single-fetch
   only — see "Genuinely not in Capsule v2" below)
-- All structured-filter endpoints (parties / opportunities / kases)
+- All structured-filter endpoints (parties / opportunities / projects,
+  with projects mapped to Capsule's `/kases` path)
 - Saved-filter list and run
 - Track instances (full CRUD) and track-definition list
 - Custom field definition list and get

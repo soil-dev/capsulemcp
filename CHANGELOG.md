@@ -11,6 +11,14 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Fixed
+
+- `get_custom_field` now maps `entity: "projects"` to Capsule's project
+  custom-field endpoint, matching `list_custom_fields` and the rest of
+  the v2 entity vocabulary.
+- Public tool descriptions, Glama metadata, and ops docs now reflect
+  the v2 project vocabulary and 89-tool / 50-read-only catalog counts.
+
 ## [2.0.0] — 2026-06-11
 
 Major release: the tool surface drops Capsule's legacy "kase"

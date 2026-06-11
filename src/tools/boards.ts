@@ -2,7 +2,7 @@ import { z } from "zod";
 import { positiveId, paginationFieldsNoDefaults } from "./shared-schemas.js";
 import { capsuleGetCachedList } from "../capsule/client.js";
 
-// Boards and stages are the project (kase) equivalents of pipelines and
+// Boards and stages are the project equivalents of pipelines and
 // milestones for opportunities. A board has many stages; a project sits at
 // one stage at a time. Capsule's response shape is symmetric to /pipelines
 // and /milestones.

@@ -62,10 +62,9 @@ export async function getProject(input: z.infer<typeof getProjectSchema>) {
 
 // ───────────────────────────────────────────────────────────────────────────
 //
-// Batch fetch up to 10 projects by id in a single call. Capsule's path
-// uses /kases (its legacy projects naming): GET /kases/<id1>,<id2>,...
-// capped at 10 per request. For larger sets the connector splits and
-// fans out in parallel; caller-facing shape unchanged.
+// Batch fetch up to 50 projects by id. Capsule's native multi-id path
+// uses /kases and is capped at 10 ids per request, so larger inputs are
+// split and fanned out in parallel; caller-facing shape unchanged.
 
 export const getProjectsSchema = z.object({
   ids: z
@@ -118,7 +117,7 @@ export const createProjectSchema = z.object({
     .optional()
     .describe(
       fieldsArrayDescriptor("get_project") +
-        " Verified empirically in v1.6.5 wire-trace: Capsule's POST /kases accepts the same `fields[]` shape as PUT, so callers can set custom field values on creation without a follow-up update. Project-specific: setting a field whose definition lives under a 'data tag' populates the row's internal tagId but does NOT auto-add the data tag to the project's tags array — use add_tag explicitly if you want it visible via embed=tags.",
+        " Verified empirically in v1.6.5 wire-trace: Capsule's project create endpoint accepts the same `fields[]` shape as PUT, so callers can set custom field values on creation without a follow-up update. Project-specific: setting a field whose definition lives under a 'data tag' populates the row's internal tagId but does NOT auto-add the data tag to the project's tags array — use add_tag explicitly if you want it visible via embed=tags.",
     ),
 });
 
@@ -134,7 +133,7 @@ export async function createProject(input: z.infer<typeof createProjectSchema>) 
   };
   setRef(body, "owner", ownerId);
   setRef(body, "team", teamId);
-  // Capsule's create-case body uses `stage: <integer>` per the docs
+  // Capsule's project create body uses `stage: <integer>` per the docs
   // example. The GET response uses the object form `stage: {id, name}`,
   // but we follow the documented request shape on the way in. So we
   // set the value directly (not via setRef which wraps in {id:...}).
@@ -180,7 +179,7 @@ export const updateProjectSchema = z.object({
     .nullable()
     .optional()
     .describe(
-      "Move the project to this stage (board column), or `null` to remove from all stages (verified empirically in v1.6.5 wire-trace — Capsule accepts `stage: null` on PUT /kases/:id and the project no longer appears on any board). Discover IDs via list_stages. Owner and team are preserved across stage-only updates (Capsule's PUT semantic). " +
+      "Move the project to this stage (board column), or `null` to remove from all stages (verified empirically in v1.6.5 wire-trace — Capsule accepts `stage: null` on project update and the project no longer appears on any board). Discover IDs via list_stages. Owner and team are preserved across stage-only updates (Capsule's PUT semantic). " +
         "WARNING (cross-board): Capsule does NOT validate that the new stage belongs to the project's current board — passing a stageId from a different board silently relocates the project across boards. Team and other board-derived defaults are NOT updated to match the new board. Verify against the project's current board (read the project first, list its board's stages) before passing a cross-board id.",
     ),
   expectedCloseOn: z
@@ -251,5 +250,5 @@ export const { schema: deleteProjectSchema, handler: deleteProject } = defineDel
   toolName: "delete_project",
   pathPrefix: "/kases",
   confirmHint:
-    "Must be set to true. Permanently deletes the project (case). Consider update_project status='CLOSED' instead. Irreversible.",
+    "Must be set to true. Permanently deletes the project. Consider update_project status='CLOSED' instead. Irreversible.",
 });

@@ -338,7 +338,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
   registerTool(
     server,
     "list_party_projects",
-    "List projects (cases) linked to a given party. Returns the same record shape as get_project, filtered to one party — use this to answer 'what cases is X involved in?' without enumerating all projects. Accepts optional embed (e.g. 'tags,fields'). For the opportunity-side analogue, use list_party_opportunities.",
+    "List projects linked to a given party. Returns the same record shape as get_project, filtered to one party — use this to answer 'what projects is X involved in?' without enumerating all projects. Accepts optional embed (e.g. 'tags,fields'). For the opportunity-side analogue, use list_party_opportunities.",
     listPartyProjectsSchema,
     listPartyProjects,
   );
@@ -354,7 +354,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
   registerTool(
     server,
     "list_custom_fields",
-    "List custom field DEFINITIONS for an entity type (parties, opportunities, or projects/kases). Returns the schema — name, type, options for list-type fields, etc. — NOT the values on any specific record. To read values on a record, use get_party / get_opportunity / get_project with embed=fields.",
+    "List custom field DEFINITIONS for an entity type (parties, opportunities, or projects). Returns the schema — name, type, options for list-type fields, etc. — NOT the values on any specific record. To read values on a record, use get_party / get_opportunity / get_project with embed=fields.",
     listCustomFieldsSchema,
     listCustomFields,
   );
@@ -527,7 +527,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
   registerTool(
     server,
     "list_associated_projects",
-    "List projects (cases) associated with a given opportunity. Returns the same record shape as list_projects, filtered to one opportunity. The inverse direction (project → opportunity) is on each project's `opportunity` field directly, so this tool is only needed for opportunity → projects discovery — use list_party_projects for party → projects.",
+    "List projects associated with a given opportunity. Returns the same record shape as list_projects, filtered to one opportunity. The inverse direction (project → opportunity) is on each project's `opportunity` field directly, so this tool is only needed for opportunity → projects discovery — use list_party_projects for party → projects.",
     listAssociatedProjectsSchema,
     listAssociatedProjects,
   );
@@ -579,7 +579,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
   registerTool(
     server,
     "list_projects",
-    "List projects (cases) in Capsule CRM, optionally filtered by status. Returns results in Capsule's default order (no sort parameter is supported here). For free-text matching use search_projects; for structured queries — 'most recent project', 'projects opened this month', 'projects tagged X' — use filter_projects instead.",
+    "List projects in Capsule CRM, optionally filtered by status. Returns results in Capsule's default order (no sort parameter is supported here). For free-text matching use search_projects; for structured queries — 'most recent project', 'projects opened this month', 'projects tagged X' — use filter_projects instead.",
     listProjectsSchema,
     listProjects,
   );
@@ -587,7 +587,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
   registerTool(
     server,
     "filter_projects",
-    "Filter projects (cases) by structured conditions (date ranges, status, tags, owner). Use this — not list_projects — for questions like 'most recent project', 'projects opened this month'. Capsule's API does not support ad-hoc sort, but for 'most recent X' you can filter by a date field and pick the highest-id row — Capsule IDs are monotonic, so newest id = newest record.",
+    "Filter projects by structured conditions (date ranges, status, tags, owner). Use this — not list_projects — for questions like 'most recent project', 'projects opened this month'. Capsule's API does not support ad-hoc sort, but for 'most recent X' you can filter by a date field and pick the highest-id row — Capsule IDs are monotonic, so newest id = newest record.",
     filterProjectsSchema,
     filterProjects,
   );
@@ -595,7 +595,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
   registerTool(
     server,
     "get_project",
-    "Fetch a single project (Capsule's term: 'case') by its numeric id. Returns the full record including name, description, status (OPEN/CLOSED), owner, stage, board, opportunityId (if linked), and timestamps. Use embed='tags,fields' to include attached tags and custom field values in one round-trip. For batch fetches of up to 50 projects at once, use get_projects instead. For the project's timeline (notes, captured emails, completed-task records) use list_project_entries.",
+    "Fetch a single project by its numeric id. Returns the full record including name, description, status (OPEN/CLOSED), owner, stage, board, opportunityId (if linked), and timestamps. Use embed='tags,fields' to include attached tags and custom field values in one round-trip. For batch fetches of up to 50 projects at once, use get_projects instead. For the project's timeline (notes, captured emails, completed-task records) use list_project_entries.",
     getProjectSchema,
     getProject,
   );
@@ -603,7 +603,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
   registerTool(
     server,
     "get_projects",
-    "Batch-fetch up to 50 projects (cases) by ID. For 1–10 ids this is a single Capsule round trip; for 11–50 ids the connector transparently splits into 10-id chunks and fans out parallel Capsule requests, so the caller sees a single tool call with all results merged.",
+    "Batch-fetch up to 50 projects by ID. For 1–10 ids this is a single Capsule round trip; for 11–50 ids the connector transparently splits into 10-id chunks and fans out parallel Capsule requests, so the caller sees a single tool call with all results merged.",
     getProjectsSchema,
     getProjects,
   );
@@ -620,7 +620,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
     registerTool(
       server,
       "create_project",
-      "Create a new project (case) in Capsule CRM linked to a party. Requires partyId and name; description, status, owner, and starting board/stage are optional. To pin a project to a specific board+stage on creation, pass stageId (which uniquely identifies a stage within a board). Discover valid ids via list_boards + list_stages. Returns the created project including its assigned id.",
+      "Create a new project in Capsule CRM linked to a party. Requires partyId and name; description, status, owner, and starting board/stage are optional. To pin a project to a specific board+stage on creation, pass stageId (which uniquely identifies a stage within a board). Discover valid ids via list_boards + list_stages. Returns the created project including its assigned id.",
       createProjectSchema,
       createProject,
     );
@@ -644,7 +644,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
     registerTool(
       server,
       "delete_project",
-      "DESTRUCTIVE & IRREVERSIBLE: permanently delete a project (case). Prefer update_project with status='CLOSED' to close a project while preserving history. Requires confirm=true. Always read the project first with get_project and confirm with the user before calling. Idempotent on retry: response is `{deleted: true, alreadyDeleted: false, id}` on a fresh delete or `{deleted: true, alreadyDeleted: true, id}` if the project was already gone.",
+      "DESTRUCTIVE & IRREVERSIBLE: permanently delete a project. Prefer update_project with status='CLOSED' to close a project while preserving history. Requires confirm=true. Always read the project first with get_project and confirm with the user before calling. Idempotent on retry: response is `{deleted: true, alreadyDeleted: false, id}` on a fresh delete or `{deleted: true, alreadyDeleted: true, id}` if the project was already gone.",
       deleteProjectSchema,
       deleteProject,
     );
@@ -784,7 +784,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
   registerTool(
     server,
     "list_project_entries",
-    "List timeline entries (notes, captured emails, completed-task records) for a project (case). Returns entries newest-first. Each entry has a type ('note', 'email', 'task'), free-text content, and timestamps. Use this to answer 'what's the latest on case X?' For party or opportunity timelines, use list_party_entries or list_opportunity_entries respectively.",
+    "List timeline entries (notes, captured emails, completed-task records) for a project. Returns entries newest-first. Each entry has a type ('note', 'email', 'task'), free-text content, and timestamps. Use this to answer 'what's the latest on project X?' For party or opportunity timelines, use list_party_entries or list_opportunity_entries respectively.",
     listProjectEntriesSchema,
     listProjectEntries,
   );
@@ -979,7 +979,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
   registerTool(
     server,
     "list_boards",
-    "List all project (case) boards defined in Capsule. A board is a grouping of stages that projects flow through — the project equivalent of an opportunity pipeline. Returns each board's id, name, and stages. Use this to discover boardId when creating a project, then pick a starting stage via list_stages. Like pipelines, boards are stable per account.",
+    "List all project boards defined in Capsule. A board is a grouping of stages that projects flow through — the project equivalent of an opportunity pipeline. Returns each board's id, name, and stages. Use this to discover boardId when creating a project, then pick a starting stage via list_stages. Like pipelines, boards are stable per account.",
     listBoardsSchema,
     listBoards,
   );
@@ -987,7 +987,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
   registerTool(
     server,
     "list_stages",
-    "List project (case) stages. Without arguments returns every stage across every board (each entry carries a `.board` reference so you can tell them apart). Pass `boardId` to scope the result to one specific board's stages. Use this to discover the numeric `stage.id` that `create_project` / `update_project` consume — stage names alone won't do, Capsule resolves by id. For opportunity (deal) stages, use `list_pipelines` instead — opportunities don't have stages in the project sense.",
+    "List project stages. Without arguments returns every stage across every board (each entry carries a `.board` reference so you can tell them apart). Pass `boardId` to scope the result to one specific board's stages. Use this to discover the numeric `stage.id` that `create_project` / `update_project` consume — stage names alone won't do, Capsule resolves by id. For opportunity (deal) stages, use `list_pipelines` instead — opportunities don't have stages in the project sense.",
     listStagesSchema,
     listStages,
   );
@@ -1099,7 +1099,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
     registerTool(
       server,
       "add_tag",
-      "Attach a tag to a party, opportunity, or project (kase) by NAME. Capsule resolves to an existing tag in the tenant or creates a fresh one with this name. Matching is case-insensitive — 'VIP' and 'vip' attach the same tag, preserving the canonical casing from whichever variant was created first. To avoid creating a genuinely-distinct near-duplicate (e.g. 'VIP' vs 'V.I.P.'), call list_tags first and reuse the exact name. Idempotent — re-attaching an already-attached tag is harmless. To DETACH a tag, use remove_tag_by_id with the tag's id (read via get_party/get_opportunity/get_project with embed='tags').",
+      "Attach a tag to a party, opportunity, or project by NAME. Capsule resolves to an existing tag in the tenant or creates a fresh one with this name. Matching is case-insensitive — 'VIP' and 'vip' attach the same tag, preserving the canonical casing from whichever variant was created first. To avoid creating a genuinely-distinct near-duplicate (e.g. 'VIP' vs 'V.I.P.'), call list_tags first and reuse the exact name. Idempotent — re-attaching an already-attached tag is harmless. To DETACH a tag, use remove_tag_by_id with the tag's id (read via get_party/get_opportunity/get_project with embed='tags').",
       addTagSchema,
       addTag,
     );
@@ -1107,7 +1107,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
     registerTool(
       server,
       "remove_tag_by_id",
-      "Detach a tag from a party, opportunity, or project (kase). Atomic — one PUT to Capsule. Reversible — no `confirm: true` gate (re-attach with add_tag using the same tag name). The `tagId` parameter is the tag's id, readable via get_party/get_opportunity/get_project with embed='tags' (list_tags returns the same ids and also works, but reading via embed first confirms the tag is actually attached to this entity). The tag definition itself remains in the tenant for other entities that still share it. Idempotent on retry: response is `{removed: true, alreadyRemoved: false, entity, entityId, tagId, ...<updated entity>}` on a fresh detach or `{removed: true, alreadyRemoved: true, entity, entityId, tagId}` if the tag was already detached (Capsule's 422 'tag not found to delete' is caught and converted).",
+      "Detach a tag from a party, opportunity, or project. Atomic — one PUT to Capsule. Reversible — no `confirm: true` gate (re-attach with add_tag using the same tag name). The `tagId` parameter is the tag's id, readable via get_party/get_opportunity/get_project with embed='tags' (list_tags returns the same ids and also works, but reading via embed first confirms the tag is actually attached to this entity). The tag definition itself remains in the tenant for other entities that still share it. Idempotent on retry: response is `{removed: true, alreadyRemoved: false, entity, entityId, tagId, ...<updated entity>}` on a fresh detach or `{removed: true, alreadyRemoved: true, entity, entityId, tagId}` if the tag was already detached (Capsule's 422 'tag not found to delete' is caught and converted).",
       removeTagByIdSchema,
       removeTagById,
     );

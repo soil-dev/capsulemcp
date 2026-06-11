@@ -1,14 +1,14 @@
 /**
  * Tool-catalog tiering (`CAPSULE_MCP_TIER`).
  *
- * The full 88-tool catalog serializes to ~155 KB of `tools/list` JSON —
+ * The full 89-tool catalog serializes to ~155 KB of `tools/list` JSON —
  * the single biggest non-conversational token cost an MCP client pays
  * per session (roughly 35–40k tokens for clients that inject the
  * catalog into context). Most conversations touch a small core:
  * search/filter/get/create/update across the four resources, notes,
  * and tags.
  *
- * `CAPSULE_MCP_TIER=core` registers only that curated core (~25 tools,
+ * `CAPSULE_MCP_TIER=core` registers only that curated core (26 tools,
  * picked from production `tool.call` analytics — see OPTIMIZATIONS.md).
  * Any other value (or unset) keeps the full catalog, so existing
  * deployments are unaffected.

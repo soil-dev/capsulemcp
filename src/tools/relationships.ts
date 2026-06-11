@@ -159,7 +159,7 @@ export const listAssociatedProjectsSchema = z.object({
 
 export async function listAssociatedProjects(input: z.infer<typeof listAssociatedProjectsSchema>) {
   // Capsule's API uses /kases for projects.
-  return capsuleGetList<{ kases: unknown[] }>(`/opportunities/${input.opportunityId}/kases`, {
+  return capsuleGetList<{ projects: unknown[] }>(`/opportunities/${input.opportunityId}/kases`, {
     embed: input.embed,
     page: input.page,
     perPage: input.perPage,

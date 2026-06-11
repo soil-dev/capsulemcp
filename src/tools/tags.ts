@@ -74,7 +74,7 @@ export async function listTags(input: z.infer<typeof listTagsSchema>) {
 
 export const addTagSchema = z.object({
   entity: TagEntity,
-  entityId: positiveId.describe("The party/opportunity/kase id."),
+  entityId: positiveId.describe("The party/opportunity/project id."),
   tagName: z
     .string()
     .min(1)
@@ -100,7 +100,7 @@ export async function addTag(input: z.infer<typeof addTagSchema>) {
 
 export const removeTagByIdSchema = z.object({
   entity: TagEntity,
-  entityId: positiveId.describe("The party/opportunity/kase id."),
+  entityId: positiveId.describe("The party/opportunity/project id."),
   tagId: positiveId.describe(
     "The tag's id. Read via get_party / get_opportunity / get_project with embed='tags' — each tag entry in the response has an `id` field. list_tags returns the same ids for the same tags, so either source works; reading via embed first is the safer pattern because it confirms the tag is actually attached to this entity before you try to remove it (otherwise Capsule returns 422 'tag not found to delete'). Removing detaches the tag from this entity only; the tag definition itself persists in the tenant for other entities that share it.",
   ),

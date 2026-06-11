@@ -42,7 +42,7 @@ export const getCustomFieldSchema = z.object({
 
 export async function getCustomField(input: z.infer<typeof getCustomFieldSchema>) {
   const { data } = await capsuleGetCached<{ definition: unknown }>(
-    `/${input.entity}/fields/definitions/${input.id}`,
+    `/${ENTITY_PATH[input.entity]}/fields/definitions/${input.id}`,
   );
   return data;
 }
