@@ -37,12 +37,12 @@ export async function listCustomFields(input: z.infer<typeof listCustomFieldsSch
 
 export const getCustomFieldSchema = z.object({
   entity: CustomFieldEntity,
-  fieldId: positiveId.describe("Custom field definition id."),
+  id: positiveId.describe("Custom field definition id."),
 });
 
 export async function getCustomField(input: z.infer<typeof getCustomFieldSchema>) {
   const { data } = await capsuleGetCached<{ definition: unknown }>(
-    `/${input.entity}/fields/definitions/${input.fieldId}`,
+    `/${input.entity}/fields/definitions/${input.id}`,
   );
   return data;
 }

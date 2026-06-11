@@ -11,7 +11,7 @@ const EXPECTED =
   "confirm: true is required to perform this destructive operation (set the parameter explicitly to acknowledge the destructive intent)";
 
 // Each gated schema gets a minimal base input that's valid except for
-// the `confirm` field. The shape varies (id vs trackId vs entity-tuple)
+// the `confirm` field. The shape varies (id vs entity-tuple)
 // so each row supplies its own.
 const cases: {
   name: string;
@@ -28,7 +28,7 @@ const cases: {
   { name: "delete_project", schema: deleteProjectSchema, base: { id: 1 } },
   { name: "delete_task", schema: deleteTaskSchema, base: { id: 1 } },
   { name: "delete_entry", schema: deleteEntrySchema, base: { id: 1 } },
-  { name: "remove_track", schema: removeTrackSchema, base: { trackId: 1 } },
+  { name: "remove_track", schema: removeTrackSchema, base: { id: 1 } },
   {
     name: "remove_additional_party",
     schema: removeAdditionalPartySchema,

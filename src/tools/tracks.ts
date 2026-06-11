@@ -11,14 +11,14 @@ import { capsuleDelete, capsuleGet, capsulePost, capsulePut } from "../capsule/c
 // Lifecycle:
 //   list_entity_tracks(entity, entityId)
 //     GET /<entity>/{id}/tracks — instances on a specific record
-//   show_track(trackId)
+//   get_track(id)
 //     GET /tracks/{id}
 //   apply_track(entity, entityId, trackDefinitionId, startDate?)
 //     POST /tracks — create a new instance, auto-creating the
 //     trackDefinition's task definitions on the target entity
-//   update_track(trackId, body)
+//   update_track(id, body)
 //     PUT /tracks/{id} — passthrough; usable to e.g. mark complete
-//   remove_track(trackId, confirm)
+//   remove_track(id, confirm)
 //     DELETE /tracks/{id} — remove the instance; Capsule also deletes
 //     the auto-tasks the track created when it was applied
 //
@@ -47,12 +47,12 @@ export async function listEntityTracks(input: z.infer<typeof listEntityTracksSch
 
 // ── Show one track instance ─────────────────────────────────────────────────
 
-export const showTrackSchema = z.object({
-  trackId: positiveId,
+export const getTrackSchema = z.object({
+  id: positiveId,
 });
 
-export async function showTrack(input: z.infer<typeof showTrackSchema>) {
-  const { data } = await capsuleGet<{ track: unknown }>(`/tracks/${input.trackId}`);
+export async function getTrack(input: z.infer<typeof getTrackSchema>) {
+  const { data } = await capsuleGet<{ track: unknown }>(`/tracks/${input.id}`);
   return data;
 }
 
@@ -99,7 +99,7 @@ export async function applyTrack(input: z.infer<typeof applyTrackSchema>) {
 // ── Update a track instance ─────────────────────────────────────────────────
 
 export const updateTrackSchema = z.object({
-  trackId: positiveId,
+  id: positiveId,
   fields: z
     // zod 4: z.record requires an explicit key schema (was implicit
     // string in zod 3). Capsule field names are strings.
@@ -113,7 +113,7 @@ export async function updateTrack(input: z.infer<typeof updateTrackSchema>) {
   if (Object.keys(input.fields).length === 0) {
     throw new Error("update_track: provide at least one field in `fields`");
   }
-  return capsulePut<{ track: unknown }>(`/tracks/${input.trackId}`, {
+  return capsulePut<{ track: unknown }>(`/tracks/${input.id}`, {
     track: input.fields,
   });
 }
@@ -121,7 +121,7 @@ export async function updateTrack(input: z.infer<typeof updateTrackSchema>) {
 // ── Remove a track instance ─────────────────────────────────────────────────
 
 export const removeTrackSchema = z.object({
-  trackId: positiveId,
+  id: positiveId,
   confirm: confirmFlag().describe(
     "Must be set to true. Removes the track instance from its entity. **Capsule also deletes the auto-tasks the track created when it was applied** — they go with the track and become unreachable (404 on GET /tasks/{id}, gone from list_tasks on the parent entity). If you need any of those tasks to outlive the track, copy their content into fresh tasks (or use the web UI) before calling remove_track.",
   ),
@@ -132,8 +132,8 @@ export async function removeTrack(input: z.infer<typeof removeTrackSchema>) {
     throw new Error("remove_track requires confirm: true");
   }
   return idempotent(
-    () => capsuleDelete(`/tracks/${input.trackId}`),
-    () => ({ removed: true, alreadyRemoved: false, trackId: input.trackId }),
-    () => ({ removed: true, alreadyRemoved: true, trackId: input.trackId }),
+    () => capsuleDelete(`/tracks/${input.id}`),
+    () => ({ removed: true, alreadyRemoved: false, id: input.id }),
+    () => ({ removed: true, alreadyRemoved: true, id: input.id }),
   );
 }

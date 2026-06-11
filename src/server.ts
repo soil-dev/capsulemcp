@@ -61,6 +61,8 @@ import {
 } from "./tools/opportunities.js";
 
 import {
+  searchProjectsSchema,
+  searchProjects,
   listProjectsSchema,
   listProjects,
   getProjectSchema,
@@ -189,8 +191,8 @@ import {
 import {
   listEntityTracksSchema,
   listEntityTracks,
-  showTrackSchema,
-  showTrack,
+  getTrackSchema,
+  getTrack,
   applyTrackSchema,
   applyTrack,
   updateTrackSchema,
@@ -401,7 +403,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
     registerTool(
       server,
       "delete_party",
-      "DESTRUCTIVE & IRREVERSIBLE: permanently delete a party (person or organisation). Cascades to all linked notes, tasks, opportunities, AND projects. Deleting an organisation does NOT delete people linked to it via organisationId — their `organisation` field is silently cleared to null and they survive as standalone records. TRACK INSTANCES applied to cascaded opportunities/projects are NOT cleaned up either — they survive as orphan records reachable only by track id via show_track. Use remove_track on each track explicitly before deleting the parent party if orphan accumulation matters (rare in practice — orphans are unreachable from normal navigation). Requires confirm=true. Always read the party first with get_party and confirm with the user before calling. Idempotent on retry: response is `{deleted: true, alreadyDeleted: false, id}` on a fresh delete or `{deleted: true, alreadyDeleted: true, id}` if the party was already gone (Capsule's 404 is caught internally so reconciliation loops can re-issue safely).",
+      "DESTRUCTIVE & IRREVERSIBLE: permanently delete a party (person or organisation). Cascades to all linked notes, tasks, opportunities, AND projects. Deleting an organisation does NOT delete people linked to it via organisationId — their `organisation` field is silently cleared to null and they survive as standalone records. TRACK INSTANCES applied to cascaded opportunities/projects are NOT cleaned up either — they survive as orphan records reachable only by track id via get_track. Use remove_track on each track explicitly before deleting the parent party if orphan accumulation matters (rare in practice — orphans are unreachable from normal navigation). Requires confirm=true. Always read the party first with get_party and confirm with the user before calling. Idempotent on retry: response is `{deleted: true, alreadyDeleted: false, id}` on a fresh delete or `{deleted: true, alreadyDeleted: true, id}` if the party was already gone (Capsule's 404 is caught internally so reconciliation loops can re-issue safely).",
       deletePartySchema,
       deleteParty,
     );
@@ -568,8 +570,16 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
 
   registerTool(
     server,
+    "search_projects",
+    "Free-text search projects in Capsule CRM (matches name and description). Returns results in Capsule's default order (no sort parameter is supported here). Omit `q` to list all projects. For structured queries — 'most recent project', 'projects opened this month', 'projects tagged X' — use filter_projects instead.",
+    searchProjectsSchema,
+    searchProjects,
+  );
+
+  registerTool(
+    server,
     "list_projects",
-    "List projects (cases) in Capsule CRM, optionally filtered by status. Returns results in Capsule's default order (no sort parameter is supported here). For structured queries — 'most recent project', 'projects opened this month', 'projects tagged X' — use filter_projects instead.",
+    "List projects (cases) in Capsule CRM, optionally filtered by status. Returns results in Capsule's default order (no sort parameter is supported here). For free-text matching use search_projects; for structured queries — 'most recent project', 'projects opened this month', 'projects tagged X' — use filter_projects instead.",
     listProjectsSchema,
     listProjects,
   );
@@ -995,7 +1005,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
 
   registerTool(
     server,
-    "list_lostreasons",
+    "list_lost_reasons",
     "List all configured opportunity-loss reasons (e.g. 'Poor Qualification', 'Lost to competitor', 'Price too high'). Returns each reason's id and name; the set is account-configured rather than a fixed enum, so call this to discover valid ids before referencing a lostReason in update_opportunity when closing a deal as lost. Useful for analysing closed-lost opportunities by reason.",
     listLostReasonsSchema,
     listLostReasons,
@@ -1003,7 +1013,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
 
   registerTool(
     server,
-    "list_activitytypes",
+    "list_activity_types",
     "List all configured activity types (e.g. Call, Meeting, Email). These are the categories used when logging timeline entries via add_note. Returns each type's id and name. The set is account-configured rather than a fixed enum, so call this to discover valid values before referencing an activityType in entry creation.",
     listActivityTypesSchema,
     listActivityTypes,
@@ -1035,10 +1045,10 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
 
   registerTool(
     server,
-    "show_track",
+    "get_track",
     "Fetch a single track instance by id. Returns the minimal Capsule projection: id, description, trackDateOn, direction, and the array of tasks attached to the track. Capsule's GET /tracks/{id} does NOT include a trackDefinition link, an entity reference, or a completion field — to find the entity a track is applied to, use list_entity_tracks (which lists track instances by their parent entity); to check completion, the track-tasks' own statuses are the proxy.",
-    showTrackSchema,
-    showTrack,
+    getTrackSchema,
+    getTrack,
   );
 
   registerTool(

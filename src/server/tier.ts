@@ -33,6 +33,7 @@ const CORE_TOOLS: ReadonlySet<string> = new Set([
   "create_opportunity",
   "update_opportunity",
   // Projects
+  "search_projects",
   "filter_projects",
   "list_projects",
   "get_project",

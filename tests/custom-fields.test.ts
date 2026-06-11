@@ -38,7 +38,7 @@ describe("getCustomField", () => {
     const { getCustomField } = await import("../src/tools/custom-fields.js");
     const result = await getCustomField({
       entity: "parties",
-      fieldId: 999,
+      id: 999,
     });
     const [url] = vi.mocked(fetch).mock.calls[0]!;
     expect(url).toContain("/parties/fields/definitions/999");

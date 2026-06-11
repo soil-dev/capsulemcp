@@ -1,7 +1,7 @@
 /**
  * Tests for MCP tool annotations inference.
  *
- * Annotations are name-inferred at registration time so all 88 tools
+ * Annotations are name-inferred at registration time so all 89 tools
  * get accurate hints without per-call-site annotation declarations.
  * These tests pin three contracts:
  *
@@ -19,7 +19,7 @@
  *      implicit-true even when `readOnlyHint: true` is also set, so
  *      we make every hint explicit and never rely on spec defaults.
  *
- *   3. Aggregate counts match the catalog: 49 read-only-and-not-
+ *   3. Aggregate counts match the catalog: 50 read-only-and-not-
  *      destructive, 8 not-read-and-destructive, 31 not-read-and-not-
  *      destructive (creates / updates / additive writes). Drift in
  *      any direction means a new tool is going to surprise users
@@ -42,7 +42,7 @@ describe("inferAnnotations (pure helper)", () => {
       "get_party",
       "get_attachment",
       "list_users",
-      "show_track",
+      "get_track",
       "run_saved_filter",
     ]) {
       // Explicit destructiveHint: false — see the helper's doc-comment
@@ -154,7 +154,7 @@ describe("tools/list response carries inferred annotations", () => {
       "list_users",
       "search_parties",
       "filter_opportunities",
-      "show_track",
+      "get_track",
       "run_saved_filter",
       "get_attachment", // manually wired via raw server.tool — must match.
     ]) {
@@ -206,7 +206,7 @@ describe("tools/list response carries inferred annotations", () => {
 
     // Aggregate counts — the catalogue invariants we want CI to defend.
     // Three mutually-exclusive buckets:
-    //   - readOnly+nondestructive (reads): 49
+    //   - readOnly+nondestructive (reads): 50
     //   - notRead+destructive (delete_*, remove_track, remove_additional_party): 8
     //   - notRead+notDestructive (creates/updates/additive writes): 31
     let readOnly = 0;
@@ -221,10 +221,10 @@ describe("tools/list response carries inferred annotations", () => {
       // The fourth combo (readOnly + destructive) is nonsensical;
       // any tool landing there means inferAnnotations regressed.
     }
-    expect(readOnly).toBe(49);
+    expect(readOnly).toBe(50);
     expect(destructive).toBe(8);
     expect(routineWrite).toBe(31);
     expect(readOnly + destructive + routineWrite).toBe(result.tools.length);
-    expect(result.tools.length).toBe(88);
+    expect(result.tools.length).toBe(89);
   });
 });

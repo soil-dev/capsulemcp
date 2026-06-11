@@ -63,7 +63,7 @@ describe("tools/list", () => {
 
     // README advertises the exact catalogue size; keep it locked here
     // so docs drift is caught before release.
-    expect(tools.length).toBe(88);
+    expect(tools.length).toBe(89);
 
     // Reads we always expect
     for (const r of [
@@ -117,8 +117,8 @@ describe("tools/list", () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name);
 
-    // README advertises 49 tools in read-only mode.
-    expect(tools.length).toBe(49);
+    // README advertises 50 tools in read-only mode.
+    expect(tools.length).toBe(50);
 
     // No write tools should appear
     const writePrefixes = [

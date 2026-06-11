@@ -42,14 +42,14 @@ describe("CAPSULE_MCP_TIER", () => {
 
   it("default (unset) registers the full catalog", async () => {
     const tools = await listTools({});
-    expect(tools.length).toBe(88);
+    expect(tools.length).toBe(89);
   });
 
   it("core tier registers only the curated core set", async () => {
     const tools = await listTools({ CAPSULE_MCP_TIER: "core" });
     const names = tools.map((t) => t.name);
-    // The 25-tool core (write mode).
-    expect(tools.length).toBe(25);
+    // The 26-tool core (write mode).
+    expect(tools.length).toBe(26);
     for (const core of ["search_parties", "create_party", "list_tasks", "add_note", "add_tag"]) {
       expect(names).toContain(core);
     }
@@ -65,15 +65,15 @@ describe("CAPSULE_MCP_TIER", () => {
     expect(names).toContain("search_parties");
     expect(names).not.toContain("create_party"); // readonly wins
     expect(names).not.toContain("list_boards"); // tier wins
-    // Core ∩ read-only = the 14 read tools in the core set (search/
+    // Core ∩ read-only = the 15 read tools in the core set (search/
     // filter/get/list across the four resources + list_tags +
     // get_current_user + list_party_entries).
-    expect(tools.length).toBe(14);
+    expect(tools.length).toBe(15);
   });
 
   it("an unknown tier value falls back to the full catalog", async () => {
     const tools = await listTools({ CAPSULE_MCP_TIER: "everything" });
-    expect(tools.length).toBe(88);
+    expect(tools.length).toBe(89);
   });
 });
 

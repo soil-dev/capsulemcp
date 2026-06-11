@@ -188,12 +188,12 @@ async function main() {
   }
 
   await updateTrack({
-    trackId: track.track.id,
+    id: track.track.id,
     fields: { complete: true },
   });
   dumpLastCall("updateTrack");
 
-  await removeTrack({ trackId: track.track.id, confirm: true });
+  await removeTrack({ id: track.track.id, confirm: true });
   dumpLastCall("removeTrack");
 
   await deleteProject({ id: proj.project.id, confirm: true });
