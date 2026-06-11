@@ -11,11 +11,18 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [2.0.1] — 2026-06-11
+
+Patch on v2.0.0, fixing the one v2 vocabulary translation that was
+missed (found by an independent Codex audit, verified against the live
+API: the broken path 404s, the fixed one returns 200).
+
 ### Fixed
 
 - `get_custom_field` now maps `entity: "projects"` to Capsule's project
-  custom-field endpoint, matching `list_custom_fields` and the rest of
-  the v2 entity vocabulary.
+  custom-field endpoint (`/kases/fields/definitions/:id`), matching
+  `list_custom_fields` and the rest of the v2 entity vocabulary. On
+  v2.0.0 it sent the unmapped path and 404'd.
 - Public tool descriptions, Glama metadata, and ops docs now reflect
   the v2 project vocabulary and 89-tool / 50-read-only catalog counts.
 
