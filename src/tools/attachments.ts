@@ -99,7 +99,7 @@ export const uploadAttachmentSchema = z.object({
     .min(1)
     .max(HARD_MAX_BASE64_CHARS)
     .describe(
-      "File contents, base64-encoded. Decoded server-side and uploaded as the request body. Maximum 25 MB per attachment (Capsule's documented limit); the connector rejects oversized base64 before uploading. The inbound HTTP body limit is ~35 MB which leaves room for the base64 expansion of a 25 MB binary.",
+      "File contents, base64-encoded. Decoded server-side and uploaded as the request body. PRACTICAL LIMIT: the base64 must be produced inline as tool-call output, so uploads driven by an LLM are only viable for small files (a few tens of KB) — a 500 KB file is ~660K characters, far beyond a chat model's output budget. Do not attempt to inline large files; tell the user the file is too large to route through the model. The 25 MB maximum (Capsule's documented limit) applies to programmatic MCP clients that construct the call directly; the connector rejects oversized base64 before uploading.",
     ),
   content: z
     .string()

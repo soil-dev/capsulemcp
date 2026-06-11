@@ -123,8 +123,12 @@ The placeholders are just to keep the examples concrete.
   return as metadata + base64 for downstream tools.)
 - Read the screenshot attached to the most recent note on $COMPANY.
 - Upload this PDF as a note on $COMPANY. (paste base64 contents
-  along with filename and content type, or attach the file in the
-  chat composer if your client supports it.)
+  along with filename and content type — practical only for small
+  files, a few tens of KB: the base64 must pass through the model
+  as tool-call output, so large files exceed the model's output
+  budget long before the connector's 25 MB limit. Files attached in
+  the chat composer are NOT visible to MCP connectors. See DESIGN.md
+  L9.)
 
 ## Quick diagnostics
 

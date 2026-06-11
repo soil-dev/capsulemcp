@@ -309,6 +309,19 @@ The HTTP transport's body limit is 35 MB by default
 (env-overridable via `MCP_HTTP_JSON_LIMIT`) so a 25 MB attachment
 fits with base64 expansion. Stdio has no body limit.
 
+The 25 MB ceiling is the *wire* limit, not what an LLM caller can
+practically send. `upload_attachment` takes the file inline as
+base64 in a tool argument, which means the bytes must transit the
+model as generated output: a ~500 KB PDF is ~660K base64 characters
+(roughly 165k tokens) — beyond any chat model's output budget and
+absurd in cost long before the wire limit matters. In practice,
+inline upload through a chat client tops out at a few tens of KB.
+The 25 MB cap is real only for *programmatic* MCP clients (n8n,
+scripts) that construct the tool call directly. Raising server-side
+limits cannot change this, and chunked upload wouldn't either (same
+tokens, more calls). The planned remedy is a URL-sourced upload —
+see IDEAS.md "URL-sourced attachment upload (`sourceUrl`)".
+
 `upload_attachment` always creates a new note carrying the
 attachment. Adding an attachment to an *existing* entry isn't
 implemented — `update_entry` doesn't accept an attachments
