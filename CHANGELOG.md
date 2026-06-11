@@ -11,6 +11,27 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Added
+
+- `CAPSULE_MCP_TIER=core` — opt-in tool-catalog tiering. Registers only
+  a curated ~25-tool core (search/filter/get/create/update across
+  parties, opportunities, projects, tasks, plus notes, tags, and
+  `get_current_user`) instead of the full 88-tool catalog. The full
+  catalog serializes to ~155 KB of `tools/list` JSON (~35–40k tokens
+  for clients that inject it into context) — the single biggest
+  non-conversational token cost this server imposes; the core tier cuts
+  it to a fraction. Default (unset, or any other value) is unchanged.
+  Composes orthogonally with `CAPSULE_MCP_READONLY`.
+
+### Changed
+
+- The five `batch_*` tools no longer duplicate their single-tool item
+  schema's nested `.describe()` text on the wire (~17 KB of pure
+  redundancy in `tools/list` — the single tool with the canonical
+  descriptions is always co-registered). Validation is byte-identical:
+  the description-stripped clone preserves all checks and refinements,
+  pinned by tests including a nested `superRefine`.
+
 ### Fixed
 
 - stdio transport now exits cleanly when the MCP client disconnects —

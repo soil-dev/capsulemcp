@@ -553,30 +553,69 @@ change; just the client emit helpers.
 
 ---
 
-## 5. Planned candidates *(not yet landed)*
+## 5. `tools/list` payload reduction *(landed)*
+
+### What
+
+Two reducers for the per-session token cost of the tool catalog:
+
+1. **Tool-catalog tiering** — `CAPSULE_MCP_TIER=core` registers only a
+   curated ~25-tool core (search/filter/get/create/update across
+   parties, opportunities, projects, tasks, plus notes, tags, and
+   `get_current_user`; see `src/server/tier.ts`). Default (unset, or
+   any other value) keeps the full catalog. Composes orthogonally with
+   `CAPSULE_MCP_READONLY` — the tier filters within whichever
+   read/write set is active.
+
+2. **Batch-schema description stripping** — the five `defineBatch`
+   tools embed their single-tool item schema wholesale, which
+   previously serialized every nested `.describe()` into `tools/list`
+   twice (the single tool is always co-registered and is the
+   canonical copy). `defineBatch` now registers a description-stripped
+   clone (`src/tools/strip-descriptions.ts`); validation is identical
+   because zod v4 keeps refinements in `def.checks`, which the strip
+   preserves.
+
+### Why
+
+The full 88-tool catalog measures **~155 KB** of `tools/list` JSON
+(measured against the built v1.8.0 server over stdio: 155,645 bytes —
+36.9 KB top-level descriptions, 104.6 KB inputSchema, of which 65 KB
+is schema-embedded `.describe()` text). For clients that inject the
+catalog into model context, that is roughly 35–40k tokens per session
+— the single biggest non-conversational token cost this server
+imposes. The earlier "~20 KB" estimate in this file was stale by ~8×.
+
+Stripping the batch-schema duplication saves ~17 KB on the full
+catalog with zero information loss; the core tier cuts the rest of
+the way down for deployments that opt in.
+
+### How to verify
+
+`tests/tier.test.ts` pins the tier counts (88 full / 25 core / 14
+core∩read-only), the strip's validation-equivalence (including a
+nested `superRefine` surviving), and a per-tool serialized-size
+ceiling on every batch schema.
+
+### Cost
+
+None at runtime — both are registration-time filters. The tier is
+opt-in; default behavior is unchanged.
+
+## 6. Planned candidates *(not yet landed)*
 
 Ranked by expected ROI. Each has a brief sketch; if/when one lands,
 move its row into a numbered section above with a real "what / why /
 result" write-up.
 
-### a. Tool-catalog tiering
+### a. Bundle minification *(evaluated, not adopting)*
 
-Reduce the per-conversation token cost of `tools/list`. Currently
-~20 KB of JSON descriptions ships to every client per session. A
-`CAPSULE_MCP_TIER=core` env would register only the 20 most-used
-tools (search/filter/get/create across the four resources, plus
-tags) and skip the long-tail. Default leaves all 86 registered for
-back-compat.
-
-**Expected impact**: halves the `tools/list` payload, which is the
-single biggest non-conversational token cost an MCP client pays.
-**Effort**: small. **Risk**: low — opt-in env, default unchanged.
-
-### b. Bundle minification
-
-`tsup --minify`. Drops `dist/index.js` from 122 → ~75 KB and
-`dist/http.js` from 147 → ~90 KB. Faster `npx capsulemcp` cold-start
-(smaller download + parse).
+`tsup --minify`. Current bundles are ~171 KB / ~199 KB; minification
+would roughly halve them, but the measured effect on `npx capsulemcp`
+cold-start is negligible (download is npm-registry-dominated, parse
+time for ~200 KB is sub-millisecond on Node 22) and it costs readable
+stack traces. Re-evaluate only if the bundles grow by an order of
+magnitude.
 
 **Trade-off**: production stack traces lose original symbol names.
 We'd reproduce locally with the un-minified build anyway, so this is
@@ -584,7 +623,7 @@ mostly fine. Worth pairing with a sourcemap upload step if we ever
 want production-readable traces (the npm tarball would carry the
 sourcemap; users wouldn't unless they opt to download it).
 
-### c. `min_instance_count=1` on production Cloud Run
+### b. `min_instance_count=1` on production Cloud Run
 
 Currently `min=0` → cold start ~1.5 s on first request after idle.
 Setting `min=1` keeps one warm instance. Costs roughly **$5/mo** at
@@ -594,7 +633,7 @@ flow currently pays after a quiet period.
 **One-line pulumi change.** Real user-visible improvement for
 hosted-connector users.
 
-### d. CI parallelism
+### c. CI parallelism
 
 CI runs ~25 s sequential (`typecheck` → `lint` → `format:check` →
 `test` → `build` → `audit`). Splitting into three parallel jobs
@@ -606,7 +645,7 @@ worth doing once the cache work has bedded in.
 
 ---
 
-## 4. Per-tool / per-endpoint analytics *(landed in v1.6.0-beta.3)*
+## 7. Per-tool / per-endpoint analytics *(landed in v1.6.0-beta.3)*
 
 ### What
 

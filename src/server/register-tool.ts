@@ -27,6 +27,7 @@ import type { CallToolResult, ToolAnnotations } from "@modelcontextprotocol/sdk/
 import type { z, ZodRawShape } from "zod";
 import type { BatchOpts } from "../capsule/batch.js";
 import { getRequestContext, logEvent } from "../log.js";
+import { shouldRegister } from "./tier.js";
 import { registerAbortController } from "../tasks/store.js";
 
 /**
@@ -176,6 +177,9 @@ export function registerTool<Schema extends z.ZodObject<ZodRawShape>>(
   schema: Schema,
   handler: (input: z.infer<Schema>) => Promise<unknown>,
 ): void {
+  // Tool-catalog tiering: skip registration when the configured tier
+  // excludes this tool (see src/server/tier.ts).
+  if (!shouldRegister(name)) return;
   // Use the SDK config-form registerTool with the full Zod schema. The
   // deprecated shape overload rebuilds z.object(schema.shape), which drops
   // object-level refinements such as superRefine.
@@ -240,6 +244,9 @@ export function registerToolTask<Schema extends z.ZodObject<ZodRawShape>>(
   schema: Schema,
   handler: (input: z.infer<Schema>, opts: BatchOpts) => Promise<unknown>,
 ): void {
+  // Tool-catalog tiering: skip registration when the configured tier
+  // excludes this tool (see src/server/tier.ts).
+  if (!shouldRegister(name)) return;
   // We reach into the experimental namespace; the SDK explicitly
   // labels these APIs as such ("WARNING: These APIs are experimental
   // and may change without notice"). Keeping the surface area we

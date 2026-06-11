@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { isReadOnly } from "./capsule/client.js";
 import { ICONS } from "./icon.js";
 import { registerTool, registerToolTask } from "./server/register-tool.js";
+import { shouldRegister } from "./server/tier.js";
 import { getTasksConfig } from "./tasks/config.js";
 import { createScopedTaskStore } from "./tasks/store.js";
 
@@ -801,110 +802,112 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
   // text → text content, binary → metadata + base64). The raw
   // server.tool call stays here so the content shape can vary.
 
-  server.tool(
-    "get_attachment",
-    "Download an attachment by id. Returns image content for image/* types (Claude can describe it natively); decoded text for text/* and application/json (small files); JSON metadata + base64 payload for other binary types (PDF, Office docs, etc.). Files exceeding maxSizeBytes (default 5MB) return metadata only with a `truncated: true` flag.",
-    getAttachmentSchema.shape,
-    // get_attachment is read-only — downloads a binary, never mutates.
-    // Mirrors the auto-inferred `{readOnlyHint: true, destructiveHint:
-    // false}` that `registerTool` applies to every other `get_*` tool.
-    // Explicit destructiveHint: false is load-bearing — MCP spec
-    // defaults destructiveHint to `true`, so omitting it would (in
-    // some client implementations) classify this read as destructive.
-    { readOnlyHint: true, destructiveHint: false },
-    async (input) => {
-      const result = await getAttachment(input);
+  if (shouldRegister("get_attachment")) {
+    server.tool(
+      "get_attachment",
+      "Download an attachment by id. Returns image content for image/* types (Claude can describe it natively); decoded text for text/* and application/json (small files); JSON metadata + base64 payload for other binary types (PDF, Office docs, etc.). Files exceeding maxSizeBytes (default 5MB) return metadata only with a `truncated: true` flag.",
+      getAttachmentSchema.shape,
+      // get_attachment is read-only — downloads a binary, never mutates.
+      // Mirrors the auto-inferred `{readOnlyHint: true, destructiveHint:
+      // false}` that `registerTool` applies to every other `get_*` tool.
+      // Explicit destructiveHint: false is load-bearing — MCP spec
+      // defaults destructiveHint to `true`, so omitting it would (in
+      // some client implementations) classify this read as destructive.
+      { readOnlyHint: true, destructiveHint: false },
+      async (input) => {
+        const result = await getAttachment(input);
 
-      // Truncated: return metadata only.
-      if (result.truncated) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(
-                {
-                  id: input.id,
-                  contentType: result.contentType,
-                  sizeBytes: result.sizeBytes,
-                  truncated: true,
-                  message: `File exceeds the size cap (${input.maxSizeBytes ?? "default"} bytes). Increase maxSizeBytes if you need the bytes; max is 25MB.`,
-                },
-                null,
-                2,
-              ),
-            },
-          ],
-        };
-      }
-
-      // Strip any Content-Type parameters (e.g. "; charset=UTF-8") before
-      // comparing — Capsule routinely returns "image/png; charset=UTF-8"
-      // and "application/json; charset=UTF-8". Without this, the
-      // application/json branch would miss the charset variant and the
-      // file would fall through to the binary base64 branch, which Claude
-      // can't read directly.
-      const baseType = result.contentType.split(";")[0]!.trim().toLowerCase();
-
-      // Image: return as MCP image content so Claude can see it.
-      if (baseType.startsWith("image/")) {
-        return {
-          content: [
-            {
-              type: "image",
-              data: result.buffer.toString("base64"),
-              mimeType: result.contentType,
-            },
-          ],
-        };
-      }
-
-      // Text-ish: decode as UTF-8 alongside metadata.
-      const isText =
-        baseType.startsWith("text/") ||
-        baseType === "application/json" ||
-        baseType === "application/xml";
-      if (isText) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(
-                {
-                  id: input.id,
-                  contentType: result.contentType,
-                  sizeBytes: result.sizeBytes,
-                },
-                null,
-                2,
-              ),
-            },
-            { type: "text", text: result.buffer.toString("utf8") },
-          ],
-        };
-      }
-
-      // Other binary (PDF, Office, archive): metadata + base64 payload
-      // for downstream tools (Claude itself can't read PDF bytes
-      // directly, but can pass the base64 to other tools).
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(
+        // Truncated: return metadata only.
+        if (result.truncated) {
+          return {
+            content: [
               {
-                id: input.id,
-                contentType: result.contentType,
-                sizeBytes: result.sizeBytes,
-                base64: result.buffer.toString("base64"),
+                type: "text",
+                text: JSON.stringify(
+                  {
+                    id: input.id,
+                    contentType: result.contentType,
+                    sizeBytes: result.sizeBytes,
+                    truncated: true,
+                    message: `File exceeds the size cap (${input.maxSizeBytes ?? "default"} bytes). Increase maxSizeBytes if you need the bytes; max is 25MB.`,
+                  },
+                  null,
+                  2,
+                ),
               },
-              null,
-              2,
-            ),
-          },
-        ],
-      };
-    },
-  );
+            ],
+          };
+        }
+
+        // Strip any Content-Type parameters (e.g. "; charset=UTF-8") before
+        // comparing — Capsule routinely returns "image/png; charset=UTF-8"
+        // and "application/json; charset=UTF-8". Without this, the
+        // application/json branch would miss the charset variant and the
+        // file would fall through to the binary base64 branch, which Claude
+        // can't read directly.
+        const baseType = result.contentType.split(";")[0]!.trim().toLowerCase();
+
+        // Image: return as MCP image content so Claude can see it.
+        if (baseType.startsWith("image/")) {
+          return {
+            content: [
+              {
+                type: "image",
+                data: result.buffer.toString("base64"),
+                mimeType: result.contentType,
+              },
+            ],
+          };
+        }
+
+        // Text-ish: decode as UTF-8 alongside metadata.
+        const isText =
+          baseType.startsWith("text/") ||
+          baseType === "application/json" ||
+          baseType === "application/xml";
+        if (isText) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(
+                  {
+                    id: input.id,
+                    contentType: result.contentType,
+                    sizeBytes: result.sizeBytes,
+                  },
+                  null,
+                  2,
+                ),
+              },
+              { type: "text", text: result.buffer.toString("utf8") },
+            ],
+          };
+        }
+
+        // Other binary (PDF, Office, archive): metadata + base64 payload
+        // for downstream tools (Claude itself can't read PDF bytes
+        // directly, but can pass the base64 to other tools).
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                {
+                  id: input.id,
+                  contentType: result.contentType,
+                  sizeBytes: result.sizeBytes,
+                  base64: result.buffer.toString("base64"),
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      },
+    );
+  }
 
   if (!readOnly) {
     registerTool(
