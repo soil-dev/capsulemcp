@@ -11,6 +11,11 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [2.1.0] — 2026-06-11
+
+Minor release: one additive field, wire-verified end-to-end (and the
+full pre-release wire-trace suite re-run against the live API).
+
 ### Added
 
 - `create_project` and `update_project` now expose `startOn` (project
