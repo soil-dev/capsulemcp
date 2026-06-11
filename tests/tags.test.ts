@@ -16,7 +16,7 @@ describe("listTags", () => {
   it.each([
     ["parties", "/parties/tags"],
     ["opportunities", "/opportunities/tags"],
-    ["kases", "/kases/tags"],
+    ["projects", "/kases/tags"],
   ] as const)("calls the correct endpoint for %s", async (entity, expectedPath) => {
     mockFetch(200, { tags: [{ id: 1, name: "VIP" }] });
 
@@ -35,7 +35,7 @@ describe("addTag — atomic attach by name", () => {
   it.each([
     ["parties", "party", "/parties/284083000"],
     ["opportunities", "opportunity", "/opportunities/19897000"],
-    ["kases", "kase", "/kases/5828000"],
+    ["projects", "kase", "/kases/5828000"],
   ] as const)("PUTs to /%s/{id} with the correct wrapper key and {name}-only tag item", async (entity, wrapper, expectedPath) => {
     mockFetch(200, { [wrapper]: { id: 1 } });
     const { addTag } = await import("../src/tools/tags.js");
@@ -60,15 +60,18 @@ describe("addTag — atomic attach by name", () => {
     );
   });
 
-  it("rejects unknown entity at the schema layer", async () => {
+  it("rejects Capsule's legacy 'kases' entity value at the schema layer (v2: say 'projects')", async () => {
     const { addTagSchema } = await import("../src/tools/tags.js");
     expect(
       addTagSchema.safeParse({
-        entity: "projects" as never, // we say 'kases', not 'projects'
+        entity: "kases" as never, // v2 surface says 'projects'; 'kases' is wire-internal
         entityId: 1,
         tagName: "X",
       }).success,
     ).toBe(false);
+    expect(addTagSchema.safeParse({ entity: "projects", entityId: 1, tagName: "X" }).success).toBe(
+      true,
+    );
   });
 });
 
@@ -101,7 +104,7 @@ describe("removeTagById — atomic detach by per-entity link id", () => {
   it.each([
     ["parties", "party", "/parties/284083000"],
     ["opportunities", "opportunity", "/opportunities/19897000"],
-    ["kases", "kase", "/kases/5828000"],
+    ["projects", "kase", "/kases/5828000"],
   ] as const)("PUTs {id, _delete:true} on /%s/{id}", async (entity, wrapper, expectedPath) => {
     mockFetch(200, { [wrapper]: { id: 1 } });
     const { removeTagById } = await import("../src/tools/tags.js");
@@ -123,7 +126,7 @@ describe("deleteTagDefinition — tenant-wide definition delete (DESTRUCTIVE)", 
   it.each([
     ["parties", "/parties/tags/42"],
     ["opportunities", "/opportunities/tags/42"],
-    ["kases", "/kases/tags/42"],
+    ["projects", "/kases/tags/42"],
   ] as const)("DELETEs /%s/tags/{id} when confirm=true", async (entity, expectedPath) => {
     mockFetch(204, {});
     const { deleteTagDefinition } = await import("../src/tools/tags.js");

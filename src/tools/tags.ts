@@ -2,7 +2,7 @@
  * Tag operations.
  *
  * Read: `list_tags(entity)` returns the tenant-global tag dictionary
- * scoped to a resource type (parties / opportunities / kases).
+ * scoped to a resource type (parties / opportunities / projects).
  *
  * Writes (alpha.10+): atomic add/remove on a specific entity, mirroring
  * the per-row pattern used by the email/phone/address/website tools in
@@ -32,7 +32,7 @@
 import { z } from "zod";
 import { confirmFlag } from "./confirm-flag.js";
 import { defineBatch } from "./define-batch.js";
-import { positiveId, paginationFieldsNoDefaults } from "./shared-schemas.js";
+import { ENTITY_PATH, positiveId, paginationFieldsNoDefaults } from "./shared-schemas.js";
 import { capsuleDelete, capsuleGetCachedList, capsulePut } from "../capsule/client.js";
 import { invalidateByPrefix } from "../capsule/cache.js";
 import { idempotent, idempotentWithResult, isCapsuleTagNotFound } from "../capsule/idempotent.js";
@@ -40,26 +40,24 @@ import { idempotent, idempotentWithResult, isCapsuleTagNotFound } from "../capsu
 const TAG_LIST_PATH = {
   parties: "/parties/tags",
   opportunities: "/opportunities/tags",
-  kases: "/kases/tags",
+  projects: "/kases/tags",
 } as const;
 
-// Capsule's path component is `parties` / `opportunities` / `kases`;
-// the body wrapper key is `party` / `opportunity` / `kase`.
+// Caller-facing entity -> Capsule body wrapper key. Capsule's wire
+// vocabulary for projects stays `kase`; the caller never sees it.
 const ENTITY_TO_WRAPPER = {
   parties: "party",
   opportunities: "opportunity",
-  kases: "kase",
+  projects: "kase",
 } as const;
 
-const TagEntity = z
-  .enum(["parties", "opportunities", "kases"])
-  .describe("Which entity type. Use 'kases' for projects (Capsule's legacy path name).");
+const TagEntity = z.enum(["parties", "opportunities", "projects"]).describe("Which entity type.");
 
 // ── list_tags (read) ──────────────────────────────────────────────────────
 
 export const listTagsSchema = z.object({
   entity: z
-    .enum(["parties", "opportunities", "kases"])
+    .enum(["parties", "opportunities", "projects"])
     .describe("The resource type to list tags for"),
   ...paginationFieldsNoDefaults,
 });
@@ -88,7 +86,7 @@ export const addTagSchema = z.object({
 export async function addTag(input: z.infer<typeof addTagSchema>) {
   const { entity, entityId, tagName } = input;
   const wrapper = ENTITY_TO_WRAPPER[entity];
-  const result = await capsulePut<Record<string, unknown>>(`/${entity}/${entityId}`, {
+  const result = await capsulePut<Record<string, unknown>>(`/${ENTITY_PATH[entity]}/${entityId}`, {
     [wrapper]: { tags: [{ name: tagName }] },
   });
   // A net-new tag created by this call would otherwise stay invisible
@@ -113,7 +111,7 @@ export async function removeTagById(input: z.infer<typeof removeTagByIdSchema>) 
   const wrapper = ENTITY_TO_WRAPPER[entity];
   const result = await idempotentWithResult(
     () =>
-      capsulePut<Record<string, unknown>>(`/${entity}/${entityId}`, {
+      capsulePut<Record<string, unknown>>(`/${ENTITY_PATH[entity]}/${entityId}`, {
         [wrapper]: { tags: [{ id: tagId, _delete: true }] },
       }),
     (result) => ({
@@ -172,7 +170,7 @@ export async function deleteTagDefinition(input: z.infer<typeof deleteTagDefinit
     throw new Error("delete_tag_definition requires confirm: true");
   }
   const result = await idempotent(
-    () => capsuleDelete(`/${entity}/tags/${tagId}`),
+    () => capsuleDelete(`/${ENTITY_PATH[entity]}/tags/${tagId}`),
     () => ({ deleted: true as const, alreadyDeleted: false, entity, tagId }),
     () => ({ deleted: true as const, alreadyDeleted: true, entity, tagId }),
   );

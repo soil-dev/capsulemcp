@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { positiveId, paginationFields } from "./shared-schemas.js";
+import { ENTITY_PATH, positiveId, paginationFields } from "./shared-schemas.js";
 import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
 import { capsuleGetCached, capsuleGetList } from "../capsule/client.js";
 
@@ -16,14 +16,12 @@ import { capsuleGetCached, capsuleGetList } from "../capsule/client.js";
 //                                         conditions, columns, orderBy)
 //   GET /<entity>/filters/{id}/results — run the filter, paginated
 //
-// Entity is one of: parties, opportunities, kases (Capsule's name for
-// projects).
+// Entity is one of: parties, opportunities, projects (mapped to
+// Capsule's legacy `kases` path component internally).
 
 const EntitySchema = z
-  .enum(["parties", "opportunities", "kases"])
-  .describe(
-    "Which entity type the filter operates over. Use 'kases' for projects (Capsule's legacy name).",
-  );
+  .enum(["parties", "opportunities", "projects"])
+  .describe("Which entity type the filter operates over.");
 
 // ── List saved filters ──────────────────────────────────────────────────────
 
@@ -32,7 +30,9 @@ export const listSavedFiltersSchema = z.object({
 });
 
 export async function listSavedFilters(input: z.infer<typeof listSavedFiltersSchema>) {
-  const { data } = await capsuleGetCached<{ filters: unknown[] }>(`/${input.entity}/filters`);
+  const { data } = await capsuleGetCached<{ filters: unknown[] }>(
+    `/${ENTITY_PATH[input.entity]}/filters`,
+  );
   return data;
 }
 
@@ -46,9 +46,12 @@ export const runSavedFilterSchema = z.object({
 });
 
 export async function runSavedFilter(input: z.infer<typeof runSavedFilterSchema>) {
-  return capsuleGetList<Record<string, unknown>>(`/${input.entity}/filters/${input.id}/results`, {
-    page: input.page,
-    perPage: input.perPage,
-    embed: input.embed,
-  });
+  return capsuleGetList<Record<string, unknown>>(
+    `/${ENTITY_PATH[input.entity]}/filters/${input.id}/results`,
+    {
+      page: input.page,
+      perPage: input.perPage,
+      embed: input.embed,
+    },
+  );
 }

@@ -1,9 +1,9 @@
 import { z } from "zod";
-import { positiveId } from "./shared-schemas.js";
+import { ENTITY_PATH, positiveId } from "./shared-schemas.js";
 import { capsuleGetCached } from "../capsule/client.js";
 
 // Custom field SCHEMA endpoints (read-only here). Each entity type
-// (parties, opportunities, kases) has its own custom-field namespace.
+// (parties, opportunities, projects) has its own custom-field namespace.
 //
 //   GET /<entity>/fields/definitions        — list all field definitions
 //   GET /<entity>/fields/definitions/{id}   — show one definition
@@ -17,8 +17,8 @@ import { capsuleGetCached } from "../capsule/client.js";
 // best done in Capsule's web UI; not exposed.
 
 const CustomFieldEntity = z
-  .enum(["parties", "opportunities", "kases"])
-  .describe("Which entity type's custom field schema to inspect. Use 'kases' for projects.");
+  .enum(["parties", "opportunities", "projects"])
+  .describe("Which entity type's custom field schema to inspect.");
 
 // ── List custom field definitions ───────────────────────────────────────────
 
@@ -28,7 +28,7 @@ export const listCustomFieldsSchema = z.object({
 
 export async function listCustomFields(input: z.infer<typeof listCustomFieldsSchema>) {
   const { data } = await capsuleGetCached<{ definitions: unknown[] }>(
-    `/${input.entity}/fields/definitions`,
+    `/${ENTITY_PATH[input.entity]}/fields/definitions`,
   );
   return data;
 }

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { positiveId, paginationFields } from "./shared-schemas.js";
+import { ENTITY_PATH, positiveId, paginationFields } from "./shared-schemas.js";
 import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
 import { confirmFlag } from "./confirm-flag.js";
 import {
@@ -27,12 +27,12 @@ import { idempotent } from "../capsule/idempotent.js";
 //     opportunity. Inverse direction (projects → opportunities) is
 //     covered by the project's `opportunity` field.
 //
-// `entity` for additional parties is "opportunities" or "kases" only.
+// `entity` for additional parties is "opportunities" or "projects" only.
 // (Capsule's API uses /kases for projects.)
 
 const RelationshipEntity = z
-  .enum(["opportunities", "kases"])
-  .describe("Which entity has the additional-party links. Use 'kases' for projects.");
+  .enum(["opportunities", "projects"])
+  .describe("Which entity has the additional-party links.");
 
 // ── List additional parties ─────────────────────────────────────────────────
 
@@ -44,11 +44,14 @@ export const listAdditionalPartiesSchema = z.object({
 });
 
 export async function listAdditionalParties(input: z.infer<typeof listAdditionalPartiesSchema>) {
-  return capsuleGetList<{ parties: unknown[] }>(`/${input.entity}/${input.entityId}/parties`, {
-    embed: input.embed,
-    page: input.page,
-    perPage: input.perPage,
-  });
+  return capsuleGetList<{ parties: unknown[] }>(
+    `/${ENTITY_PATH[input.entity]}/${input.entityId}/parties`,
+    {
+      embed: input.embed,
+      page: input.page,
+      perPage: input.perPage,
+    },
+  );
 }
 
 // ── Add additional party ────────────────────────────────────────────────────
@@ -77,7 +80,9 @@ export async function addAdditionalParty(input: z.infer<typeof addAdditionalPart
   // MAIN party on the entity, not an additional). Different error
   // message, same end-state ("link exists, no-op").
   try {
-    await capsulePostNoContent(`/${input.entity}/${input.entityId}/parties/${input.partyId}`);
+    await capsulePostNoContent(
+      `/${ENTITY_PATH[input.entity]}/${input.entityId}/parties/${input.partyId}`,
+    );
     return {
       linked: true,
       alreadyLinked: false,
@@ -121,7 +126,7 @@ export async function removeAdditionalParty(input: z.infer<typeof removeAddition
   // isn't linked to this entity" — both are observationally "the link
   // doesn't exist", treat both as already-removed.
   return idempotent(
-    () => capsuleDelete(`/${input.entity}/${input.entityId}/parties/${input.partyId}`),
+    () => capsuleDelete(`/${ENTITY_PATH[input.entity]}/${input.entityId}/parties/${input.partyId}`),
     () => ({
       removed: true,
       alreadyRemoved: false,

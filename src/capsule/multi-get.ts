@@ -22,7 +22,7 @@ const MULTI_GET_MAX_IDS = 10;
 
 /**
  * @param base         path prefix without trailing slash, e.g. `/parties`, `/kases`
- * @param responseKey  the array key in Capsule's response, e.g. `parties`, `kases`
+ * @param responseKey  the array key in the (normalized) response, e.g. `parties`, `projects`
  * @param ids          entity ids (the caller's schema caps the count, typically ≤50)
  * @param params       optional query params forwarded verbatim (e.g. `{ embed }`);
  *                     `undefined` values are dropped by the URL builder, matching

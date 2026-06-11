@@ -17,7 +17,7 @@ describe("listEntityTracks", () => {
   it("GETs /<entity>/{id}/tracks", async () => {
     mockFetch(200, { tracks: [{ id: 1 }] });
     const { listEntityTracks } = await import("../src/tools/tracks.js");
-    await listEntityTracks({ entity: "kases", entityId: 99 });
+    await listEntityTracks({ entity: "projects", entityId: 99 });
     const [url] = vi.mocked(fetch).mock.calls[0]!;
     expect(url).toContain("/kases/99/tracks");
   });
@@ -38,7 +38,7 @@ describe("applyTrack", () => {
     mockFetch(200, { track: { id: 1 } });
     const { applyTrack } = await import("../src/tools/tracks.js");
     await applyTrack({
-      entity: "kases",
+      entity: "projects",
       entityId: 99,
       trackDefinitionId: 147602,
     });

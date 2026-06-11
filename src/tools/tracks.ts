@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { positiveId } from "./shared-schemas.js";
+import { ENTITY_PATH, positiveId } from "./shared-schemas.js";
 import { confirmFlag } from "./confirm-flag.js";
 import { idempotent } from "../capsule/idempotent.js";
 import { capsuleDelete, capsuleGet, capsulePost, capsulePut } from "../capsule/client.js";
@@ -23,15 +23,13 @@ import { capsuleDelete, capsuleGet, capsulePost, capsulePut } from "../capsule/c
 //     the auto-tasks the track created when it was applied
 //
 // Entity for list_entity_tracks is "parties", "opportunities", or
-// "kases". apply_track intentionally exposes only "kases" and
+// "projects". apply_track intentionally exposes only "projects" and
 // "opportunities" — tracks model deal/project workflows, not party
 // lifecycle, and we haven't seen a real workflow that needs party-
 // applied tracks. The Capsule API would accept "parties" too if
 // `applyTrackSchema.entity` were widened.
 
-const TrackEntity = z
-  .enum(["parties", "opportunities", "kases"])
-  .describe("Use 'kases' for projects.");
+const TrackEntity = z.enum(["parties", "opportunities", "projects"]).describe("Which entity type.");
 
 // ── List entity tracks ──────────────────────────────────────────────────────
 
@@ -42,7 +40,7 @@ export const listEntityTracksSchema = z.object({
 
 export async function listEntityTracks(input: z.infer<typeof listEntityTracksSchema>) {
   const { data } = await capsuleGet<{ tracks: unknown[] }>(
-    `/${input.entity}/${input.entityId}/tracks`,
+    `/${ENTITY_PATH[input.entity]}/${input.entityId}/tracks`,
   );
   return data;
 }
@@ -61,9 +59,7 @@ export async function showTrack(input: z.infer<typeof showTrackSchema>) {
 // ── Apply a track ───────────────────────────────────────────────────────────
 
 export const applyTrackSchema = z.object({
-  entity: z
-    .enum(["opportunities", "kases"])
-    .describe("Which entity to apply the track to. Use 'kases' for projects."),
+  entity: z.enum(["opportunities", "projects"]).describe("Which entity to apply the track to."),
   entityId: positiveId,
   trackDefinitionId: positiveId.describe(
     "The trackDefinition to apply (from list_track_definitions). Auto-creates task definitions on the target entity per the track's rules.",

@@ -25,7 +25,7 @@ describe("listSavedFilters", () => {
   it("uses /kases/filters for projects", async () => {
     mockFetch(200, { filters: [] });
     const { listSavedFilters } = await import("../src/tools/saved-filters.js");
-    await listSavedFilters({ entity: "kases" });
+    await listSavedFilters({ entity: "projects" });
     const [url] = vi.mocked(fetch).mock.calls[0]!;
     expect(url).toContain("/kases/filters");
   });
