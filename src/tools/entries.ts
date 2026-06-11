@@ -1,7 +1,6 @@
 import { z } from "zod";
-import { positiveId, paginationFields } from "./shared-schemas.js";
+import { positiveId, paginationFields, embedParam, ENTRY_EMBEDS } from "./shared-schemas.js";
 import { assertSingleParentRef, setRef } from "./body-helpers.js";
-import { EMBED_ATTACHMENTS_PARTICIPANTS_DESCRIPTION } from "./descriptions.js";
 import { defineDelete } from "./define-delete.js";
 import { capsuleGet, capsulePost, capsulePut, capsuleGetList } from "../capsule/client.js";
 import { getBatchConcurrency, mapWithConcurrency } from "../capsule/batch.js";
@@ -10,7 +9,7 @@ import { getBatchConcurrency, mapWithConcurrency } from "../capsule/batch.js";
 
 const listEntriesPagination = {
   ...paginationFields,
-  embed: z.string().optional().describe(EMBED_ATTACHMENTS_PARTICIPANTS_DESCRIPTION),
+  embed: embedParam(ENTRY_EMBEDS),
 };
 
 export const listPartyEntriesSchema = z.object({
@@ -207,7 +206,7 @@ export async function listProjectEntries(input: z.infer<typeof listProjectEntrie
 
 export const getEntrySchema = z.object({
   id: positiveId,
-  embed: z.string().optional().describe(EMBED_ATTACHMENTS_PARTICIPANTS_DESCRIPTION),
+  embed: embedParam(ENTRY_EMBEDS),
 });
 
 export async function getEntry(input: z.infer<typeof getEntrySchema>) {

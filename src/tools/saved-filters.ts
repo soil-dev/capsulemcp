@@ -1,6 +1,11 @@
 import { z } from "zod";
-import { ENTITY_PATH, positiveId, paginationFields } from "./shared-schemas.js";
-import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
+import {
+  ENTITY_PATH,
+  positiveId,
+  paginationFields,
+  embedParam,
+  RECORD_EMBEDS,
+} from "./shared-schemas.js";
 import { capsuleGetCached, capsuleGetList } from "../capsule/client.js";
 
 // Saved filters are filters created and stored in Capsule's web UI. Unlike
@@ -41,7 +46,7 @@ export async function listSavedFilters(input: z.infer<typeof listSavedFiltersSch
 export const runSavedFilterSchema = z.object({
   entity: EntitySchema,
   id: positiveId.describe("The saved filter id (from list_saved_filters)."),
-  embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
+  embed: embedParam(RECORD_EMBEDS),
   ...paginationFields,
 });
 

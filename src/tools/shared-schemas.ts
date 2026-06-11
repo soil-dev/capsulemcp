@@ -84,3 +84,42 @@ export const ENTITY_PATH = {
 } as const;
 
 export type EntityName = keyof typeof ENTITY_PATH;
+
+/**
+ * Validated `embed` parameter. Capsule SILENTLY IGNORES unknown embed
+ * tokens (probed live: `embed=bogus_xyz` returns 200 with the default
+ * shape), so a typo'd embed used to "succeed" while returning less
+ * data than the caller believed it asked for — the worst failure mode
+ * for an LLM caller. From v2 the tokens are validated against the
+ * per-surface allow-list; the wire format (comma-joined string) is
+ * unchanged.
+ *
+ * Allow-lists verified empirically (2026-06-11, live tenant):
+ * `tags` / `fields` / `missingImportantFields` are honored on parties,
+ * opportunities, and projects; every other candidate (organisation,
+ * party, milestone, …) is silently ignored. The entries surface
+ * documents `attachments` / `participants`.
+ */
+export function embedParam(allowed: readonly string[]) {
+  return z
+    .string()
+    .superRefine((value, ctx) => {
+      const tokens = value.split(",").map((t) => t.trim());
+      for (const token of tokens) {
+        if (token === "" || !allowed.includes(token)) {
+          ctx.addIssue({
+            code: "custom",
+            message: `Unknown embed token '${token}'. Valid tokens: ${allowed.join(", ")} (comma-separated). Capsule silently ignores unknown tokens, so this is rejected client-side to prevent silently-missing data.`,
+          });
+        }
+      }
+    })
+    .describe(`Comma-separated embeds. Valid tokens: ${allowed.join(", ")}.`)
+    .optional();
+}
+
+/** `embed` for the record surfaces (parties / opportunities / projects / filters / audit). */
+export const RECORD_EMBEDS = ["tags", "fields", "missingImportantFields"] as const;
+
+/** `embed` for the entries surface. */
+export const ENTRY_EMBEDS = ["attachments", "participants"] as const;
