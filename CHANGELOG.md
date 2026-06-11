@@ -11,6 +11,15 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Added
+
+- `create_project` and `update_project` now expose `startOn` (project
+  start date). It was always present on project responses but never
+  settable through the connector. Wire-verified: POST stores it, PUT
+  changes it, and `startOn: null` on update clears it. `update_project`
+  follows the connector's usual nullable-date semantics (`undefined` =
+  leave untouched, `null` = clear).
+
 ## [2.0.1] — 2026-06-11
 
 Patch on v2.0.0, fixing the one v2 vocabulary translation that was

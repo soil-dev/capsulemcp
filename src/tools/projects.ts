@@ -112,6 +112,13 @@ export const createProjectSchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional()
     .describe("YYYY-MM-DD"),
+  startOn: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional()
+    .describe(
+      "Project start date, YYYY-MM-DD. Verified empirically (v2.0.1 wire probe): Capsule's POST /kases accepts and stores it; reads back as `startOn` on the project.",
+    ),
   fields: z
     .array(CustomFieldWriteSchema)
     .optional()
@@ -187,6 +194,14 @@ export const updateProjectSchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional()
     .describe("YYYY-MM-DD"),
+  startOn: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullable()
+    .optional()
+    .describe(
+      "Set the project start date (YYYY-MM-DD), or `null` to clear it. Verified empirically (v2.0.1 wire probe): PUT accepts both the set and the null-clear. `undefined` leaves the field untouched.",
+    ),
   fields: z
     .array(CustomFieldWriteSchema)
     .optional()

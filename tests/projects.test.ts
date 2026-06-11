@@ -486,3 +486,35 @@ describe("getProjects (batch)", () => {
     expect(result.projects.map((p) => p.id)).toEqual(ids);
   });
 });
+
+describe("startOn", () => {
+  // Wire-verified (v2.0.1 probe): POST stores startOn (201, echoed),
+  // PUT changes it (200), PUT null clears it (200).
+  it("create_project forwards startOn in the body", async () => {
+    mockFetch(201, { kase: { id: 10 } });
+    const { createProject } = await import("../src/tools/projects.js");
+    await createProject({ name: "X", partyId: 5, startOn: "2026-07-01" });
+    const body = JSON.parse((vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string);
+    expect(body.kase.startOn).toBe("2026-07-01");
+  });
+
+  it("update_project sets and null-clears startOn", async () => {
+    mockFetch(200, { kase: { id: 10 } });
+    const { updateProject } = await import("../src/tools/projects.js");
+    await updateProject({ id: 10, startOn: "2026-08-15" });
+    let body = JSON.parse((vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string);
+    expect(body.kase.startOn).toBe("2026-08-15");
+
+    mockFetch(200, { kase: { id: 10 } });
+    await updateProject({ id: 10, startOn: null });
+    body = JSON.parse((vi.mocked(fetch).mock.calls[1]![1] as RequestInit).body as string);
+    expect(body.kase.startOn).toBeNull();
+  });
+
+  it("rejects non-date startOn at the schema layer", async () => {
+    const { createProjectSchema } = await import("../src/tools/projects.js");
+    expect(
+      createProjectSchema.safeParse({ name: "X", partyId: 5, startOn: "July 1st" }).success,
+    ).toBe(false);
+  });
+});
