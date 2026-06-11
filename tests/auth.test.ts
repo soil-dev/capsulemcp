@@ -502,7 +502,7 @@ describe("OAuthProvider + FixedClientStore", () => {
 
   it("authorize -> token -> verify roundtrip works for the configured client", async () => {
     const p = makeProvider();
-    const client = p.clientsStore.getClient("fixed-id")!;
+    const client = (await p.clientsStore.getClient("fixed-id"))!;
     let redirected: string | undefined;
     await p.authorize(
       client,
@@ -526,7 +526,7 @@ describe("OAuthProvider + FixedClientStore", () => {
 
   it("rejects authorization requests for a different MCP resource", async () => {
     const p = makeProvider();
-    const client = p.clientsStore.getClient("fixed-id")!;
+    const client = (await p.clientsStore.getClient("fixed-id"))!;
     await expect(
       p.authorize(
         client,
@@ -542,7 +542,7 @@ describe("OAuthProvider + FixedClientStore", () => {
 
   it("rejects token exchange when token request resource differs from the authorization resource", async () => {
     const p = makeProvider();
-    const client = p.clientsStore.getClient("fixed-id")!;
+    const client = (await p.clientsStore.getClient("fixed-id"))!;
     let redirected: string | undefined;
     await p.authorize(
       client,

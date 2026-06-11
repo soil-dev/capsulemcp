@@ -24,7 +24,6 @@
   "bin": {
     "capsulemcp": "dist/index.js"
   },
-  "main": "./dist/index.js",
   "files": [
     "dist"
   ],
@@ -35,12 +34,12 @@
     "start": "node dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.tests.json",
     "lint": "biome lint src tests scripts",
     "format": "biome format --write src tests scripts",
     "format:check": "biome format src tests scripts",
     "check": "biome check src tests scripts",
-    "prepare": "npm run build:icon && tsup"
+    "prepare": "npm run build"
   },
   "repository": {
     "type": "git",

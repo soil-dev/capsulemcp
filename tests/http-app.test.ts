@@ -329,7 +329,7 @@ describe("/authorize and /token", () => {
       await new Promise<void>((resolve) => {
         publicServer = app.listen(0, () => resolve());
       });
-      const addr = publicServer.address() as AddressInfo;
+      const addr = publicServer!.address() as AddressInfo;
       const publicBaseUrl = `http://127.0.0.1:${addr.port}`;
 
       const registerRes = await fetch(`${publicBaseUrl}/register`, {
@@ -384,7 +384,7 @@ describe("/authorize and /token", () => {
       provider.shutdown();
       if (publicServer) {
         await new Promise<void>((resolve, reject) =>
-          publicServer.close((err) => (err ? reject(err) : resolve())),
+          publicServer!.close((err) => (err ? reject(err) : resolve())),
         );
       }
     }

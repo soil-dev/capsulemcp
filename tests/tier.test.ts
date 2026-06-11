@@ -87,7 +87,8 @@ describe("batch schema description-stripping", () => {
     expect(JSON.stringify(singleJson)).toContain('"description"');
 
     // Inside the batch items element, no descriptions survive.
-    const items = (batchJson as { properties: { items: { items: unknown } } }).properties.items;
+    const items = (batchJson as unknown as { properties: { items: { items: unknown } } }).properties
+      .items;
     expect(JSON.stringify((items as { items: unknown }).items)).not.toContain('"description"');
 
     // The items array itself keeps its pointer description.

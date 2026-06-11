@@ -776,7 +776,7 @@ describe("getParties (batch)", () => {
 
     const { getParties } = await import("../src/tools/parties.js");
     const ids = Array.from({ length: 25 }, (_, i) => i + 1);
-    const result = (await getParties({ ids })) as { parties: Array<{ id: number }> };
+    const result = (await getParties({ ids })) as unknown as { parties: Array<{ id: number }> };
 
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(3);
     const urls = vi.mocked(fetch).mock.calls.map((c) => String(c[0]));
@@ -816,7 +816,7 @@ describe("getParties (batch)", () => {
 
     const { getParties } = await import("../src/tools/parties.js");
     const ids = Array.from({ length: 13 }, (_, i) => i + 1);
-    const result = (await getParties({ ids })) as {
+    const result = (await getParties({ ids })) as unknown as {
       parties: Array<{ id: number }>;
       meta?: string;
     };

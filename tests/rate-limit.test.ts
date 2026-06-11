@@ -327,7 +327,7 @@ describe("doFetch retry-on-429", () => {
         throw err;
       },
       statusText: "200",
-    } as Awaited<ReturnType<typeof fetch>>);
+    } as unknown as Awaited<ReturnType<typeof fetch>>);
     const { capsuleGet } = await import("../src/capsule/client.js");
     await expect(capsuleGet("/test")).rejects.toThrow(/Capsule API request timed out after 60s/);
   });

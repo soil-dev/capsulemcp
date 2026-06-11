@@ -67,6 +67,7 @@ describe("createScopedTaskStore", () => {
       const a = createScopedTaskStore("client-a");
       const b = createScopedTaskStore("client-b");
       const [task] = await create(a, 1);
+      if (!task) throw new Error("create returned no task");
       expect(await b.getTask(task.taskId)).toBeNull();
       expect(await a.getTask(task.taskId)).not.toBeNull();
     });
@@ -75,6 +76,7 @@ describe("createScopedTaskStore", () => {
       const a = createScopedTaskStore("client-a");
       const b = createScopedTaskStore("client-b");
       const [task] = await create(a, 1);
+      if (!task) throw new Error("create returned no task");
       await a.storeTaskResult(task.taskId, "completed", {
         content: [{ type: "text", text: "done" }],
         isError: false,
@@ -86,6 +88,7 @@ describe("createScopedTaskStore", () => {
       const a = createScopedTaskStore("client-a");
       const b = createScopedTaskStore("client-b");
       const [task] = await create(a, 1);
+      if (!task) throw new Error("create returned no task");
       await expect(b.updateTaskStatus(task.taskId, "working")).rejects.toBeInstanceOf(McpError);
     });
 
@@ -154,6 +157,7 @@ describe("createScopedTaskStore", () => {
     it("records owning clientId for every task", async () => {
       const a = createScopedTaskStore("client-a");
       const [t1, t2] = await create(a, 2);
+      if (!t1 || !t2) throw new Error("create returned fewer than 2 tasks");
       const snap = _ownersSnapshot();
       expect(snap.get(t1.taskId)).toBe("client-a");
       expect(snap.get(t2.taskId)).toBe("client-a");

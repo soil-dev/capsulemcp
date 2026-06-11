@@ -99,9 +99,9 @@ async function main() {
     // Discover the first pipeline, then first milestone via the
     // /pipelines/<id>/milestones sub-resource (Capsule's actual shape).
     const pipelines = await call("GET", "/pipelines");
-    const firstPipelineId = (pipelines.body as { pipelines: { id: number }[] }).pipelines[0].id;
+    const firstPipelineId = (pipelines.body as { pipelines: { id: number }[] }).pipelines[0]!.id;
     const milestones = await call("GET", `/pipelines/${firstPipelineId}/milestones`);
-    const milestoneId = (milestones.body as { milestones: { id: number }[] }).milestones[0].id;
+    const milestoneId = (milestones.body as { milestones: { id: number }[] }).milestones[0]!.id;
     const boards = await call("GET", "/boards");
     const boardIdsRes = boards.body as { boards: { id: number }[] };
     const firstBoardId = boardIdsRes.boards[0]?.id;

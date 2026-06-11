@@ -89,7 +89,7 @@ describe("listPartyEntries", () => {
     // Merge: newest first by entryAt. The May-27 entry (person 8)
     // wins despite being created on a linked person, not the org —
     // this is the whole point of the flag.
-    expect(result.entries.map((e: { id: number }) => e.id)).toEqual([200, 300, 100]);
+    expect(result.entries.map((e) => (e as { id: number }).id)).toEqual([200, 300, 100]);
   });
 
   it("includeLinkedPersons + org with zero linked persons: collapses to single GET", async () => {
@@ -178,7 +178,7 @@ describe("listPartyEntries", () => {
       includeLinkedPersons: true,
     });
 
-    expect(result.entries.map((e: { id: number }) => e.id)).toEqual([20, 10]);
+    expect(result.entries.map((e) => (e as { id: number }).id)).toEqual([20, 10]);
   });
 
   it("applies caller's pagination window to the merged feed; nextPage when more entries remain", async () => {
@@ -206,7 +206,7 @@ describe("listPartyEntries", () => {
     });
 
     // Merged sorted: [3, 4, 5, 1, 2]. Page 1, perPage 2 → slice [3, 4].
-    expect(result.entries.map((e: { id: number }) => e.id)).toEqual([3, 4]);
+    expect(result.entries.map((e) => (e as { id: number }).id)).toEqual([3, 4]);
     // 5 candidates, slice goes 0..2 → nextPage signals more remain.
     expect((result as { nextPage?: number }).nextPage).toBe(2);
   });
@@ -238,7 +238,7 @@ describe("listPartyEntries", () => {
       includeLinkedPersons: true,
     });
 
-    expect(result.entries.map((e: { id: number }) => e.id)).toEqual([11, 10]);
+    expect(result.entries.map((e) => (e as { id: number }).id)).toEqual([11, 10]);
     expect((result as { nextPage?: number }).nextPage).toBe(2);
   });
 
