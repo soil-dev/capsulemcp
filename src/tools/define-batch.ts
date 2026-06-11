@@ -23,6 +23,7 @@
 
 import { z } from "zod";
 import { type BatchOpts, type BatchResponse, batchExecute } from "../capsule/batch.js";
+import { stripDescriptions } from "./strip-descriptions.js";
 
 interface DefineBatchArgs<S extends z.ZodObject<z.ZodRawShape>> {
   /** Tool name, e.g. "batch_update_party". Used in `batchExecute` and `batch.complete` logs. */
@@ -36,8 +37,16 @@ interface DefineBatchArgs<S extends z.ZodObject<z.ZodRawShape>> {
 }
 
 export function defineBatch<S extends z.ZodObject<z.ZodRawShape>>(args: DefineBatchArgs<S>) {
+  // Register a description-stripped clone of the item schema: the
+  // nested .describe() text would otherwise be serialized into
+  // tools/list twice (once on the co-registered single tool — the
+  // canonical copy — and again here), ~17 KB of pure duplication
+  // across the five batch tools. Validation is identical; the cast
+  // back to S is sound because stripDescriptions only removes
+  // metadata, never structure or checks.
+  const itemSchema = stripDescriptions(args.itemSchema) as S;
   const schema = z.object({
-    items: z.array(args.itemSchema).min(1).max(50).describe(args.itemDescription),
+    items: z.array(itemSchema).min(1).max(50).describe(args.itemDescription),
   });
 
   async function handler(
