@@ -11,7 +11,7 @@ npm install
 npm test
 ```
 
-576 tests, all mocked — no Capsule API calls happen, no token needed. The suite has three layers:
+579 tests, all mocked — no Capsule API calls happen, no token needed. The suite has three layers:
 
 - **Per-tool unit tests** (e.g. `tests/parties.test.ts`): import the tool function, mock `undici.fetch`, assert on the URL, method, body, and response handling. Most tests live here.
 - **MCP-protocol integration tests** (`tests/mcp-integration.test.ts`): drive a real `McpServer` through the wire protocol via the SDK's in-memory transport pair, with `undici.fetch` still mocked. Catches the layer between "tool function works" and "MCP correctly registers and dispatches the tool". Includes the `get_attachment` content-type routing logic (which lives in `server.ts`, not the tool function).
