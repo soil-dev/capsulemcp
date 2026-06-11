@@ -4,10 +4,10 @@
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server for [Capsule CRM](https://capsulecrm.com). Connect Claude (Desktop, Code, or web Projects via Custom Connector) to your CRM and let it answer natural-language questions across the full record graph: contacts, organisations, opportunities, projects, tasks, and timeline activity. Beyond the basics it covers structured filters with field/operator conditions, saved searches with sort, workflow tracks (templates and instances), file attachments (read + write), audit of deleted records, and batch fetches up to 50 records per call.
 
-- **88 tools** across the Capsule resource graph (49 in read-only mode) — full read coverage plus careful, confirm-gated writes; 6 batched-write tools (`batch_*`) for mass-update workflows
+- **89 tools** across the Capsule resource graph (50 in read-only mode) — full read coverage plus careful, confirm-gated writes; 6 batched-write tools (`batch_*`) for mass-update workflows
 - **Two transports**: stdio for local installs (Claude Desktop / Code), HTTP+OAuth for hosted Custom Connectors
 - **Read-only mode** as a one-env-var flag; works alongside read-scoped Capsule tokens
-- **MCP tool annotations**: 49 read tools carry `readOnlyHint: true`, 8 destructive ones carry `destructiveHint: true` — clients that honor these hints can auto-approve safe reads while still prompting for writes/destructive calls
+- **MCP tool annotations**: 50 read tools carry `readOnlyHint: true`, 8 destructive ones carry `destructiveHint: true` — clients that honor these hints can auto-approve safe reads while still prompting for writes/destructive calls
 - **Apache 2.0**
 
 ## Pick your install
@@ -56,7 +56,7 @@ That's it. The first launch fetches the package from npm (a few seconds); subseq
 |---|---|---|
 | Parties (people/orgs) | `search_parties`, `filter_parties`, `get_party`, `get_parties`, `list_employees`, `list_party_opportunities`, `list_party_projects`, `list_party_entries` | `create_party`, `update_party`, `delete_party`, `add_party_email_address`, `remove_party_email_address_by_id`, `add_party_phone_number`, `remove_party_phone_number_by_id`, `add_party_address`, `remove_party_address_by_id`, `add_party_website`, `remove_party_website_by_id` |
 | Opportunities | `search_opportunities`, `filter_opportunities`, `get_opportunity`, `get_opportunities`, `list_opportunity_entries`, `list_associated_projects` | `create_opportunity`, `update_opportunity`, `delete_opportunity` |
-| Projects (cases) | `list_projects`, `filter_projects`, `get_project`, `get_projects`, `list_project_entries` | `create_project`, `update_project`, `delete_project` |
+| Projects (cases) | `search_projects`, `list_projects`, `filter_projects`, `get_project`, `get_projects`, `list_project_entries` | `create_project`, `update_project`, `delete_project` |
 | Additional parties (multi-party deals) | `list_additional_parties` | `add_additional_party`, `remove_additional_party` |
 | Tasks | `list_tasks`, `get_task`, `get_tasks` | `create_task`, `update_task`, `complete_task`, `delete_task` |
 | Entries (notes / captured emails) | `get_entry`, `list_entries` | `add_note`, `update_entry`, `delete_entry` |
@@ -64,12 +64,12 @@ That's it. The first launch fetches the package from npm (a few seconds); subseq
 | Audit (deleted records) | `list_deleted_parties`, `list_deleted_opportunities`, `list_deleted_projects` | — |
 | Pipelines & milestones (opportunities) | `list_pipelines`, `list_milestones` | — |
 | Boards & stages (projects) | `list_boards`, `list_stages` | — |
-| Tracks (workflow instances) | `list_track_definitions`, `list_entity_tracks`, `show_track` | `apply_track`, `update_track`, `remove_track` |
+| Tracks (workflow instances) | `list_track_definitions`, `list_entity_tracks`, `get_track` | `apply_track`, `update_track`, `remove_track` |
 | Saved filters | `list_saved_filters`, `run_saved_filter` | — |
 | Custom fields (schema) | `list_custom_fields`, `get_custom_field` | — |
 | Tags | `list_tags` | `add_tag`, `remove_tag_by_id`, `delete_tag_definition` |
 | Users & teams | `list_users`, `get_current_user`, `list_teams` | — |
-| Reference metadata | `list_lostreasons`, `list_activitytypes`, `list_categories`, `list_goals`, `get_site` | — |
+| Reference metadata | `list_lost_reasons`, `list_activity_types`, `list_categories`, `list_goals`, `get_site` | — |
 
 Most record-list tools default `perPage=25`; reference-data tools default `perPage=100` so small accounts usually fit in one response. All paginated tools cap `perPage` at 100 and return a `nextPage` cursor when more results exist. Many GET tools accept an `embed` parameter (e.g. `tags,fields`) — see Capsule's API docs for the full list per resource.
 

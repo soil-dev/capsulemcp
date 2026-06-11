@@ -182,7 +182,7 @@ export const updateOpportunitySchema = z.object({
   lostReasonId: positiveId
     .optional()
     .describe(
-      "Reason the opportunity was lost. Only meaningful when transitioning to a Lost milestone — Capsule silently drops it for other milestones. Without this set, a connector-driven Lost-close leaves `lostReason: null`. Discover IDs via list_lostreasons.",
+      "Reason the opportunity was lost. Only meaningful when transitioning to a Lost milestone — Capsule silently drops it for other milestones. Without this set, a connector-driven Lost-close leaves `lostReason: null`. Discover IDs via list_lost_reasons.",
     ),
   ownerId: positiveId
     .nullable()

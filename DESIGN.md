@@ -550,7 +550,7 @@ retrying.
 | Wanted | Status | Substitute |
 |---|---|---|
 | `GET /tasks/deleted` (audit) | 404 | No soft-delete list for tasks. Parties / opportunities / projects do have it. |
-| `GET /tracks` (global list) | 405 Method Not Allowed | Tracks are entity-scoped. Use `list_entity_tracks(entity, entityId)` or `show_track(id)`. |
+| `GET /tracks` (global list) | 405 Method Not Allowed | Tracks are entity-scoped. Use `list_entity_tracks(entity, entityId)` or `get_track(id)`. |
 | `GET /entries/{ids}` (batch fetch) | 404 | Capsule v2 doesn't expose a batch fetcher for entries. Parties / opportunities / projects / tasks all do. |
 | `POST /attachments/upload` (multipart) | works as raw POST | The doc page suggested multipart at first reading; it's actually a raw-body POST with three custom headers (`Content-Type`, `Content-Length`, `X-Attachment-Filename`). |
 

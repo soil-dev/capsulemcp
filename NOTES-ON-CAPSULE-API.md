@@ -789,7 +789,7 @@ The same is true for direct `DELETE /opportunities/{id}` or
 **Practical impact:** negligible per delete. But repeated
 apply-track + delete-entity cycles accumulate orphan tracks in
 the tenant indefinitely. `list_entity_tracks` can't surface them
-(the entity is gone); only `show_track` by id does.
+(the entity is gone); only `get_track` by id does.
 
 **Workaround:** call `remove_track` explicitly before
 `delete_party` / `delete_opportunity` / `delete_project` on each
@@ -1405,7 +1405,7 @@ are therefore reachable only:
 
 - entity-scoped: `GET /<entity>/{id}/tracks` (the `list_entity_tracks`
   tool), or
-- by known id: `GET /tracks/{id}` (the `show_track` tool).
+- by known id: `GET /tracks/{id}` (the `get_track` tool).
 
 **Consequence:** the orphan track instances from §25 (which survive
 parent deletion) **cannot be enumerated tenant-wide** — if you don't

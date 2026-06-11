@@ -15,6 +15,23 @@ import {
 
 // ── Read ────────────────────────────────────────────────────────────────────
 
+export const searchProjectsSchema = z.object({
+  q: z.string().optional().describe("Free-text search query"),
+  embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
+  ...paginationFields,
+});
+
+export async function searchProjects(input: z.infer<typeof searchProjectsSchema>) {
+  // GET /kases ignores `q`; the search sub-resource is required for filtering.
+  const path = input.q ? "/kases/search" : "/kases";
+  return capsuleGetList<{ projects: unknown[] }>(path, {
+    q: input.q,
+    embed: input.embed,
+    page: input.page,
+    perPage: input.perPage,
+  });
+}
+
 export const listProjectsSchema = z.object({
   status: z.enum(["OPEN", "CLOSED"]).optional(),
   embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),

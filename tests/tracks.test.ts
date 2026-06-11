@@ -23,11 +23,11 @@ describe("listEntityTracks", () => {
   });
 });
 
-describe("showTrack", () => {
+describe("getTrack", () => {
   it("GETs /tracks/{id}", async () => {
     mockFetch(200, { track: { id: 5 } });
-    const { showTrack } = await import("../src/tools/tracks.js");
-    await showTrack({ trackId: 5 });
+    const { getTrack } = await import("../src/tools/tracks.js");
+    await getTrack({ id: 5 });
     const [url] = vi.mocked(fetch).mock.calls[0]!;
     expect(url).toContain("/tracks/5");
   });
@@ -100,7 +100,7 @@ describe("updateTrack", () => {
   it("PUTs to /tracks/{id} with fields wrapped in {track: ...}", async () => {
     mockFetch(200, { track: { id: 5 } });
     const { updateTrack } = await import("../src/tools/tracks.js");
-    await updateTrack({ trackId: 5, fields: { complete: true } });
+    await updateTrack({ id: 5, fields: { complete: true } });
     const [url, init] = vi.mocked(fetch).mock.calls[0]!;
     expect(url).toContain("/tracks/5");
     const i = init as { method: string; body: string };
@@ -110,7 +110,7 @@ describe("updateTrack", () => {
 
   it("rejects empty field updates", async () => {
     const { updateTrack } = await import("../src/tools/tracks.js");
-    await expect(updateTrack({ trackId: 1, fields: {} })).rejects.toThrow(/at least one field/);
+    await expect(updateTrack({ id: 1, fields: {} })).rejects.toThrow(/at least one field/);
   });
 });
 
@@ -118,7 +118,7 @@ describe("removeTrack", () => {
   it("DELETEs /tracks/{id} when confirm=true", async () => {
     mockFetch(204, {});
     const { removeTrack } = await import("../src/tools/tracks.js");
-    const result = await removeTrack({ trackId: 5, confirm: true });
+    const result = await removeTrack({ id: 5, confirm: true });
     const [url, init] = vi.mocked(fetch).mock.calls[0]!;
     expect(url).toContain("/tracks/5");
     expect((init as { method: string }).method).toBe("DELETE");

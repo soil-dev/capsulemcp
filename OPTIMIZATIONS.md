@@ -24,7 +24,7 @@ up during a conversation:
 - `list_pipelines`, `list_milestones`
 - `list_boards`, `list_stages`
 - `list_custom_fields`, `get_custom_field`
-- `list_lostreasons`, `list_activitytypes`, `list_categories`, `list_goals`
+- `list_lost_reasons`, `list_activity_types`, `list_categories`, `list_goals`
 - `list_track_definitions`, `list_saved_filters`
 - `list_users`, `list_teams`, `list_tags`
 - `get_site`
