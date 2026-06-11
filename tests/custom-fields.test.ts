@@ -26,7 +26,7 @@ describe("listCustomFields", () => {
   it("uses /kases for projects", async () => {
     mockFetch(200, { definitions: [] });
     const { listCustomFields } = await import("../src/tools/custom-fields.js");
-    await listCustomFields({ entity: "kases" });
+    await listCustomFields({ entity: "projects" });
     const [url] = vi.mocked(fetch).mock.calls[0]!;
     expect(url).toContain("/kases/fields/definitions");
   });

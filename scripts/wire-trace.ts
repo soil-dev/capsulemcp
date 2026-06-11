@@ -176,7 +176,7 @@ async function main() {
   const tdefId = tdResp.data.trackDefinitions[0]!.id;
 
   const track = (await applyTrack({
-    entity: "kases",
+    entity: "projects",
     entityId: proj.project.id,
     trackDefinitionId: tdefId,
   })) as { track: { id: number } | null };

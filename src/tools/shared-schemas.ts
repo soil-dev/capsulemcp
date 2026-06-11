@@ -66,3 +66,21 @@ export const paginationFieldsNoDefaults = {
   page: z.number().int().positive().optional(),
   perPage: z.number().int().min(1).max(100).optional(),
 };
+
+/**
+ * Caller-facing entity vocabulary → Capsule path component.
+ *
+ * From v2 the tool surface says `projects` everywhere; Capsule's API
+ * still uses its legacy name `kases` in paths. This map is the single
+ * place that translation lives for the entity-parameterized tools
+ * (tags, custom fields, saved filters, tracks, additional parties).
+ * Response keys are normalized the other way at the client boundary —
+ * see src/capsule/normalize.ts.
+ */
+export const ENTITY_PATH = {
+  parties: "parties",
+  opportunities: "opportunities",
+  projects: "kases",
+} as const;
+
+export type EntityName = keyof typeof ENTITY_PATH;

@@ -389,7 +389,7 @@ export const { schema: deletePartySchema, handler: deleteParty } = defineDelete(
   toolName: "delete_party",
   pathPrefix: "/parties",
   confirmHint:
-    "Must be set to true. Deletes the party AND all linked notes, tasks, opportunities, and projects (kases). " +
+    "Must be set to true. Deletes the party AND all linked notes, tasks, opportunities, and projects. " +
     "Deleting an ORGANISATION does NOT delete people linked to it via organisationId — their `organisation` field is silently cleared to null and they survive as standalone records. " +
     "Irreversible.",
 });

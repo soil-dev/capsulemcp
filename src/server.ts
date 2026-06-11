@@ -401,7 +401,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
     registerTool(
       server,
       "delete_party",
-      "DESTRUCTIVE & IRREVERSIBLE: permanently delete a party (person or organisation). Cascades to all linked notes, tasks, opportunities, AND projects (kases). Deleting an organisation does NOT delete people linked to it via organisationId — their `organisation` field is silently cleared to null and they survive as standalone records. TRACK INSTANCES applied to cascaded opportunities/projects are NOT cleaned up either — they survive as orphan records reachable only by track id via show_track. Use remove_track on each track explicitly before deleting the parent party if orphan accumulation matters (rare in practice — orphans are unreachable from normal navigation). Requires confirm=true. Always read the party first with get_party and confirm with the user before calling. Idempotent on retry: response is `{deleted: true, alreadyDeleted: false, id}` on a fresh delete or `{deleted: true, alreadyDeleted: true, id}` if the party was already gone (Capsule's 404 is caught internally so reconciliation loops can re-issue safely).",
+      "DESTRUCTIVE & IRREVERSIBLE: permanently delete a party (person or organisation). Cascades to all linked notes, tasks, opportunities, AND projects. Deleting an organisation does NOT delete people linked to it via organisationId — their `organisation` field is silently cleared to null and they survive as standalone records. TRACK INSTANCES applied to cascaded opportunities/projects are NOT cleaned up either — they survive as orphan records reachable only by track id via show_track. Use remove_track on each track explicitly before deleting the parent party if orphan accumulation matters (rare in practice — orphans are unreachable from normal navigation). Requires confirm=true. Always read the party first with get_party and confirm with the user before calling. Idempotent on retry: response is `{deleted: true, alreadyDeleted: false, id}` on a fresh delete or `{deleted: true, alreadyDeleted: true, id}` if the party was already gone (Capsule's 404 is caught internally so reconciliation loops can re-issue safely).",
       deletePartySchema,
       deleteParty,
     );
@@ -517,7 +517,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
   registerTool(
     server,
     "list_additional_parties",
-    "List secondary party links on an opportunity or project. The 'main' party is on the entity itself (opportunity.party); additional parties are e.g. partners, consultants, or referrers also involved in the deal. Set entity to 'opportunities' or 'kases' (Capsule's term for projects).",
+    "List secondary party links on an opportunity or project. The 'main' party is on the entity itself (opportunity.party); additional parties are e.g. partners, consultants, or referrers also involved in the deal. Set entity to 'opportunities' or 'projects'.",
     listAdditionalPartiesSchema,
     listAdditionalParties,
   );
@@ -1080,7 +1080,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
   registerTool(
     server,
     "list_tags",
-    "List all tags available for a given entity type (parties, opportunities, or kases). Returns each tag's id, name, and any data-tag field schema. Tags are entity-specific — a party tag is not interchangeable with an opportunity tag. Use this to discover valid tag ids before calling add_tag, or to display the tag catalogue to the user when they ask 'what tags do we use?'",
+    "List all tags available for a given entity type (parties, opportunities, or projects). Returns each tag's id, name, and any data-tag field schema. Tags are entity-specific — a party tag is not interchangeable with an opportunity tag. Use this to discover valid tag ids before calling add_tag, or to display the tag catalogue to the user when they ask 'what tags do we use?'",
     listTagsSchema,
     listTags,
   );
@@ -1105,7 +1105,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
     registerTool(
       server,
       "delete_tag_definition",
-      "DESTRUCTIVE & TENANT-WIDE: permanently delete a tag DEFINITION from an entity type's tag namespace (parties / opportunities / kases). Unlike remove_tag_by_id — which detaches a tag from ONE record and leaves the definition intact for others — this removes the definition itself, so the tag disappears from EVERY record that shared it. Use it to clean up stray / mistyped / test tag definitions polluting the tenant-global list. Requires confirm=true. Always read the affected tag first via list_tags and confirm with the user; if you only want to untag one record, use remove_tag_by_id instead. Irreversible (re-creating by name via add_tag mints a brand-new id). Idempotent on retry: `{deleted: true, alreadyDeleted: false, entity, tagId}` on a fresh delete, or `{deleted: true, alreadyDeleted: true, entity, tagId}` if the definition was already gone (Capsule's 404 is caught). Endpoint verified empirically (DELETE /<entity>/tags/{id} → 204).",
+      "DESTRUCTIVE & TENANT-WIDE: permanently delete a tag DEFINITION from an entity type's tag namespace (parties / opportunities / projects). Unlike remove_tag_by_id — which detaches a tag from ONE record and leaves the definition intact for others — this removes the definition itself, so the tag disappears from EVERY record that shared it. Use it to clean up stray / mistyped / test tag definitions polluting the tenant-global list. Requires confirm=true. Always read the affected tag first via list_tags and confirm with the user; if you only want to untag one record, use remove_tag_by_id instead. Irreversible (re-creating by name via add_tag mints a brand-new id). Idempotent on retry: `{deleted: true, alreadyDeleted: false, entity, tagId}` on a fresh delete, or `{deleted: true, alreadyDeleted: true, entity, tagId}` if the definition was already gone (Capsule's 404 is caught). Endpoint verified empirically (DELETE /<entity>/tags/{id} → 204).",
       deleteTagDefinitionSchema,
       deleteTagDefinition,
     );

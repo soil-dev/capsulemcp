@@ -32,7 +32,7 @@ describe("listAdditionalParties", () => {
     mockFetch(200, { parties: [] });
     const { listAdditionalParties } = await import("../src/tools/relationships.js");
     await listAdditionalParties({
-      entity: "kases",
+      entity: "projects",
       entityId: 7,
       page: 1,
       perPage: 25,
@@ -67,7 +67,7 @@ describe("addAdditionalParty", () => {
     mockFetch(204, {});
     const { addAdditionalParty } = await import("../src/tools/relationships.js");
     await addAdditionalParty({
-      entity: "kases",
+      entity: "projects",
       entityId: 1,
       partyId: 2,
     });
@@ -159,7 +159,7 @@ describe("removeAdditionalParty", () => {
     mockFetch(204, {});
     const { removeAdditionalParty } = await import("../src/tools/relationships.js");
     const result = await removeAdditionalParty({
-      entity: "kases",
+      entity: "projects",
       entityId: 7,
       partyId: 42,
       confirm: true,
