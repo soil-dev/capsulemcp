@@ -560,7 +560,7 @@ change; just the client emit helpers.
 Two reducers for the per-session token cost of the tool catalog:
 
 1. **Tool-catalog tiering** — `CAPSULE_MCP_TIER=core` registers only a
-   curated ~25-tool core (search/filter/get/create/update across
+   curated 26-tool core (search/filter/get/create/update across
    parties, opportunities, projects, tasks, plus notes, tags, and
    `get_current_user`; see `src/server/tier.ts`). Default (unset, or
    any other value) keeps the full catalog. Composes orthogonally with
@@ -578,8 +578,8 @@ Two reducers for the per-session token cost of the tool catalog:
 
 ### Why
 
-The full 88-tool catalog measures **~155 KB** of `tools/list` JSON
-(measured against the built v1.8.0 server over stdio: 155,645 bytes —
+The full 89-tool catalog measures roughly **~155 KB** of `tools/list` JSON
+(baseline measured against the built v1.8.0 server over stdio: 155,645 bytes —
 36.9 KB top-level descriptions, 104.6 KB inputSchema, of which 65 KB
 is schema-embedded `.describe()` text). For clients that inject the
 catalog into model context, that is roughly 35–40k tokens per session
@@ -592,7 +592,7 @@ the way down for deployments that opt in.
 
 ### How to verify
 
-`tests/tier.test.ts` pins the tier counts (88 full / 25 core / 14
+`tests/tier.test.ts` pins the tier counts (89 full / 26 core / 15
 core∩read-only), the strip's validation-equivalence (including a
 nested `superRefine` surviving), and a per-tool serialized-size
 ceiling on every batch schema.

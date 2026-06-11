@@ -123,7 +123,7 @@ export const createOpportunitySchema = z.object({
     .optional()
     .describe(
       fieldsArrayDescriptor("get_opportunity") +
-        " Capsule's POST /opportunities accepts the same `fields[]` shape as PUT (inferred by symmetry with the v1.6.5 wire-trace findings on POST /parties and POST /kases — the tenant probed had no opportunity custom fields configured, so this is unverified empirically). Setting custom fields on creation removes the create-then-update ritual.",
+        " Capsule's POST /opportunities accepts the same `fields[]` shape as PUT (inferred by symmetry with the v1.6.5 wire-trace findings on party and project creation — the tenant probed had no opportunity custom fields configured, so this is unverified empirically). Setting custom fields on creation removes the create-then-update ritual.",
     ),
 });
 
@@ -188,7 +188,7 @@ export const updateOpportunitySchema = z.object({
     .optional()
     .describe(
       "Reassign owner: pass a user ID to set, or `null` to unassign (verified empirically in v1.6.5 wire-trace — Capsule accepts `owner: null` on PUT /opportunities/:id, mirroring the v1.6.4 finding on /parties; brings update_opportunity into parity with update_party and update_project). " +
-        "When you supply `ownerId` and omit `teamId`, the connector fetches the opportunity's current team and includes it in the PUT body to preserve it across the owner change. Without this defensive read, Capsule's PUT would clear the existing team (see NOTES-ON-CAPSULE-API.md §27 — same asymmetric semantic as /kases). Supply `teamId` explicitly on the same call to change the team instead. " +
+        "When you supply `ownerId` and omit `teamId`, the connector fetches the opportunity's current team and includes it in the PUT body to preserve it across the owner change. Without this defensive read, Capsule's PUT would clear the existing team (see NOTES-ON-CAPSULE-API.md §27 — same asymmetric semantic as project updates). Supply `teamId` explicitly on the same call to change the team instead. " +
         "Combine `ownerId: null` + `teamId: <T>` in one call to transfer an opportunity to team-ownership with no specific user (verified empirically in v1.6.5; the owner-clears-team semantic doesn't fire when owner is being cleared to null).",
     ),
   teamId: positiveId

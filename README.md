@@ -56,7 +56,7 @@ That's it. The first launch fetches the package from npm (a few seconds); subseq
 |---|---|---|
 | Parties (people/orgs) | `search_parties`, `filter_parties`, `get_party`, `get_parties`, `list_employees`, `list_party_opportunities`, `list_party_projects`, `list_party_entries` | `create_party`, `update_party`, `delete_party`, `add_party_email_address`, `remove_party_email_address_by_id`, `add_party_phone_number`, `remove_party_phone_number_by_id`, `add_party_address`, `remove_party_address_by_id`, `add_party_website`, `remove_party_website_by_id` |
 | Opportunities | `search_opportunities`, `filter_opportunities`, `get_opportunity`, `get_opportunities`, `list_opportunity_entries`, `list_associated_projects` | `create_opportunity`, `update_opportunity`, `delete_opportunity` |
-| Projects (cases) | `search_projects`, `list_projects`, `filter_projects`, `get_project`, `get_projects`, `list_project_entries` | `create_project`, `update_project`, `delete_project` |
+| Projects | `search_projects`, `list_projects`, `filter_projects`, `get_project`, `get_projects`, `list_project_entries` | `create_project`, `update_project`, `delete_project` |
 | Additional parties (multi-party deals) | `list_additional_parties` | `add_additional_party`, `remove_additional_party` |
 | Tasks | `list_tasks`, `get_task`, `get_tasks` | `create_task`, `update_task`, `complete_task`, `delete_task` |
 | Entries (notes / captured emails) | `get_entry`, `list_entries` | `add_note`, `update_entry`, `delete_entry` |

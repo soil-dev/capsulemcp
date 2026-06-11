@@ -217,7 +217,7 @@ export const listPartyProjectsSchema = z.object({
 });
 
 export async function listPartyProjects(input: z.infer<typeof listPartyProjectsSchema>) {
-  return capsuleGetList<{ kases: unknown[] }>(`/parties/${input.partyId}/kases`, {
+  return capsuleGetList<{ projects: unknown[] }>(`/parties/${input.partyId}/kases`, {
     page: input.page,
     perPage: input.perPage,
   });
@@ -265,7 +265,7 @@ const PartyWriteBaseSchema = {
     .optional()
     .describe(
       "Pass a user ID to set, or `null` to unassign (verified empirically in v1.6.4 wire-trace — Capsule accepts `owner: null` on PUT /parties/:id for both persons and organisations). Discover IDs via list_users. " +
-        "WARNING: Capsule's PUT on /parties has the same asymmetric owner/team semantic documented in NOTES-ON-CAPSULE-API.md §27 for /kases — setting `owner` while omitting `team` is plausibly clearing-prone. When you supply `ownerId` and omit `teamId`, this connector reads the party's current team and includes it in the PUT body to preserve it across the owner change. Supply `teamId` explicitly to change it.",
+        "WARNING: Capsule's PUT on parties has the same asymmetric owner/team semantic documented in NOTES-ON-CAPSULE-API.md §27 for project updates — setting `owner` while omitting `team` is plausibly clearing-prone. When you supply `ownerId` and omit `teamId`, this connector reads the party's current team and includes it in the PUT body to preserve it across the owner change. Supply `teamId` explicitly to change it.",
     ),
   teamId: positiveId
     .nullable()

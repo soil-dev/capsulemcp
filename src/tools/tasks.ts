@@ -159,7 +159,7 @@ export const updateTaskSchema = z.object({
     .nullable()
     .optional()
     .describe(
-      "Re-link the task to a project (kase) by id, or `null` to orphan it. Mutually exclusive with `partyId` / `opportunityId` — see `partyId` for the XOR semantic.",
+      "Re-link the task to a project by id, or `null` to orphan it. Mutually exclusive with `partyId` / `opportunityId` — see `partyId` for the XOR semantic.",
     ),
 });
 

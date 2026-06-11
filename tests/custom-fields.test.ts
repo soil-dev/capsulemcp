@@ -44,4 +44,12 @@ describe("getCustomField", () => {
     expect(url).toContain("/parties/fields/definitions/999");
     expect((result as { definition: { id: number } }).definition.id).toBe(999);
   });
+
+  it("uses /kases for project field definitions", async () => {
+    mockFetch(200, { definition: { id: 999, name: "Project Field" } });
+    const { getCustomField } = await import("../src/tools/custom-fields.js");
+    await getCustomField({ entity: "projects", id: 999 });
+    const [url] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toContain("/kases/fields/definitions/999");
+  });
 });
