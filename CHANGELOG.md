@@ -11,6 +11,24 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.8.1] — 2026-06-11
+
+Patch release on top of v1.8.0 — token-cost and robustness work from a
+compat-preserving improvement review, with no wire-shape or behavior
+change to any tool. Highlights: opt-in `CAPSULE_MCP_TIER=core` cuts the
+~155 KB `tools/list` payload to a fraction, and the `batch_*` schemas
+drop ~17 KB of duplicated description text; the stdio transport now
+exits cleanly on client disconnect (no more zombie instances after a
+host reconnect flap); the Capsule client's timeout plumbing moved to
+`AbortSignal.timeout` (−52 lines, mid-body stalls abortable by
+construction); repeated patterns consolidated into shared helpers
+(parent-ref XOR, concurrency pool, pagination schema fragments, list
+plumbing, the four `remove_party_*_by_id` clones); the npm package is
+explicitly bin-only; and the typecheck gate now covers tests/ and
+scripts/ plus six new compiler strictness flags. Catalog unchanged: 88
+tools (49 read-only, 25 in the core tier), 8 confirm-gated destructive;
+568 tests.
+
 ### Added
 
 - `CAPSULE_MCP_TIER=core` — opt-in tool-catalog tiering. Registers only
