@@ -110,7 +110,7 @@ describe("fetch-stage failure events (forced, verbose-independent)", () => {
       json: async () => ({ parties: [] }),
       text: async () => "",
       statusText: "200",
-    } as Awaited<ReturnType<typeof fetch>>);
+    } as unknown as Awaited<ReturnType<typeof fetch>>);
 
     const { capsuleGet } = await import("../src/capsule/client.js");
     await capsuleGet("/parties");
@@ -137,7 +137,7 @@ describe("fetch-stage failure events (forced, verbose-independent)", () => {
       },
       text: async () => "",
       statusText: "200",
-    } as Awaited<ReturnType<typeof fetch>>);
+    } as unknown as Awaited<ReturnType<typeof fetch>>);
 
     const { capsuleGet } = await import("../src/capsule/client.js");
     await expect(capsuleGet("/parties/123456789")).rejects.toThrow(

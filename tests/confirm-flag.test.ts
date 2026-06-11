@@ -18,7 +18,7 @@ const cases: {
   schema: {
     safeParse: (v: unknown) => {
       success: boolean;
-      error?: { issues: { path: (string | number)[]; message: string }[] };
+      error?: { issues: { path: PropertyKey[]; message: string }[] };
     };
   };
   base: Record<string, unknown>;

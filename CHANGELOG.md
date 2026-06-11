@@ -32,6 +32,22 @@ versions adhere to [Semantic Versioning](https://semver.org).
   the description-stripped clone preserves all checks and refinements,
   pinned by tests including a nested `superRefine`.
 
+- The npm package is now explicitly bin-only: the `main` field is
+  removed, so an accidental `import "capsulemcp"` fails at resolve time
+  instead of executing the stdio entry inside the importing process
+  (which validates env and can call `process.exit`). `npx capsulemcp`
+  and the `bin` install path are unchanged. The `prepare` script now
+  reuses `npm run build` instead of duplicating its command line.
+
+- The `typecheck` gate now covers `tests/` and `scripts/` (≈10k LOC that
+  previously relied on runtime failures to catch type drift) via a
+  second project file, `tsconfig.tests.json`; the latent type errors it
+  surfaced in test files were fixed with no behavior change. Also
+  removed the unused `cacheGet` back-compat shim and the dead
+  `TokenType` export, and corrected IDEAS.md's stale claim that
+  tag-definition delete is unimplemented (shipped in v1.7.0 as
+  `delete_tag_definition`).
+
 ### Fixed
 
 - stdio transport now exits cleanly when the MCP client disconnects —

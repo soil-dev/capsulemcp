@@ -13,8 +13,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 
-export type TokenType = "access" | "refresh";
-
 // Schema is the source of truth; the interface below is derived from it
 // so a drift between runtime validation and TypeScript shape can't happen.
 // The HMAC verification already ensures an attacker can't forge claims,

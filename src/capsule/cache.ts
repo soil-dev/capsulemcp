@@ -57,10 +57,9 @@ interface CacheEntry {
 }
 
 /**
- * Discriminated result for cache lookups. `cacheGet` is kept as the
- * back-compat shim returning just `PagedResult | undefined`, but
- * callers that want to log a reason ("empty" vs "expired") use
- * `cacheLookup` instead.
+ * Discriminated result for cache lookups: `hit` with `ageMs` on
+ * hit; `reason` ("empty" vs "expired") on miss, so the caller can
+ * log why the cache didn't serve.
  */
 export type CacheLookupResult<T> =
   | { hit: true; result: PagedResult<T>; ageMs: number }
@@ -131,8 +130,7 @@ export function cacheKey(path: string, params?: QueryParams): string {
 /**
  * Rich lookup returning a discriminated result (`hit` with `ageMs`
  * on hit; `reason` on miss). Used by `capsuleGetCached` so it can
- * emit cache.hit / cache.miss events with the right reason. Tests
- * and back-compat callers can keep using `cacheGet` below.
+ * emit cache.hit / cache.miss events with the right reason.
  */
 export function cacheLookup<T>(key: string): CacheLookupResult<T> {
   const entry = cache.get(key);
@@ -143,11 +141,6 @@ export function cacheLookup<T>(key: string): CacheLookupResult<T> {
     return { hit: false, reason: "expired" };
   }
   return { hit: true, result: entry.result as PagedResult<T>, ageMs: now - entry.storedAt };
-}
-
-export function cacheGet<T>(key: string): PagedResult<T> | undefined {
-  const r = cacheLookup<T>(key);
-  return r.hit ? r.result : undefined;
 }
 
 export function cacheSet<T>(key: string, result: PagedResult<T>): void {

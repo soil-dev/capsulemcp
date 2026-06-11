@@ -15,14 +15,22 @@ import { fetch } from "undici";
 import { mockFetch } from "./test-helpers.js";
 import {
   cacheClear,
-  cacheGet,
   cacheKey,
+  cacheLookup,
   cacheSet,
   cacheSize,
   cacheDisabled,
   getCacheTtlMs,
   invalidateByPrefix,
 } from "../src/capsule/cache.js";
+
+// Local convenience over cacheLookup, mirroring the old cacheGet shim
+// the production code no longer carries (nothing in src/ wanted the
+// reasonless form).
+function cacheGet<T>(key: string) {
+  const r = cacheLookup<T>(key);
+  return r.hit ? r.result : undefined;
+}
 
 vi.mock("undici", () => ({ fetch: vi.fn() }));
 
