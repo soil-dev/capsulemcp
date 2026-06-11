@@ -22,7 +22,7 @@ export const listProjectsSchema = z.object({
 });
 
 export async function listProjects(input: z.infer<typeof listProjectsSchema>) {
-  return capsuleGetList<{ kases: unknown[] }>("/kases", {
+  return capsuleGetList<{ projects: unknown[] }>("/kases", {
     status: input.status,
     embed: input.embed,
     page: input.page,
@@ -38,7 +38,7 @@ export const getProjectSchema = z.object({
 });
 
 export async function getProject(input: z.infer<typeof getProjectSchema>) {
-  const { data } = await capsuleGet<{ kase: unknown }>(`/kases/${input.id}`, {
+  const { data } = await capsuleGet<{ project: unknown }>(`/kases/${input.id}`, {
     embed: input.embed,
   });
   return data;
@@ -63,7 +63,7 @@ export const getProjectsSchema = z.object({
 });
 
 export async function getProjects(input: z.infer<typeof getProjectsSchema>) {
-  return chunkedMultiGet("/kases", "kases", input.ids, { embed: input.embed });
+  return chunkedMultiGet("/kases", "projects", input.ids, { embed: input.embed });
 }
 
 // ── Write ───────────────────────────────────────────────────────────────────
@@ -126,7 +126,7 @@ export async function createProject(input: z.infer<typeof createProjectSchema>) 
   const mappedFields = mapFieldsForBody(fields);
   if (mappedFields !== undefined) body["fields"] = mappedFields;
 
-  return capsulePost<{ kase: unknown }>("/kases", { kase: body });
+  return capsulePost<{ project: unknown }>("/kases", { kase: body });
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -202,7 +202,7 @@ export async function updateProject(input: z.infer<typeof updateProjectSchema>) 
   let resolvedTeamId: number | null | undefined = teamId;
   let resolvedStageId: number | null | undefined = stageId;
   if (ownerId !== undefined && (teamId === undefined || stageId === undefined)) {
-    const current = await readEntityRefs(`/kases/${id}`, "kase");
+    const current = await readEntityRefs(`/kases/${id}`, "project");
     if (teamId === undefined) resolvedTeamId = current.teamId;
     if (stageId === undefined) resolvedStageId = current.stageId;
   }
@@ -216,7 +216,7 @@ export async function updateProject(input: z.infer<typeof updateProjectSchema>) 
   const mappedFields = mapFieldsForBody(fields);
   if (mappedFields !== undefined) body["fields"] = mappedFields;
 
-  return capsulePut<{ kase: unknown }>(`/kases/${id}`, { kase: body });
+  return capsulePut<{ project: unknown }>(`/kases/${id}`, { kase: body });
 }
 
 // ── batch_update_project (write, fan-out) ──────────────────────────────────

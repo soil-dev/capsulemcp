@@ -158,11 +158,11 @@ async function main() {
     name: "ZZZ-MCP wire-trace project",
     partyId: partyA.party.id,
     status: "OPEN",
-  })) as { kase: { id: number } };
+  })) as { project: { id: number } };
   dumpLastCall("createProject");
 
   await updateProject({
-    id: proj.kase.id,
+    id: proj.project.id,
     description: "updated by wire-trace",
   });
   dumpLastCall("updateProject");
@@ -177,7 +177,7 @@ async function main() {
 
   const track = (await applyTrack({
     entity: "kases",
-    entityId: proj.kase.id,
+    entityId: proj.project.id,
     trackDefinitionId: tdefId,
   })) as { track: { id: number } | null };
   dumpLastCall("applyTrack");
@@ -196,7 +196,7 @@ async function main() {
   await removeTrack({ trackId: track.track.id, confirm: true });
   dumpLastCall("removeTrack");
 
-  await deleteProject({ id: proj.kase.id, confirm: true });
+  await deleteProject({ id: proj.project.id, confirm: true });
   dumpLastCall("deleteProject");
 
   // ── 5. TASK ──────────────────────────────────────────────────────────────
