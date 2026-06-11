@@ -261,6 +261,50 @@ common workflow involves passing PDFs through Claude.
 
 ---
 
+## URL-sourced attachment upload (`sourceUrl`)
+
+`upload_attachment` requires the file inline as base64 in the tool
+arguments, so the bytes must transit the model as generated output.
+That caps practical uploads from chat clients at a few tens of KB —
+a ~500 KB signed PDF is ~660K base64 characters (~165k tokens of
+model output), impossible regardless of the server's 25 MB wire
+limit (DESIGN.md L9). Raising any server-side limit cannot fix
+this, and chunked upload doesn't either (same tokens, more calls).
+
+The remedy is to move the bytes out of the model's path: an
+optional `sourceUrl` parameter, mutually exclusive with
+`dataBase64`. The server fetches the file itself and uploads it to
+Capsule; the model only ever handles a short URL. Workflow: put the
+file anywhere https-fetchable (Drive "anyone with the link",
+DocuSign signed URL, an internal file server the deployment can
+reach), then "attach this URL to project X".
+
+Server-side URL fetch is an SSRF surface, so the implementation
+needs the same guard discipline as the `CAPSULE_API_BASE_URL`
+validation in `src/capsule/client.ts`:
+
+- https only; refuse redirects that downgrade the scheme
+- resolve DNS and reject private / link-local / loopback ranges
+  (RFC 1918, 169.254.0.0/16 — the cloud metadata server is the
+  classic SSRF target), re-checking on every redirect hop
+- enforce the existing 25 MB cap while streaming (abort
+  mid-download — same pattern as `capsuleGetBinary`'s streaming cap)
+- take `Content-Type` from the response, caller-overridable; never
+  forward auth headers to the fetched URL
+- standard 60 s request timeout
+
+Constraints to document on the tool when shipped: the URL must be
+reachable from the deployment without auth (a private Drive file
+won't work; a signed/public link will), and files attached to a
+Claude chat are NOT exposed to MCP connectors, so there is no path
+to "upload the file I just attached to this conversation".
+
+**When to consider**: a real request already exists (attaching a
+~500 KB signed contract PDF to a Lifecycle project, 2026-06-11).
+Effort: ~half a day with tests.
+
+---
+
 ## Tag CRUD
 
 `POST/PUT/DELETE` on `/<entity>/tags` work and are deliberately not

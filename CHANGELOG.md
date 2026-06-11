@@ -11,6 +11,19 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Changed
+
+- Documented the practical inline-upload limit honestly: the
+  `upload_attachment.dataBase64` description now tells LLM callers
+  that inline base64 is only viable for small files (a few tens of
+  KB — the bytes must transit the model as tool-call output) and not
+  to attempt large files; DESIGN.md L9 explains the structural
+  bottleneck (the 25 MB cap is the wire limit for programmatic
+  clients, not what a chat model can emit); EXAMPLES.md's upload
+  example carries the same caveat; IDEAS.md gains the full design for
+  the planned remedy, a URL-sourced upload (`sourceUrl`) with SSRF
+  guards.
+
 ## [2.1.0] — 2026-06-11
 
 Minor release: one additive field, wire-verified end-to-end (and the
