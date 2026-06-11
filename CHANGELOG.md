@@ -11,6 +11,56 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [2.0.0] — 2026-06-11
+
+Major release: the tool surface drops Capsule's legacy "kase"
+vocabulary and its other naming inconsistencies — breaking changes
+throughout, no back-compat aliases. The motivation is LLM ergonomics:
+a consistent surface measurably improves tool selection and removes
+the cross-referencing trivia ("kase means project") that every caller
+previously had to know. All wire behaviour against Capsule is
+unchanged (paths still hit `/kases`, body wrappers still send `kase`)
+and was re-verified against the live API via the full wire-trace
+suite before this release. Catalog: 89 tools (50 in read-only mode,
+26 in the core tier), 8 confirm-gated destructive; 575 tests.
+
+### Breaking
+
+- **Response keys say `project`, never `kase`.** Every JSON response is
+  deep-key-normalized at the client boundary (`kase` → `project`,
+  `kases` → `projects`, `restrictedKases` → `restrictedProjects`; keys
+  only, values untouched). Input/output vocabulary now match: a task
+  written with `projectId: 5` reads back as `task.project.id === 5`.
+
+- **Entity enums take `'projects'`, not `'kases'`** on the
+  entity-parameterized tools (tags, custom fields, saved filters,
+  tracks, additional parties). Every "Use 'kases' for projects" hedge
+  is gone from the descriptions.
+
+- **Tool renames**: `list_lostreasons` → `list_lost_reasons`,
+  `list_activitytypes` → `list_activity_types` (snake_case
+  convention); `show_track` → `get_track` (the surface's only `show_`
+  verb). Parameter renames: `get_track`/`update_track`/`remove_track`
+  take `id` (was `trackId`); `get_custom_field` takes `id` (was
+  `fieldId`) — every single-record tool now uses the same name.
+
+- **`embed` is validated.** Capsule silently ignores unknown embed
+  tokens, so a typo'd embed previously returned less data than asked
+  for with no error. Tokens are now checked against per-surface
+  allow-lists verified empirically against the live API (`tags`,
+  `fields`, `missingImportantFields` on record surfaces;
+  `attachments`, `participants` on entries).
+
+- **`create_party` enforces its promised conditional requireds** at
+  the schema layer: a person needs `firstName` and/or `lastName`; an
+  organisation needs `name`.
+
+### Added
+
+- `search_projects` — free-text project search (`GET /kases/search`,
+  verified live). Parties and opportunities always had `search_*`
+  tools; projects only had `list_projects`. Included in the core tier.
+
 ## [1.8.1] — 2026-06-11
 
 Patch release on top of v1.8.0 — token-cost and robustness work from a
