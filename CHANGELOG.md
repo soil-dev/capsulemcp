@@ -11,6 +11,13 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [2.1.1] — 2026-06-11
+
+Docs-only patch: the practical inline-upload limit is now documented
+(and the misleading 25 MB framing corrected) in the one place that has
+runtime effect — the `upload_attachment` tool description an LLM
+caller reads — plus DESIGN/EXAMPLES/IDEAS.
+
 ### Changed
 
 - Documented the practical inline-upload limit honestly: the

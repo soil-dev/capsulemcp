@@ -255,7 +255,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
   const server = new McpServer(
     {
       name: "capsulemcp",
-      version: "2.1.0",
+      version: "2.1.1",
       description:
         "Read and (optionally) modify Capsule CRM data — parties, opportunities, projects, tasks, timeline entries, pipelines, tags.",
       websiteUrl: "https://github.com/soil-dev/capsulemcp",
