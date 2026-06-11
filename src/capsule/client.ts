@@ -2,6 +2,7 @@ import { fetch, type Response } from "undici";
 import { readBool } from "../env.js";
 import { logEvent, logVerbose, redactPath } from "../log.js";
 import { cacheDisabled, cacheKey, cacheLookup, cacheSet } from "./cache.js";
+import { normalizeProjectKeys } from "./normalize.js";
 
 const DEFAULT_BASE_URL = "https://api.capsulecrm.com/api/v2";
 
@@ -572,7 +573,11 @@ async function throwForStatus(res: Response): Promise<void> {
 
 async function handleResponse<T>(res: Response): Promise<T> {
   await throwForStatus(res);
-  return mapAbort(res.json() as Promise<T>);
+  const body = await mapAbort(res.json());
+  // v2 boundary normalization: Capsule's legacy `kase`/`kases`/
+  // `restrictedKases` response keys become `project`/`projects`/
+  // `restrictedProjects` for every consumer (see capsule/normalize.ts).
+  return normalizeProjectKeys(body) as T;
 }
 
 export type QueryParams = Record<string, string | number | boolean | undefined>;

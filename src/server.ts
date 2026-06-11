@@ -601,7 +601,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
   registerTool(
     server,
     "list_deleted_projects",
-    "Audit feature: list projects deleted on or after a given timestamp. The `since` parameter is REQUIRED. Response also includes a `restrictedKases` key for records the integration user can't read fully.",
+    "Audit feature: list projects deleted on or after a given timestamp. The `since` parameter is REQUIRED. Response also includes a `restrictedProjects` key for records the integration user can't read fully.",
     listDeletedProjectsSchema,
     listDeletedProjects,
   );

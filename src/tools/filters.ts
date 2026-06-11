@@ -132,5 +132,5 @@ export async function filterProjects(input: FilterInput) {
   //      {field: "closedOn", operator: "is within last", value: N}]
   //
   // Capsule's API uses the legacy `/kases` path for projects (cases).
-  return runFilter<{ kases: unknown[] }>("kases", input);
+  return runFilter<{ projects: unknown[] }>("kases", input);
 }

@@ -28,13 +28,13 @@ interface EntityRefShape {
  * means "skip" or "explicit null".
  *
  * @param path  full Capsule API path, e.g. `/opportunities/123`
- * @param responseKey  top-level field on the response: `kase` for
+ * @param responseKey  top-level field on the response: `project` for
  *                     projects, `opportunity` for opportunities, or
  *                     `party` for parties.
  */
 export async function readEntityRefs(
   path: string,
-  responseKey: "kase" | "opportunity" | "party",
+  responseKey: "project" | "opportunity" | "party",
 ): Promise<{ teamId: number | undefined; stageId: number | undefined }> {
   const { data } = await capsuleGet<Record<string, EntityRefShape>>(path);
   const entity = data[responseKey];

@@ -12,7 +12,7 @@ import { capsuleGetList } from "../capsule/client.js";
 //
 // All deleted-* endpoints REQUIRE the `since` parameter (Capsule returns
 // 422 without it). They also include a `restrictedParties` /
-// `restrictedOpportunities` / `restrictedKases` sibling key in the
+// `restrictedOpportunities` / `restrictedProjects` sibling key in the
 // response: records that the integration user can see were deleted but
 // cannot read in full. We surface both keys verbatim.
 
@@ -80,8 +80,8 @@ export const listDeletedProjectsSchema = z.object(DeletedPagination);
 export async function listDeletedProjects(input: z.infer<typeof listDeletedProjectsSchema>) {
   // Capsule's API uses /kases for projects.
   return capsuleGetList<{
-    kases: unknown[];
-    restrictedKases?: unknown[];
+    projects: unknown[];
+    restrictedProjects?: unknown[];
   }>("/kases/deleted", {
     since: input.since,
     page: input.page,

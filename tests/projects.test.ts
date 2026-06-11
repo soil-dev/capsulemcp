@@ -13,7 +13,7 @@ afterEach(() => {
 });
 
 describe("listProjects", () => {
-  it("returns kases and nextPage", async () => {
+  it("returns projects and nextPage (Capsule kases key normalized)", async () => {
     mockFetch(
       200,
       { kases: [{ id: 1, name: "Website Rebuild" }] },
@@ -25,7 +25,7 @@ describe("listProjects", () => {
     const { listProjects } = await import("../src/tools/projects.js");
     const result = await listProjects({ page: 1, perPage: 25 });
 
-    expect(result.kases).toHaveLength(1);
+    expect(result.projects).toHaveLength(1);
     expect(result.nextPage).toBe(2);
   });
 
@@ -47,7 +47,7 @@ describe("getProject", () => {
     const { getProject } = await import("../src/tools/projects.js");
     const result = await getProject({ id: 3 });
 
-    expect((result as { kase: { name: string } }).kase.name).toBe("Onboarding");
+    expect((result as { project: { name: string } }).project.name).toBe("Onboarding");
   });
 });
 
@@ -468,14 +468,14 @@ describe("getProjects (batch)", () => {
     expect(url).not.toContain("/projects/");
   });
 
-  it("splits >10 ids into chunks, propagates embed, and merges kases", async () => {
+  it("splits >10 ids into chunks, propagates embed, and merges projects", async () => {
     mockFetch(200, { kases: Array.from({ length: 10 }, (_v, i) => ({ id: i + 1 })) });
     mockFetch(200, { kases: [{ id: 11 }] });
 
     const { getProjects } = await import("../src/tools/projects.js");
     const ids = Array.from({ length: 11 }, (_v, i) => i + 1);
     const result = (await getProjects({ ids, embed: "tags,fields" })) as {
-      kases: Array<{ id: number }>;
+      projects: Array<{ id: number }>;
     };
 
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
@@ -483,6 +483,6 @@ describe("getProjects (batch)", () => {
     expect(urls[0]).toContain("/kases/1,2,3,4,5,6,7,8,9,10");
     expect(urls[1]).toContain("/kases/11");
     expect(urls.every((u) => u.includes("embed=tags%2Cfields"))).toBe(true);
-    expect(result.kases.map((kase) => kase.id)).toEqual(ids);
+    expect(result.projects.map((p) => p.id)).toEqual(ids);
   });
 });
