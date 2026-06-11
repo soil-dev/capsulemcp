@@ -1,6 +1,11 @@
 import { z } from "zod";
-import { ENTITY_PATH, positiveId, paginationFields } from "./shared-schemas.js";
-import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
+import {
+  ENTITY_PATH,
+  positiveId,
+  paginationFields,
+  embedParam,
+  RECORD_EMBEDS,
+} from "./shared-schemas.js";
 import { confirmFlag } from "./confirm-flag.js";
 import {
   CapsuleApiError,
@@ -39,7 +44,7 @@ const RelationshipEntity = z
 export const listAdditionalPartiesSchema = z.object({
   entity: RelationshipEntity,
   entityId: positiveId.describe("ID of the opportunity or project."),
-  embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
+  embed: embedParam(RECORD_EMBEDS),
   ...paginationFields,
 });
 
@@ -148,7 +153,7 @@ export async function removeAdditionalParty(input: z.infer<typeof removeAddition
 
 export const listAssociatedProjectsSchema = z.object({
   opportunityId: positiveId,
-  embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
+  embed: embedParam(RECORD_EMBEDS),
   ...paginationFields,
 });
 

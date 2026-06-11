@@ -1,10 +1,9 @@
 import { z } from "zod";
 import { setNullableRef, setRef } from "./body-helpers.js";
 import { defineBatch } from "./define-batch.js";
-import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
 import { defineDelete } from "./define-delete.js";
 import { readEntityRefs } from "./preserve-refs.js";
-import { positiveId, paginationFields } from "./shared-schemas.js";
+import { positiveId, paginationFields, embedParam, RECORD_EMBEDS } from "./shared-schemas.js";
 import { capsuleGet, capsulePost, capsulePut, capsuleGetList } from "../capsule/client.js";
 import { chunkedMultiGet } from "../capsule/multi-get.js";
 import { idempotentWithResult } from "../capsule/idempotent.js";
@@ -142,7 +141,7 @@ const WebsiteSchema = z
 
 export const searchPartiesSchema = z.object({
   q: z.string().optional().describe("Free-text search query"),
-  embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
+  embed: embedParam(RECORD_EMBEDS),
   ...paginationFields,
 });
 
@@ -162,7 +161,7 @@ export async function searchParties(input: z.infer<typeof searchPartiesSchema>) 
 
 export const getPartySchema = z.object({
   id: positiveId.describe("Party ID"),
-  embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
+  embed: embedParam(RECORD_EMBEDS),
 });
 
 export async function getParty(input: z.infer<typeof getPartySchema>) {
@@ -189,7 +188,7 @@ export const getPartiesSchema = z.object({
     .describe(
       "Array of party IDs (1–50). Capsule's native batch-fetch endpoint caps at 10 per request; the connector transparently splits larger sets into 10-id chunks and fans out the Capsule calls in parallel. Result shape is identical regardless of input size.",
     ),
-  embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
+  embed: embedParam(RECORD_EMBEDS),
 });
 
 export async function getParties(input: z.infer<typeof getPartiesSchema>) {
@@ -276,35 +275,58 @@ const PartyWriteBaseSchema = {
     ),
 };
 
-export const createPartySchema = z.object({
-  type: z.enum(["person", "organisation"]),
-  // person
-  firstName: z.string().optional(),
-  lastName: z.string().optional(),
-  title: z.string().optional(),
-  jobTitle: z.string().optional(),
-  organisationId: positiveId.optional().describe("Link person to an existing organisation ID"),
-  // organisation
-  name: z.string().optional(),
-  ...PartyWriteBaseSchema,
-  ownerId: positiveId
-    .optional()
-    .describe(
-      "Assign to user ID. Defaults to the API-token owner when omitted. To create a team-owned party with no specific user, first create the party, then call update_party with `ownerId: null` and `teamId`.",
-    ),
-  teamId: positiveId
-    .optional()
-    .describe(
-      "Assign to team ID (discover via list_teams). Omit to leave team unset on create. To clear an existing team or create a team-owned party with no specific owner, use update_party after creation.",
-    ),
-  fields: z
-    .array(CustomFieldWriteSchema)
-    .optional()
-    .describe(
-      fieldsArrayDescriptor("get_party") +
-        " Verified empirically in v1.6.5 wire-trace: Capsule's POST /parties accepts the same `fields[]` shape as PUT, so callers can set custom field values on creation without a follow-up update.",
-    ),
-});
+export const createPartySchema = z
+  .object({
+    type: z.enum(["person", "organisation"]),
+    // person
+    firstName: z.string().optional(),
+    lastName: z.string().optional(),
+    title: z.string().optional(),
+    jobTitle: z.string().optional(),
+    organisationId: positiveId.optional().describe("Link person to an existing organisation ID"),
+    // organisation
+    name: z.string().optional(),
+    ...PartyWriteBaseSchema,
+    ownerId: positiveId
+      .optional()
+      .describe(
+        "Assign to user ID. Defaults to the API-token owner when omitted. To create a team-owned party with no specific user, first create the party, then call update_party with `ownerId: null` and `teamId`.",
+      ),
+    teamId: positiveId
+      .optional()
+      .describe(
+        "Assign to team ID (discover via list_teams). Omit to leave team unset on create. To clear an existing team or create a team-owned party with no specific owner, use update_party after creation.",
+      ),
+    fields: z
+      .array(CustomFieldWriteSchema)
+      .optional()
+      .describe(
+        fieldsArrayDescriptor("get_party") +
+          " Verified empirically in v1.6.5 wire-trace: Capsule's POST /parties accepts the same `fields[]` shape as PUT, so callers can set custom field values on creation without a follow-up update.",
+      ),
+  })
+  .superRefine((data, ctx) => {
+    // Enforce the type-conditional required fields the description has
+    // always promised (and Capsule enforces with a 422): a person needs
+    // firstName or lastName; an organisation needs name. Rejecting at the
+    // schema layer surfaces the problem before any HTTP round-trip,
+    // matching the codebase's schema-layer-enforcement pattern
+    // (validateWebsiteAddress above).
+    if (data.type === "person" && !data.firstName && !data.lastName) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["firstName"],
+        message: "create_party: a person requires firstName and/or lastName",
+      });
+    }
+    if (data.type === "organisation" && !data.name) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["name"],
+        message: "create_party: an organisation requires name",
+      });
+    }
+  });
 
 export async function createParty(input: z.infer<typeof createPartySchema>) {
   const { ownerId, teamId, organisationId, fields, ...rest } = input;

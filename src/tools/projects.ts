@@ -1,10 +1,9 @@
 import { z } from "zod";
 import { setNullableRef, setRef } from "./body-helpers.js";
 import { defineBatch } from "./define-batch.js";
-import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
 import { defineDelete } from "./define-delete.js";
 import { readEntityRefs } from "./preserve-refs.js";
-import { positiveId, paginationFields } from "./shared-schemas.js";
+import { positiveId, paginationFields, embedParam, RECORD_EMBEDS } from "./shared-schemas.js";
 import { capsuleGet, capsulePost, capsulePut, capsuleGetList } from "../capsule/client.js";
 import { chunkedMultiGet } from "../capsule/multi-get.js";
 import {
@@ -17,7 +16,7 @@ import {
 
 export const searchProjectsSchema = z.object({
   q: z.string().optional().describe("Free-text search query"),
-  embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
+  embed: embedParam(RECORD_EMBEDS),
   ...paginationFields,
 });
 
@@ -34,7 +33,7 @@ export async function searchProjects(input: z.infer<typeof searchProjectsSchema>
 
 export const listProjectsSchema = z.object({
   status: z.enum(["OPEN", "CLOSED"]).optional(),
-  embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
+  embed: embedParam(RECORD_EMBEDS),
   ...paginationFields,
 });
 
@@ -51,7 +50,7 @@ export async function listProjects(input: z.infer<typeof listProjectsSchema>) {
 
 export const getProjectSchema = z.object({
   id: positiveId,
-  embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
+  embed: embedParam(RECORD_EMBEDS),
 });
 
 export async function getProject(input: z.infer<typeof getProjectSchema>) {
@@ -76,7 +75,7 @@ export const getProjectsSchema = z.object({
     .describe(
       "Array of project IDs (1–50). Capsule's native batch-fetch endpoint caps at 10 per request; the connector transparently splits larger sets into 10-id chunks and fans out the Capsule calls in parallel.",
     ),
-  embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
+  embed: embedParam(RECORD_EMBEDS),
 });
 
 export async function getProjects(input: z.infer<typeof getProjectsSchema>) {

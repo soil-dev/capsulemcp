@@ -831,3 +831,25 @@ describe("getParties (batch)", () => {
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("v2 schema tightening", () => {
+  it("rejects typo'd embed tokens (Capsule silently ignores them — worst failure mode)", async () => {
+    const { searchPartiesSchema } = await import("../src/tools/parties.js");
+    expect(searchPartiesSchema.safeParse({ embed: "tags,fields" }).success).toBe(true);
+    expect(searchPartiesSchema.safeParse({ embed: "missingImportantFields" }).success).toBe(true);
+    // The typo class: 'field' instead of 'fields', or unknown tokens.
+    expect(searchPartiesSchema.safeParse({ embed: "field" }).success).toBe(false);
+    expect(searchPartiesSchema.safeParse({ embed: "tags,bogus" }).success).toBe(false);
+    expect(searchPartiesSchema.safeParse({ embed: "" }).success).toBe(false);
+  });
+
+  it("create_party enforces its promised type-conditional required fields", async () => {
+    const { createPartySchema } = await import("../src/tools/parties.js");
+    // person: firstName and/or lastName required
+    expect(createPartySchema.safeParse({ type: "person" }).success).toBe(false);
+    expect(createPartySchema.safeParse({ type: "person", lastName: "K" }).success).toBe(true);
+    // organisation: name required
+    expect(createPartySchema.safeParse({ type: "organisation" }).success).toBe(false);
+    expect(createPartySchema.safeParse({ type: "organisation", name: "Acme" }).success).toBe(true);
+  });
+});

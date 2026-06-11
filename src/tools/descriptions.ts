@@ -11,18 +11,3 @@
  * across all of them. Per-tool descriptions with domain-specific
  * meaning (e.g. mutex notes on `create_task`) stay inline.
  */
-
-/**
- * `embed` parameter description for tools whose embed surface is
- * dominated by `tags` and `fields`. Used on parties, opportunities,
- * projects, audit, filters, saved-filters, relationships.
- */
-export const EMBED_TAGS_FIELDS_DESCRIPTION = "Comma-separated embeds, e.g. 'tags,fields'";
-
-/**
- * `embed` parameter description for the entries surface, where the
- * useful embeds are `attachments` and `participants`. Used on
- * `list_*_entries`, `get_entry`, and the global `list_entries`.
- */
-export const EMBED_ATTACHMENTS_PARTICIPANTS_DESCRIPTION =
-  "Comma-separated embeds, e.g. 'attachments,participants'";

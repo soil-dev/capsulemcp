@@ -1,6 +1,5 @@
 import { z } from "zod";
-import { paginationFields } from "./shared-schemas.js";
-import { EMBED_TAGS_FIELDS_DESCRIPTION } from "./descriptions.js";
+import { paginationFields, embedParam, RECORD_EMBEDS } from "./shared-schemas.js";
 import { capsuleSearch } from "../capsule/client.js";
 
 // ── Shared schema ───────────────────────────────────────────────────────────
@@ -63,7 +62,7 @@ const FilterInputSchema = z.object({
     .describe(
       "Array of filter conditions. All conditions are ANDed together. To get newest records, use a date condition like {field: 'addedOn', operator: 'is within last', value: 7} and pick the highest-id row from the result (Capsule IDs are monotonic).",
     ),
-  embed: z.string().optional().describe(EMBED_TAGS_FIELDS_DESCRIPTION),
+  embed: embedParam(RECORD_EMBEDS),
   ...paginationFields,
 });
 
