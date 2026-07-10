@@ -11,6 +11,31 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [2.1.2] — 2026-07-10
+
+Security patch: updates undici, the connector's sole outbound HTTP
+client (all Capsule API calls + the HTTP/OAuth transport), off a
+version carrying a high-severity advisory cluster.
+
+### Security
+
+- Bump `undici` 8.4.1 → 8.5.0, resolving a high-severity advisory
+  cluster affecting `undici <= 8.4.1` (`npm audit --audit-level=high`
+  failed on the prior lockfile). Most relevant to this connector:
+  HTTP response-queue poisoning via keep-alive socket reuse and
+  Set-Cookie header injection via percent-decoding. Several other
+  advisories in the cluster (SOCKS5 TLS bypass, WebSocket DoS) require
+  configurations this deployment doesn't use, but undici is the one
+  HTTP library every outbound call flows through, so staying current
+  is defense-in-depth. Request behaviour is unchanged — verified by
+  the full wire-trace suite against the live API before release.
+
+### Changed
+
+- Dev/CI dependency bumps grouped in the same cycle: `vitest`
+  4.1.8 → 4.1.9, `@biomejs/biome` 2.4.16 → 2.5.0, and
+  `actions/checkout` 6 → 7 in CI. No runtime effect.
+
 ## [2.1.1] — 2026-06-11
 
 Docs-only patch: the practical inline-upload limit is now documented
