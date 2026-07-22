@@ -36,22 +36,25 @@ describe("addTag — atomic attach by name", () => {
     ["parties", "party", "/parties/284083000"],
     ["opportunities", "opportunity", "/opportunities/19897000"],
     ["projects", "kase", "/kases/5828000"],
-  ] as const)("PUTs to /%s/{id} with the correct wrapper key and {name}-only tag item", async (entity, wrapper, expectedPath) => {
-    mockFetch(200, { [wrapper]: { id: 1 } });
-    const { addTag } = await import("../src/tools/tags.js");
+  ] as const)(
+    "PUTs to /%s/{id} with the correct wrapper key and {name}-only tag item",
+    async (entity, wrapper, expectedPath) => {
+      mockFetch(200, { [wrapper]: { id: 1 } });
+      const { addTag } = await import("../src/tools/tags.js");
 
-    const entityId = Number(expectedPath.split("/").pop());
-    await addTag({ entity, entityId, tagName: "VIP" });
+      const entityId = Number(expectedPath.split("/").pop());
+      await addTag({ entity, entityId, tagName: "VIP" });
 
-    const [url, opts] = vi.mocked(fetch).mock.calls[0]!;
-    expect(url).toContain(expectedPath);
-    expect((opts as RequestInit).method).toBe("PUT");
-    const body = JSON.parse((opts as RequestInit).body as string);
-    expect(body[wrapper].tags).toEqual([{ name: "VIP" }]);
-    // No id, no _delete on an add
-    expect(body[wrapper].tags[0].id).toBeUndefined();
-    expect(body[wrapper].tags[0]._delete).toBeUndefined();
-  });
+      const [url, opts] = vi.mocked(fetch).mock.calls[0]!;
+      expect(url).toContain(expectedPath);
+      expect((opts as RequestInit).method).toBe("PUT");
+      const body = JSON.parse((opts as RequestInit).body as string);
+      expect(body[wrapper].tags).toEqual([{ name: "VIP" }]);
+      // No id, no _delete on an add
+      expect(body[wrapper].tags[0].id).toBeUndefined();
+      expect(body[wrapper].tags[0]._delete).toBeUndefined();
+    },
+  );
 
   it("rejects empty tagName at the schema layer", async () => {
     const { addTagSchema } = await import("../src/tools/tags.js");
