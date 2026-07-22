@@ -60,6 +60,10 @@
     "typescript": "^7.0.2",
     "vitest": "^4.1.10"
   },
+  "overrides": {
+    "@hono/node-server": "^2.0.5",
+    "esbuild": "^0.28.1"
+  },
   "engines": {
     "node": ">=22.19.0"
   }
