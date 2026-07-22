@@ -11,6 +11,33 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [2.1.3] — 2026-07-22
+
+Security + dependency maintenance. Resolves a high-severity transitive
+advisory and takes `npm audit` to zero at all levels; also lands the
+accumulated Dependabot bumps. No source or wire-behaviour change —
+verified by the full wire-trace suite against the live API.
+
+### Security
+
+- Resolve **fast-uri** high-severity advisory (host confusion via IDN
+  canonicalization / backslash authority delimiter), transitive via
+  `@modelcontextprotocol/sdk` → `ajv`: fast-uri 3.1.2 → 3.1.4. This was
+  failing `npm audit --audit-level=high` on the prior release.
+- Take `npm audit` to **0 vulnerabilities** at all levels via
+  `overrides` pinning the patched transitive versions (npm's auto-fix
+  wanted a SDK downgrade): `@hono/node-server` → ^2.0.5 (Windows
+  serve-static path traversal — reached only through the SDK's hono
+  adapter, which this connector never imports) and `esbuild` → ^0.28.1
+  (dev-server file read; build-time only, via tsup).
+
+### Changed
+
+- Dependency bumps: `undici` 8.5.0 → 8.7.0 and `express-rate-limit`
+  8.5.2 → 8.6.0 (runtime); `typescript` 6 → 7, `@types/node` 25 → 26,
+  `vitest` → 4.1.10, `@biomejs/biome` → 2.5.4 (dev); `actions/checkout`
+  and `actions/setup-node` → 7 (CI). No runtime behaviour change.
+
 ## [2.1.2] — 2026-07-10
 
 Security patch: updates undici, the connector's sole outbound HTTP
