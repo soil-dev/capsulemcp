@@ -41,6 +41,9 @@ export function mockFetch(
     ok: status >= 200 && status < 300,
     headers: new Headers(headers),
     json: async () => body,
+    // Real undici Responses always have text(); the 2xx-but-not-204
+    // drain path in capsuleDelete reads it, so the mock must too.
+    text: async () => JSON.stringify(body),
     statusText: String(status),
   } as Awaited<ReturnType<typeof fetch>>);
 }

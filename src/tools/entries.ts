@@ -261,10 +261,15 @@ export const addNoteSchema = z.object({
     .describe(
       "ISO-8601 timestamp for when this note actually happened (e.g. '2024-03-15T14:30:00Z'). Defaults to now. Use this for backdating historical notes when migrating from another system. `entryAt` is preserved across subsequent update_entry calls; only `updatedAt` advances on edits. Note attribution flows to the API-token owner — there is no way to record a note as authored by a different user via this connector (a `creatorId` parameter would enable audit-attribution spoofing on shared-connector deployments, so it is intentionally not exposed).",
     ),
+  activityTypeId: positiveId
+    .optional()
+    .describe(
+      "Categorise the note under a custom activity type (Meeting, Call, ... — ids from list_activity_types). Omit for a plain Note (Capsule's default, activityType -1). Wire-verified: POST /entries accepts the id and the entry echoes {activityType: {id, name}}.",
+    ),
 });
 
 export async function addNote(input: z.infer<typeof addNoteSchema>) {
-  const { content, partyId, opportunityId, projectId, entryAt } = input;
+  const { content, partyId, opportunityId, projectId, entryAt, activityTypeId } = input;
 
   assertSingleParentRef("add_note", input, { required: true });
 
@@ -273,6 +278,7 @@ export async function addNote(input: z.infer<typeof addNoteSchema>) {
   setRef(body, "opportunity", opportunityId);
   setRef(body, "kase", projectId);
   if (entryAt !== undefined) body["entryAt"] = entryAt;
+  if (activityTypeId !== undefined) body["activityType"] = activityTypeId;
 
   return capsulePost<{ entry: unknown }>("/entries", { entry: body });
 }
@@ -300,6 +306,12 @@ export const updateEntrySchema = z.object({
     .describe(
       "New subject line. Mostly meaningful on email-type entries; on plain notes Capsule accepts the call (HTTP 200) but **does not store the subject and does not advance `updatedAt`** — a true no-op for inapplicable fields. `entryAt` (when the note was authored) is preserved across edits; `updatedAt` advances only when an applicable field actually changes. To sort/filter by 'when did this happen', use `entryAt`; for 'last touched', use `updatedAt`.",
     ),
+  removeAttachmentIds: z
+    .array(positiveId)
+    .optional()
+    .describe(
+      "Attachment ids to detach from this entry (ids from the entry's attachments array; wire shape {id, _delete: true}, verified live — removal returns the entry with the attachment gone). Other attachments are untouched. Capsule rejects removing the LAST attachment from an entry that has no content. To ADD an attachment to an existing entry, use upload_attachment with entryId.",
+    ),
 });
 
 export async function updateEntry(input: z.infer<typeof updateEntrySchema>) {
@@ -307,6 +319,9 @@ export async function updateEntry(input: z.infer<typeof updateEntrySchema>) {
   const body: Record<string, unknown> = {};
   if (rest.content !== undefined) body["content"] = rest.content;
   if (rest.subject !== undefined) body["subject"] = rest.subject;
+  if (rest.removeAttachmentIds?.length) {
+    body["attachments"] = rest.removeAttachmentIds.map((attId) => ({ id: attId, _delete: true }));
+  }
 
   if (Object.keys(body).length === 0) {
     throw new Error("update_entry: provide at least one field to update (content or subject)");

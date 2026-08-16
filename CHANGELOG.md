@@ -11,6 +11,49 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Added
+
+- **Tracks at creation time** — `create_party`, `create_opportunity`,
+  and `create_project` take `trackDefinitionIds`, applying tracks
+  atomically at create (previously a separate `apply_track` call per
+  track). Capsule validates each definition's entity scope (422 on
+  mismatch). Wire-verified end-to-end.
+- **Attach files to existing entries** — `upload_attachment` gains an
+  `entryId` mode (upload → PUT the token onto the entry; no new note
+  created), and `update_entry` gains `removeAttachmentIds`
+  (`{id, _delete: true}` delta semantics — other attachments
+  untouched). Closes the long-standing IDEAS
+  "add-attachment-to-existing-entry" item; both directions
+  wire-verified.
+- **`add_note` takes `activityTypeId`** — categorise notes under
+  custom activity types (ids from `list_activity_types`); omitted =
+  Capsule's default Note type.
+- **Opportunity `duration` / `durationBasis`** on create and update
+  (FIXED/HOUR/DAY/WEEK/MONTH/QUARTER/YEAR); cross-field guard rejects
+  FIXED + numeric duration pre-flight (Capsule 422s it); the
+  FIXED + `duration: null` clear is supported. Wire-verified.
+- **Repeating tasks** — `create_task` takes `repeat`
+  ({frequency: YEARLY|MONTHLY|WEEKLY, interval, on}); Capsule derives
+  `on` from `dueOn` when omitted. Wire-verified.
+- **`since` on list endpoints** — `search_parties`,
+  `search_opportunities`, `list_projects`, `search_projects` accept an
+  ISO-8601 `since` (only records changed on/after; pairs with the
+  `list_deleted_*` audit tools for incremental sync). Wire-verified on
+  all three resources.
+
+### Changed
+
+- Whole-record delete tools surface Capsule's long-running-deletion
+  semantics: on `202 Accepted` (deletion scheduled, e.g. large party
+  cascades) the envelope carries `scheduled: true` so callers don't
+  misread an in-flight deletion as a failure. 204 behaviour unchanged.
+- Docs: NOTES corrects its claim that no `/countries` endpoint exists
+  (live: 200 with 250 rows; `list_countries` planned under #112 P2),
+  documents the 202 delete path and the undocumented party
+  `enrichment` field; DESIGN gains an "exists upstream, adoption
+  planned" table (`/activities`, `/countries`, `/currencies`) and
+  re-verified dates on the not-in-v2 list.
+
 ### Fixed
 
 - The `embed` allow-lists no longer reject valid, documented Capsule

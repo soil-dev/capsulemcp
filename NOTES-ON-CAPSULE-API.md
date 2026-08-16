@@ -1220,9 +1220,18 @@ reader would consider them obvious synonyms.
 **Practical effect on callers:** any workflow that takes a
 free-text country from the operator (form input, CSV import,
 LLM-paraphrased address) needs to either pre-normalise to the
-dictionary or be ready to handle the 422. The connector cannot
-discover the full accepted list — Capsule's API exposes no
-`/countries` enumeration endpoint.
+dictionary or be ready to handle the 422.
+
+**Correction (2026-08-16):** an earlier revision of this note claimed
+Capsule exposes no `/countries` enumeration endpoint. That is no
+longer true (and may never have been): `GET /countries` returns 200
+with 250 rows (`name`, `alpha2Code`, `alpha3Code`, `numericCode`,
+`dialCode`) — live-verified. The `name` values are the accepted
+country-dictionary spellings. A `list_countries` tool is planned
+(issue #112 P2); until then the probe-derived examples above remain
+the in-tool guidance. `GET /currencies` (80 rows: `code`, `symbol`,
+`name`) also exists, as does an undocumented `GET /activities`
+cross-entity activity feed.
 
 **Where in our code:** [`src/tools/parties.ts`](src/tools/parties.ts)
 `AddressSchema` and `addPartyAddressSchema.country` descriptions
@@ -1458,3 +1467,30 @@ The golden rule: **behaviour is authoritative, docs are a snapshot.**
 If a quote here drifts from Capsule's docs in the future, that's
 useful — it tells you Capsule may have updated their docs (and
 possibly their API). Treat it as a prompt to re-verify.
+
+---
+
+## 34. DELETE can return 202 Accepted (long-running deletion job)
+
+`DELETE /parties/{id}` is documented to return **202 Accepted** (not
+204) when Capsule schedules the deletion as a long-running operation —
+large cascades. The 202 carries a `Location` header with a pollable
+job-status URL (`{status, progress, action, id}`). The record WILL be
+deleted; an immediate read-back may still find it.
+
+**Where in our code:** `capsuleDelete`
+([`src/capsule/client.ts`](src/capsule/client.ts)) returns
+`{scheduled: boolean}`; `defineDelete`'s envelope surfaces
+`scheduled: true` on 202 so callers don't misread an in-flight
+deletion as a failure. All observed deletes on this tenant so far
+returned 204; the 202 path is doc-driven, not yet observed live.
+
+---
+
+## 35. Undocumented party field: `enrichment`
+
+Every party row now carries an `enrichment` key (observed live
+2026-08-16; absent from Capsule's Party model docs). Its semantics are
+unknown — presumably Capsule's contact-enrichment feature. The
+connector passes it through untouched. If Capsule documents it, revisit
+whether it deserves surfacing (e.g. an embed or field description).

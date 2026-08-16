@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { positiveId } from "./shared-schemas.js";
 import { assertSingleParentRef, setRef } from "./body-helpers.js";
-import { capsuleGetBinary, capsulePost, capsulePostBinary } from "../capsule/client.js";
+import { capsuleGetBinary, capsulePost, capsulePostBinary, capsulePut } from "../capsule/client.js";
 
 // Attachments — the only tool surface in capsulemcp that handles binary
 // content rather than JSON.
@@ -112,6 +112,11 @@ export const uploadAttachmentSchema = z.object({
     .describe("Link the new note to a party (mutually exclusive with opportunityId / projectId)."),
   opportunityId: positiveId.optional(),
   projectId: positiveId.optional(),
+  entryId: positiveId
+    .optional()
+    .describe(
+      "ATTACH TO AN EXISTING ENTRY instead of creating a new note: the id of the note/email entry to attach the file to (wire: PUT /entries/{id} with an upload token; verified live). Mutually exclusive with partyId/opportunityId/projectId and content — when entryId is set, no new entry is created.",
+    ),
 });
 
 // Capsule's API decodes whatever bytes we send. If the caller passes
@@ -134,7 +139,22 @@ function decodedBase64Size(s: string): number {
 }
 
 export async function uploadAttachment(input: z.infer<typeof uploadAttachmentSchema>) {
-  assertSingleParentRef("upload_attachment", input, { required: true });
+  if (input.entryId !== undefined) {
+    // Attach-to-existing mode: no new entry. Parents/content don't
+    // apply — reject them so the caller's intent is unambiguous.
+    if (
+      input.partyId !== undefined ||
+      input.opportunityId !== undefined ||
+      input.projectId !== undefined ||
+      input.content !== undefined
+    ) {
+      throw new Error(
+        "upload_attachment: entryId is mutually exclusive with partyId/opportunityId/projectId and content — the file attaches to the existing entry",
+      );
+    }
+  } else {
+    assertSingleParentRef("upload_attachment", input, { required: true });
+  }
   if (!isValidBase64(input.dataBase64)) {
     throw new Error(
       "upload_attachment: dataBase64 is not valid base64 — Node's tolerant decoder would silently produce corrupt bytes. Verify the encoding (RFC 4648, padded with '=' to a multiple of 4 chars).",
@@ -156,6 +176,15 @@ export async function uploadAttachment(input: z.infer<typeof uploadAttachmentSch
     input.filename,
   );
   const token = uploaded.upload.token;
+
+  // Attach-to-existing mode (wire-verified): PUT /entries/{id} with an
+  // upload token ADDS the attachment; existing attachments are
+  // untouched (delta semantics, not array replacement).
+  if (input.entryId !== undefined) {
+    return capsulePut<{ entry: unknown }>(`/entries/${input.entryId}`, {
+      entry: { attachments: [{ token }] },
+    });
+  }
 
   // Step 2: create a note that references the upload token. Capsule
   // returns the entry with the attachment metadata populated (id,

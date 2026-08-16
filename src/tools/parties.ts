@@ -22,6 +22,9 @@ import {
 
 // ── Shared sub-schemas ──────────────────────────────────────────────────────
 
+export const TRACKS_AT_CREATE_DESCRIPTION =
+  'Track definition ids to apply at creation time (creation-only shortcut; use apply_track for existing records). Discover ids via list_track_definitions. Capsule validates each definition\'s entity scope and returns 422 on mismatch (e.g. "track definition must be for parties"). Wire-verified: the created record carries the track instances immediately.';
+
 const EmailAddressSchema = z.object({
   address: z.string().email(),
   type: z.string().optional(),
@@ -147,6 +150,12 @@ const WebsiteSchema = z
 // ── Tool definitions ────────────────────────────────────────────────────────
 
 export const searchPartiesSchema = z.object({
+  since: z
+    .string()
+    .optional()
+    .describe(
+      "Only records CHANGED on/after this ISO-8601 timestamp (incremental sync; pairs with the list_deleted_* audit tools). Wire-verified on the plain list endpoints. Ignored by Capsule when q triggers the /search sub-resource — omit q when using since.",
+    ),
   q: z.string().optional().describe("Free-text search query"),
   embed: embedParam(PARTY_EMBEDS),
   ...paginationFields,
@@ -158,6 +167,7 @@ export async function searchParties(input: z.infer<typeof searchPartiesSchema>) 
   const path = input.q ? "/parties/search" : "/parties";
   return capsuleGetList<{ parties: unknown[] }>(path, {
     q: input.q,
+    since: input.since,
     embed: input.embed,
     page: input.page,
     perPage: input.perPage,
@@ -313,6 +323,7 @@ export const createPartySchema = z
         fieldsArrayDescriptor("get_party") +
           " Verified empirically in v1.6.5 wire-trace: Capsule's POST /parties accepts the same `fields[]` shape as PUT, so callers can set custom field values on creation without a follow-up update.",
       ),
+    trackDefinitionIds: z.array(positiveId).optional().describe(TRACKS_AT_CREATE_DESCRIPTION),
   })
   .superRefine((data, ctx) => {
     // Enforce the type-conditional required fields the description has
@@ -338,7 +349,7 @@ export const createPartySchema = z
   });
 
 export async function createParty(input: z.infer<typeof createPartySchema>) {
-  const { ownerId, teamId, organisationId, fields, ...rest } = input;
+  const { ownerId, teamId, organisationId, fields, trackDefinitionIds, ...rest } = input;
 
   const body: Record<string, unknown> = { ...rest };
   // On create, only positive integer IDs are accepted by the schema.
@@ -350,6 +361,9 @@ export async function createParty(input: z.infer<typeof createPartySchema>) {
   const mappedFields = mapFieldsForBody(fields);
   if (mappedFields !== undefined) body["fields"] = mappedFields;
 
+  if (trackDefinitionIds?.length) {
+    body["tracks"] = trackDefinitionIds.map((id) => ({ definition: { id } }));
+  }
   return capsulePost<{ party: unknown }>("/parties", { party: body });
 }
 
