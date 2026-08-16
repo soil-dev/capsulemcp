@@ -10,6 +10,7 @@ import {
   PARTY_EMBEDS,
   OPPORTUNITY_EMBEDS,
   PROJECT_EMBEDS,
+  rejectSinceWithQ,
 } from "./shared-schemas.js";
 import { capsuleGet, capsulePost, capsulePut, capsuleGetList } from "../capsule/client.js";
 import { chunkedMultiGet } from "../capsule/multi-get.js";
@@ -149,17 +150,19 @@ const WebsiteSchema = z
 
 // ── Tool definitions ────────────────────────────────────────────────────────
 
-export const searchPartiesSchema = z.object({
-  since: z
-    .string()
-    .optional()
-    .describe(
-      "Only records CHANGED on/after this ISO-8601 timestamp (incremental sync; pairs with the list_deleted_* audit tools). Wire-verified on the plain list endpoints. Ignored by Capsule when q triggers the /search sub-resource — omit q when using since.",
-    ),
-  q: z.string().optional().describe("Free-text search query"),
-  embed: embedParam(PARTY_EMBEDS),
-  ...paginationFields,
-});
+export const searchPartiesSchema = z
+  .object({
+    since: z
+      .string()
+      .optional()
+      .describe(
+        "Only records CHANGED on/after this ISO-8601 timestamp (incremental sync; pairs with the list_deleted_* audit tools). Wire-verified on the plain list endpoints. Ignored by Capsule when q triggers the /search sub-resource — omit q when using since.",
+      ),
+    q: z.string().optional().describe("Free-text search query"),
+    embed: embedParam(PARTY_EMBEDS),
+    ...paginationFields,
+  })
+  .superRefine(rejectSinceWithQ);
 
 export async function searchParties(input: z.infer<typeof searchPartiesSchema>) {
   // Capsule uses a dedicated /parties/search endpoint when filtering by query.
@@ -222,6 +225,7 @@ export const listPartyOpportunitiesSchema = z.object({
 
 export async function listPartyOpportunities(input: z.infer<typeof listPartyOpportunitiesSchema>) {
   return capsuleGetList<{ opportunities: unknown[] }>(`/parties/${input.partyId}/opportunities`, {
+    embed: input.embed,
     page: input.page,
     perPage: input.perPage,
   });
@@ -237,6 +241,7 @@ export const listPartyProjectsSchema = z.object({
 
 export async function listPartyProjects(input: z.infer<typeof listPartyProjectsSchema>) {
   return capsuleGetList<{ projects: unknown[] }>(`/parties/${input.partyId}/kases`, {
+    embed: input.embed,
     page: input.page,
     perPage: input.perPage,
   });

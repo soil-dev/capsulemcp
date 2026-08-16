@@ -130,7 +130,7 @@ export function embedParam(allowed: readonly string[]) {
  * Per-resource embed allow-lists, from Capsule's operations docs and
  * re-verified live 2026-08-16 (nested-ref enrichment measured for every
  * ref token). `project` is the caller-facing name for Capsule's `kase`
- * token (transformed on the wire by `embedParam`).
+ * token (validated here; mapped to the wire token by `buildUrl` in capsule/client.ts).
  *
  * `attachments` / `participants` on entries predate the docs' current
  * five-token list; they are retained for continuity (Capsule tolerates
@@ -173,3 +173,26 @@ export const EMBEDS_BY_ENTITY: Record<EntityName, readonly string[]> = {
   opportunities: OPPORTUNITY_EMBEDS,
   projects: PROJECT_EMBEDS,
 };
+
+/**
+ * Cross-field guard for the search_* tools: `since` is only honored on
+ * the plain list path; a truthy `q` routes to Capsule's /search
+ * sub-resource, which silently IGNORES `since` — the caller would get
+ * un-filtered results believing they were incremental. Reject the
+ * combination pre-flight. (Truthiness matches the handlers' routing:
+ * `input.q ? "/search" : "/list"` — an empty-string q stays on the
+ * list path where since works.)
+ */
+export function rejectSinceWithQ(
+  data: { q?: string | undefined; since?: string | undefined },
+  ctx: z.RefinementCtx,
+): void {
+  if (data.q && data.since !== undefined) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["since"],
+      message:
+        "q and since cannot be combined: q routes to Capsule's /search sub-resource, which silently ignores since. Use since alone for incremental sync, or q alone for text search.",
+    });
+  }
+}

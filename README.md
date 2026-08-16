@@ -72,7 +72,7 @@ That's it. The first launch fetches the package from npm (a few seconds); subseq
 | Users & teams | `list_users`, `get_current_user`, `list_teams` | — |
 | Reference metadata | `list_lost_reasons`, `list_activity_types`, `list_categories`, `list_goals`, `list_countries`, `list_currencies`, `get_site` | — |
 
-Most record-list tools default `perPage=25`; reference-data tools default `perPage=100` so small accounts usually fit in one response. All paginated tools cap `perPage` at 100 and return a `nextPage` cursor when more results exist. Many GET tools accept an `embed` parameter (e.g. `tags,fields`) — see Capsule's API docs for the full list per resource.
+Most record-list tools default `perPage=25`; reference-data tools default `perPage=100` so small accounts usually fit in one response. All paginated tools cap `perPage` at 100 and return a `nextPage` cursor when more results exist. Many GET tools accept an `embed` parameter (e.g. `tags,fields`) — each tool's description enumerates its valid tokens (validated per resource; unknown tokens are rejected rather than silently ignored, and the caller-facing `project` token maps to Capsule's legacy `kase` on the wire).
 
 The `filter_*` tools wrap Capsule's structured filter endpoint (`POST /<entity>/filters/results`) and accept an array of `{field, operator, value}` conditions ANDed together. Capsule's API does not support ad-hoc sort, so for "most recent X" questions filter by a date condition (e.g. `addedOn is within last 7`) and pick the highest id from the result — Capsule's numeric IDs are monotonically incrementing.
 

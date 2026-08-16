@@ -1482,7 +1482,8 @@ deleted; an immediate read-back may still find it.
 ([`src/capsule/client.ts`](src/capsule/client.ts)) returns
 `{scheduled: boolean}`; `defineDelete`'s envelope surfaces
 `scheduled: true` on 202 so callers don't misread an in-flight
-deletion as a failure. All observed deletes on this tenant so far
+deletion as a failure; `delete_tag_definition` (the doc's own
+long-running example) surfaces the same flag. All observed deletes on this tenant so far
 returned 204; the 202 path is doc-driven, not yet observed live.
 
 ---

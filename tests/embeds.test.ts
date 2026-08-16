@@ -153,3 +153,18 @@ describe("filter tools carry per-entity embeds", () => {
     expect(filterPartiesSchema.safeParse({ conditions, embed: "milestone" }).success).toBe(false);
   });
 });
+
+describe("party sub-lists forward embed (pre-v2.3.0 audit blocker)", () => {
+  it("list_party_opportunities and list_party_projects put embed on the wire", async () => {
+    mockFetch(200, { opportunities: [] });
+    const { listPartyOpportunities, listPartyProjects } = await import("../src/tools/parties.js");
+    await listPartyOpportunities({ partyId: 5, embed: "milestone,tags", page: 1, perPage: 25 });
+    expect(String(vi.mocked(fetch).mock.calls[0]![0])).toContain("embed=milestone%2Ctags");
+
+    mockFetch(200, { kases: [] });
+    await listPartyProjects({ partyId: 5, embed: "opportunity", page: 1, perPage: 25 });
+    const url = String(vi.mocked(fetch).mock.calls[1]![0]);
+    expect(url).toContain("/parties/5/kases");
+    expect(url).toContain("embed=opportunity");
+  });
+});

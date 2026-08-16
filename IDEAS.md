@@ -183,25 +183,15 @@ prompts in the UI.
 
 ---
 
-## Add-attachment-to-existing-entry
+## Add-attachment-to-existing-entry — ✅ shipped (Unreleased)
 
-Today `upload_attachment` always creates a new note carrying the
-attachment. Adding to an *existing* entry would need a read-then-PUT
-dance because Capsule's PUT semantics replace the attachments array.
-
-**Implementation sketch**:
-1. Add an `entryId` parameter to `upload_attachment`.
-2. When set: GET the entry, read its current `attachments` token
-   list, append the new token, PUT the entry with the merged list.
-3. Surface the inevitable race condition (two concurrent uploads
-   that race on the read) with optimistic-concurrency check or just
-   "last write wins" with a docs note.
-
-**Cost**: low complexity but real correctness work. The race-condition
-window is small but real.
-
-**When to consider**: people start asking "can Claude attach a file
-to this note?" rather than just "create a note with this attachment".
+Shipped as `upload_attachment`'s `entryId` mode (upload → PUT the
+token onto the existing entry; no new note created) plus
+`update_entry.removeAttachmentIds` (`{id, _delete: true}` delta —
+other attachments untouched). The original blocker recorded here —
+"Capsule's PUT semantics on entries replace the attachments array" —
+turned out to be wrong: the documented delta semantics (token adds,
+`_delete` removes) were wire-verified live in the issue #112 sweep.
 
 ---
 
