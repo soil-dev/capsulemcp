@@ -13,6 +13,22 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ### Added
 
+- **`list_activities`** — global cross-entity activity feed
+  (`GET /activities`): typed rows (Note, Task completed, Email
+  sent/received, custom types) with the acting user, the apiClient
+  that made the change, and refs to the record concerned; `since` +
+  pagination. One call answers "what happened across the tenant this
+  week" — previously approximated by per-record entry fan-outs.
+  CAVEAT: undocumented Capsule endpoint (discovered by live probe;
+  stable in observation) — could change without notice.
+- **`list_countries`** — Capsule's 250-row country dictionary; the
+  `name` values are the exact spellings the address-country field
+  accepts (the authoritative fix for the 422 'unknown country' class).
+  Cached reference data.
+- **`list_currencies`** — Capsule's 80-row currency dictionary
+  (ISO 4217 code, symbol, name); valid codes for opportunity
+  `value.currency`. Cached reference data.
+
 - **Tracks at creation time** — `create_party`, `create_opportunity`,
   and `create_project` take `trackDefinitionIds`, applying tracks
   atomically at create (previously a separate `apply_track` call per

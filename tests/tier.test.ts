@@ -42,7 +42,7 @@ describe("CAPSULE_MCP_TIER", () => {
 
   it("default (unset) registers the full catalog", async () => {
     const tools = await listTools({});
-    expect(tools.length).toBe(89);
+    expect(tools.length).toBe(92);
   });
 
   it("core tier registers only the curated core set", async () => {
@@ -73,7 +73,7 @@ describe("CAPSULE_MCP_TIER", () => {
 
   it("an unknown tier value falls back to the full catalog", async () => {
     const tools = await listTools({ CAPSULE_MCP_TIER: "everything" });
-    expect(tools.length).toBe(89);
+    expect(tools.length).toBe(92);
   });
 });
 

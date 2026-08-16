@@ -1227,9 +1227,9 @@ Capsule exposes no `/countries` enumeration endpoint. That is no
 longer true (and may never have been): `GET /countries` returns 200
 with 250 rows (`name`, `alpha2Code`, `alpha3Code`, `numericCode`,
 `dialCode`) — live-verified. The `name` values are the accepted
-country-dictionary spellings. A `list_countries` tool is planned
-(issue #112 P2); until then the probe-derived examples above remain
-the in-tool guidance. `GET /currencies` (80 rows: `code`, `symbol`,
+country-dictionary spellings. The `list_countries` tool exposes it (cached
+reference data); the probe-derived examples above remain as quick
+in-description guidance. `GET /currencies` (80 rows: `code`, `symbol`,
 `name`) also exists, as does an undocumented `GET /activities`
 cross-entity activity feed.
 
