@@ -884,7 +884,7 @@ export async function capsulePostBinary<T>(
  * to parse. Errors flow through the same `throwForStatus` helper as
  * GET/POST/PUT.
  */
-export async function capsuleDelete(path: string): Promise<void> {
+export async function capsuleDelete(path: string): Promise<{ scheduled: boolean }> {
   if (isReadOnly()) throw new CapsuleReadOnlyError("DELETE");
   const token = getToken();
   const url = buildUrl(path);
@@ -892,11 +892,19 @@ export async function capsuleDelete(path: string): Promise<void> {
     method: "DELETE",
     headers: baseHeaders(token),
   });
-  await consumeBody(start, async () => {
-    if (start.res.status === 204) return;
+  return consumeBody(start, async () => {
+    if (start.res.status === 204) return { scheduled: false };
     await throwForStatus(start.res);
+
+    // 202 Accepted: Capsule scheduled the deletion as a long-running
+    // operation (documented for large cascades — e.g. party deletes —
+    // with a pollable job URL in the Location header). The record WILL
+    // be deleted; it just hasn't finished yet. Surface that so callers
+    // don't read-back immediately and conclude the delete failed.
+    const scheduled = start.res.status === 202;
 
     // 2xx-but-not-204: drain the body so the connection can be reused.
     await mapAbort(start.res.text());
+    return { scheduled };
   });
 }

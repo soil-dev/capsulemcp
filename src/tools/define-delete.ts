@@ -17,11 +17,17 @@ import { z } from "zod";
 import { confirmFlag } from "./confirm-flag.js";
 import { positiveId } from "./shared-schemas.js";
 import { capsuleDelete } from "../capsule/client.js";
-import { idempotent } from "../capsule/idempotent.js";
+import { idempotentWithResult } from "../capsule/idempotent.js";
 
 export interface DeleteResult {
   deleted: true;
   alreadyDeleted: boolean;
+  /**
+   * Present (true) when Capsule returned 202 Accepted — the deletion
+   * was scheduled as a long-running operation and completes shortly.
+   * An immediate read-back may still find the record.
+   */
+  scheduled?: true;
   id: number;
 }
 
@@ -57,9 +63,14 @@ export function defineDelete(args: DefineDeleteArgs) {
     if (input.confirm !== true) {
       throw new Error(`${toolName} requires confirm: true`);
     }
-    return idempotent<DeleteResult>(
+    return idempotentWithResult<{ scheduled: boolean }, DeleteResult>(
       () => capsuleDelete(`${pathPrefix}/${input.id}`),
-      () => ({ deleted: true, alreadyDeleted: false, id: input.id }),
+      (r) => ({
+        deleted: true,
+        alreadyDeleted: false,
+        ...(r.scheduled ? { scheduled: true as const } : {}),
+        id: input.id,
+      }),
       () => ({ deleted: true, alreadyDeleted: true, id: input.id }),
     );
   }

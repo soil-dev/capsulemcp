@@ -4,6 +4,7 @@ import { defineBatch } from "./define-batch.js";
 import { defineDelete } from "./define-delete.js";
 import { readEntityRefs } from "./preserve-refs.js";
 import { positiveId, paginationFields, embedParam, PROJECT_EMBEDS } from "./shared-schemas.js";
+import { TRACKS_AT_CREATE_DESCRIPTION } from "./parties.js";
 import { capsuleGet, capsulePost, capsulePut, capsuleGetList } from "../capsule/client.js";
 import { chunkedMultiGet } from "../capsule/multi-get.js";
 import {
@@ -15,6 +16,12 @@ import {
 // ── Read ────────────────────────────────────────────────────────────────────
 
 export const searchProjectsSchema = z.object({
+  since: z
+    .string()
+    .optional()
+    .describe(
+      "Only records CHANGED on/after this ISO-8601 timestamp (incremental sync; pairs with the list_deleted_* audit tools). Wire-verified on the plain list endpoints. Ignored by Capsule when q triggers the /search sub-resource — omit q when using since.",
+    ),
   q: z.string().optional().describe("Free-text search query"),
   embed: embedParam(PROJECT_EMBEDS),
   ...paginationFields,
@@ -25,6 +32,7 @@ export async function searchProjects(input: z.infer<typeof searchProjectsSchema>
   const path = input.q ? "/kases/search" : "/kases";
   return capsuleGetList<{ projects: unknown[] }>(path, {
     q: input.q,
+    since: input.since,
     embed: input.embed,
     page: input.page,
     perPage: input.perPage,
@@ -32,6 +40,12 @@ export async function searchProjects(input: z.infer<typeof searchProjectsSchema>
 }
 
 export const listProjectsSchema = z.object({
+  since: z
+    .string()
+    .optional()
+    .describe(
+      "Only records CHANGED on/after this ISO-8601 timestamp (incremental sync; pairs with the list_deleted_* audit tools). Wire-verified on the plain list endpoints. Ignored by Capsule when q triggers the /search sub-resource — omit q when using since.",
+    ),
   status: z.enum(["OPEN", "CLOSED"]).optional(),
   embed: embedParam(PROJECT_EMBEDS),
   ...paginationFields,
@@ -41,6 +55,7 @@ export async function listProjects(input: z.infer<typeof listProjectsSchema>) {
   return capsuleGetList<{ projects: unknown[] }>("/kases", {
     status: input.status,
     embed: input.embed,
+    since: input.since,
     page: input.page,
     perPage: input.perPage,
   });
@@ -126,10 +141,11 @@ export const createProjectSchema = z.object({
       fieldsArrayDescriptor("get_project") +
         " Verified empirically in v1.6.5 wire-trace: Capsule's project create endpoint accepts the same `fields[]` shape as PUT, so callers can set custom field values on creation without a follow-up update. Project-specific: setting a field whose definition lives under a 'data tag' populates the row's internal tagId but does NOT auto-add the data tag to the project's tags array — use add_tag explicitly if you want it visible via embed=tags.",
     ),
+  trackDefinitionIds: z.array(positiveId).optional().describe(TRACKS_AT_CREATE_DESCRIPTION),
 });
 
 export async function createProject(input: z.infer<typeof createProjectSchema>) {
-  const { partyId, ownerId, teamId, status, stageId, fields, ...rest } = input;
+  const { partyId, ownerId, teamId, status, stageId, fields, trackDefinitionIds, ...rest } = input;
 
   // Default applied here (not via zod's .default()) so the inferred
   // input type keeps `status` optional. Same pattern as listTasks.
@@ -147,6 +163,9 @@ export async function createProject(input: z.infer<typeof createProjectSchema>) 
   if (stageId) body["stage"] = stageId;
   const mappedFields = mapFieldsForBody(fields);
   if (mappedFields !== undefined) body["fields"] = mappedFields;
+  if (trackDefinitionIds?.length) {
+    body["tracks"] = trackDefinitionIds.map((id) => ({ definition: { id } }));
+  }
 
   return capsulePost<{ project: unknown }>("/kases", { kase: body });
 }

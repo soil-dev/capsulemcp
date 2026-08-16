@@ -4,6 +4,7 @@ import { defineBatch } from "./define-batch.js";
 import { defineDelete } from "./define-delete.js";
 import { readEntityRefs } from "./preserve-refs.js";
 import { positiveId, paginationFields, embedParam, OPPORTUNITY_EMBEDS } from "./shared-schemas.js";
+import { TRACKS_AT_CREATE_DESCRIPTION } from "./parties.js";
 import { capsuleGet, capsulePost, capsulePut, capsuleGetList } from "../capsule/client.js";
 import { chunkedMultiGet } from "../capsule/multi-get.js";
 import {
@@ -38,6 +39,12 @@ const OpportunityValueSchema = z.object({
 // ── Read ────────────────────────────────────────────────────────────────────
 
 export const searchOpportunitiesSchema = z.object({
+  since: z
+    .string()
+    .optional()
+    .describe(
+      "Only records CHANGED on/after this ISO-8601 timestamp (incremental sync; pairs with the list_deleted_* audit tools). Wire-verified on the plain list endpoints. Ignored by Capsule when q triggers the /search sub-resource — omit q when using since.",
+    ),
   q: z.string().optional().describe("Free-text search query"),
   embed: embedParam(OPPORTUNITY_EMBEDS),
   ...paginationFields,
@@ -48,6 +55,7 @@ export async function searchOpportunities(input: z.infer<typeof searchOpportunit
   const path = input.q ? "/opportunities/search" : "/opportunities";
   return capsuleGetList<{ opportunities: unknown[] }>(path, {
     q: input.q,
+    since: input.since,
     embed: input.embed,
     page: input.page,
     perPage: input.perPage,
@@ -92,43 +100,76 @@ export async function getOpportunities(input: z.infer<typeof getOpportunitiesSch
 
 // ── Write ───────────────────────────────────────────────────────────────────
 
-export const createOpportunitySchema = z.object({
-  name: z.string().min(1),
-  partyId: positiveId.describe("ID of the party this opportunity belongs to"),
-  milestoneId: positiveId.describe(
-    "ID of the pipeline milestone to place this opportunity at. The milestone implicitly determines the pipeline — there is no separate pipelineId parameter. Discover via list_pipelines / list_milestones. " +
-      "NOTE: some Capsule tenants configure **pipeline / milestone-reached automation rules** that mutate `owner` and/or `team` immediately after creation — e.g. an 'Assign to a Team' action that fires on entry to a specific milestone and has been observed to clear `owner` as an automation side-effect. If you observe a newly-created opp landing with `owner: null` despite passing `ownerId`, the cause is almost certainly a milestone automation on the destination pipeline rather than the connector. Documented workaround: follow `create_opportunity` with an immediate `batch_update_opportunity({items: [{id, ownerId, teamId}]})` carrying both fields — PUT does not re-fire milestone-reached triggers, so the owner sticks.",
-  ),
-  description: z.string().optional(),
-  value: OpportunityValueSchema.optional(),
-  expectedCloseOn: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .optional()
-    .describe("YYYY-MM-DD"),
-  probability: z.number().int().min(0).max(100).optional(),
-  ownerId: positiveId
-    .optional()
-    .describe(
-      "Assign to user ID. Defaults to the API-token owner when omitted — note that opportunities do NOT inherit owner from the linked party, even though one might expect it. To clear owner later, call update_opportunity with `ownerId: null`. Discover IDs via list_users. " +
-        "WARNING: tenant pipeline / milestone-reached automation can mutate this field post-create — see the `milestoneId` description for details and the chained-PUT workaround.",
+// Cross-field: Capsule 422s when durationBasis is FIXED and a numeric
+// duration is supplied (wire-verified). Reject pre-flight.
+function validateDuration(
+  data: { durationBasis?: string | undefined; duration?: number | null | undefined },
+  ctx: z.RefinementCtx,
+): void {
+  if (data.durationBasis === "FIXED" && typeof data.duration === "number") {
+    ctx.addIssue({
+      code: "custom",
+      path: ["duration"],
+      message: "duration must be omitted or null when durationBasis is FIXED",
+    });
+  }
+}
+
+export const createOpportunitySchema = z
+  .object({
+    name: z.string().min(1),
+    partyId: positiveId.describe("ID of the party this opportunity belongs to"),
+    milestoneId: positiveId.describe(
+      "ID of the pipeline milestone to place this opportunity at. The milestone implicitly determines the pipeline — there is no separate pipelineId parameter. Discover via list_pipelines / list_milestones. " +
+        "NOTE: some Capsule tenants configure **pipeline / milestone-reached automation rules** that mutate `owner` and/or `team` immediately after creation — e.g. an 'Assign to a Team' action that fires on entry to a specific milestone and has been observed to clear `owner` as an automation side-effect. If you observe a newly-created opp landing with `owner: null` despite passing `ownerId`, the cause is almost certainly a milestone automation on the destination pipeline rather than the connector. Documented workaround: follow `create_opportunity` with an immediate `batch_update_opportunity({items: [{id, ownerId, teamId}]})` carrying both fields — PUT does not re-fire milestone-reached triggers, so the owner sticks.",
     ),
-  teamId: positiveId
-    .optional()
-    .describe(
-      "Assign to team ID (discover via list_teams). Independent from `ownerId` — setting one does NOT clear the other on create. Three ownership shapes are valid: owner alone, team alone, or owner+team (the owner must be a member of the team; users can belong to multiple teams — 422 'owner is not a member of the team' otherwise).",
-    ),
-  fields: z
-    .array(CustomFieldWriteSchema)
-    .optional()
-    .describe(
-      fieldsArrayDescriptor("get_opportunity") +
-        " Capsule's POST /opportunities accepts the same `fields[]` shape as PUT (inferred by symmetry with the v1.6.5 wire-trace findings on party and project creation — the tenant probed had no opportunity custom fields configured, so this is unverified empirically). Setting custom fields on creation removes the create-then-update ritual.",
-    ),
-});
+    description: z.string().optional(),
+    value: OpportunityValueSchema.optional(),
+    durationBasis: z
+      .enum(["FIXED", "HOUR", "DAY", "WEEK", "MONTH", "QUARTER", "YEAR"])
+      .optional()
+      .describe(
+        "Time unit of the opportunity's contract duration. FIXED means a one-off (no recurring duration) — `duration` must be omitted/null with FIXED (Capsule 422s otherwise; wire-verified). Recurring deals: pair with `duration`, e.g. durationBasis MONTH + duration 12.",
+      ),
+    duration: z
+      .number()
+      .int()
+      .positive()
+      .nullable()
+      .optional()
+      .describe(
+        "How many durationBasis units the contract runs (e.g. 12 with MONTH). Must be null/omitted when durationBasis is FIXED. Wire-verified: POST stores it, PUT changes it, and PUT duration:null with durationBasis:FIXED clears it.",
+      ),
+    expectedCloseOn: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional()
+      .describe("YYYY-MM-DD"),
+    probability: z.number().int().min(0).max(100).optional(),
+    ownerId: positiveId
+      .optional()
+      .describe(
+        "Assign to user ID. Defaults to the API-token owner when omitted — note that opportunities do NOT inherit owner from the linked party, even though one might expect it. To clear owner later, call update_opportunity with `ownerId: null`. Discover IDs via list_users. " +
+          "WARNING: tenant pipeline / milestone-reached automation can mutate this field post-create — see the `milestoneId` description for details and the chained-PUT workaround.",
+      ),
+    teamId: positiveId
+      .optional()
+      .describe(
+        "Assign to team ID (discover via list_teams). Independent from `ownerId` — setting one does NOT clear the other on create. Three ownership shapes are valid: owner alone, team alone, or owner+team (the owner must be a member of the team; users can belong to multiple teams — 422 'owner is not a member of the team' otherwise).",
+      ),
+    fields: z
+      .array(CustomFieldWriteSchema)
+      .optional()
+      .describe(
+        fieldsArrayDescriptor("get_opportunity") +
+          " Capsule's POST /opportunities accepts the same `fields[]` shape as PUT (inferred by symmetry with the v1.6.5 wire-trace findings on party and project creation — the tenant probed had no opportunity custom fields configured, so this is unverified empirically). Setting custom fields on creation removes the create-then-update ritual.",
+      ),
+    trackDefinitionIds: z.array(positiveId).optional().describe(TRACKS_AT_CREATE_DESCRIPTION),
+  })
+  .superRefine(validateDuration);
 
 export async function createOpportunity(input: z.infer<typeof createOpportunitySchema>) {
-  const { partyId, milestoneId, ownerId, teamId, fields, ...rest } = input;
+  const { partyId, milestoneId, ownerId, teamId, fields, trackDefinitionIds, ...rest } = input;
 
   const body: Record<string, unknown> = {
     ...rest,
@@ -139,72 +180,92 @@ export async function createOpportunity(input: z.infer<typeof createOpportunityS
   setRef(body, "team", teamId);
   const mappedFields = mapFieldsForBody(fields);
   if (mappedFields !== undefined) body["fields"] = mappedFields;
+  if (trackDefinitionIds?.length) {
+    body["tracks"] = trackDefinitionIds.map((id) => ({ definition: { id } }));
+  }
 
   return capsulePost<{ opportunity: unknown }>("/opportunities", { opportunity: body });
 }
 
 // ───────────────────────────────────────────────────────────────────────────
 
-export const updateOpportunitySchema = z.object({
-  id: positiveId,
-  name: z.string().min(1).optional(),
-  partyId: positiveId
-    .optional()
-    .describe(
-      "Reassign the opportunity to a different primary party. Capsule requires every opportunity to have a party — passing `null` is rejected with 422 'party is required' (use Capsule's web UI if you need to dissolve the link entirely). Discover ids via search_parties / filter_parties. " +
-        "No defensive read-modify-write needed: this connector verified empirically (v1.6.3 wire-trace) that `party` is a standalone PUT field on /opportunities and does not interact with the asymmetric owner/team semantic from NOTES-ON-CAPSULE-API.md §27. " +
-        "NOTE: parent-ref nullability differs by entity — `update_task.partyId` IS nullable (orphan task), but opportunities and projects must always have a parent party. The same applies to `update_project.partyId`.",
-    ),
-  milestoneId: positiveId
-    .optional()
-    .describe(
-      "Move the opportunity to this milestone. Side effects depend on the target: " +
-        "closing milestones (Won/Lost) auto-set `closedOn` to today and `probability` to the milestone default (100/0), preserving `lastOpenMilestone` as the previous open stage; moving back to an open milestone clears `closedOn` and re-applies the milestone's default probability (Won/Lost is reversible — no separate reopen tool). " +
-        "WARNING: Capsule does NOT validate that the new milestone belongs to the opportunity's current pipeline. Passing a milestoneId from a different pipeline silently relocates the opportunity across pipelines, and `lastOpenMilestone` may then reference a milestone in the previous pipeline. Verify against the opportunity's current pipeline (read the opp first, list its pipeline's milestones via list_milestones) before passing a cross-pipeline id. " +
-        "NOTE: changing `milestoneId` can fire **pipeline / milestone-reached automations** that mutate `owner` / `team` on the destination milestone (same shape as `create_opportunity` — see its `milestoneId` description for the owner-clearing automation caveat). If a milestone-change-and-owner-set in the same call lands with `owner: null`, follow up with a second `update_opportunity` (or `batch_update_opportunity`) carrying both `ownerId` and `teamId` — milestone-reached triggers only fire on the transition, so a subsequent PUT preserves your values.",
-    ),
-  description: z.string().optional(),
-  value: OpportunityValueSchema.optional(),
-  expectedCloseOn: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .optional(),
-  probability: z
-    .number()
-    .int()
-    .min(0)
-    .max(100)
-    .optional()
-    .describe(
-      "Win probability 0–100. On an open milestone this overrides the milestone's default probability. CANNOT be set in the same call as a closing milestone (Won/Lost) — Capsule processes the milestone change first, the opportunity becomes closed, then the probability update is rejected as edit-on-closed-opp with 422 'probability can be updated only for open opportunity'. To close an opportunity, leave probability out of the call: it auto-snaps to 100% (Won) or 0% (Lost).",
-    ),
-  lostReasonId: positiveId
-    .optional()
-    .describe(
-      "Reason the opportunity was lost. Only meaningful when transitioning to a Lost milestone — Capsule silently drops it for other milestones. Without this set, a connector-driven Lost-close leaves `lostReason: null`. Discover IDs via list_lost_reasons.",
-    ),
-  ownerId: positiveId
-    .nullable()
-    .optional()
-    .describe(
-      "Reassign owner: pass a user ID to set, or `null` to unassign (verified empirically in v1.6.5 wire-trace — Capsule accepts `owner: null` on PUT /opportunities/:id, mirroring the v1.6.4 finding on /parties; brings update_opportunity into parity with update_party and update_project). " +
-        "When you supply `ownerId` and omit `teamId`, the connector fetches the opportunity's current team and includes it in the PUT body to preserve it across the owner change. Without this defensive read, Capsule's PUT would clear the existing team (see NOTES-ON-CAPSULE-API.md §27 — same asymmetric semantic as project updates). Supply `teamId` explicitly on the same call to change the team instead. " +
-        "Combine `ownerId: null` + `teamId: <T>` in one call to transfer an opportunity to team-ownership with no specific user (verified empirically in v1.6.5; the owner-clears-team semantic doesn't fire when owner is being cleared to null).",
-    ),
-  teamId: positiveId
-    .nullable()
-    .optional()
-    .describe(
-      "Reassign team: pass a team ID (discover via list_teams) to set, or `null` to unassign. " +
-        "Capsule preserves the existing owner across a team change (server-side), so `update_opportunity { teamId }` alone is safe — the owner is carried through. " +
-        "Owner must be a member of the new team or Capsule returns 422 'owner is not a member of the team'. " +
-        "Independent from `ownerId` — setting `teamId` does NOT clear the owner.",
-    ),
-  fields: z
-    .array(CustomFieldWriteSchema)
-    .optional()
-    .describe(fieldsArrayDescriptor("get_opportunity")),
-});
+export const updateOpportunitySchema = z
+  .object({
+    id: positiveId,
+    name: z.string().min(1).optional(),
+    partyId: positiveId
+      .optional()
+      .describe(
+        "Reassign the opportunity to a different primary party. Capsule requires every opportunity to have a party — passing `null` is rejected with 422 'party is required' (use Capsule's web UI if you need to dissolve the link entirely). Discover ids via search_parties / filter_parties. " +
+          "No defensive read-modify-write needed: this connector verified empirically (v1.6.3 wire-trace) that `party` is a standalone PUT field on /opportunities and does not interact with the asymmetric owner/team semantic from NOTES-ON-CAPSULE-API.md §27. " +
+          "NOTE: parent-ref nullability differs by entity — `update_task.partyId` IS nullable (orphan task), but opportunities and projects must always have a parent party. The same applies to `update_project.partyId`.",
+      ),
+    milestoneId: positiveId
+      .optional()
+      .describe(
+        "Move the opportunity to this milestone. Side effects depend on the target: " +
+          "closing milestones (Won/Lost) auto-set `closedOn` to today and `probability` to the milestone default (100/0), preserving `lastOpenMilestone` as the previous open stage; moving back to an open milestone clears `closedOn` and re-applies the milestone's default probability (Won/Lost is reversible — no separate reopen tool). " +
+          "WARNING: Capsule does NOT validate that the new milestone belongs to the opportunity's current pipeline. Passing a milestoneId from a different pipeline silently relocates the opportunity across pipelines, and `lastOpenMilestone` may then reference a milestone in the previous pipeline. Verify against the opportunity's current pipeline (read the opp first, list its pipeline's milestones via list_milestones) before passing a cross-pipeline id. " +
+          "NOTE: changing `milestoneId` can fire **pipeline / milestone-reached automations** that mutate `owner` / `team` on the destination milestone (same shape as `create_opportunity` — see its `milestoneId` description for the owner-clearing automation caveat). If a milestone-change-and-owner-set in the same call lands with `owner: null`, follow up with a second `update_opportunity` (or `batch_update_opportunity`) carrying both `ownerId` and `teamId` — milestone-reached triggers only fire on the transition, so a subsequent PUT preserves your values.",
+      ),
+    description: z.string().optional(),
+    value: OpportunityValueSchema.optional(),
+    durationBasis: z
+      .enum(["FIXED", "HOUR", "DAY", "WEEK", "MONTH", "QUARTER", "YEAR"])
+      .optional()
+      .describe(
+        "Time unit of the opportunity's contract duration. FIXED means a one-off (no recurring duration) — `duration` must be omitted/null with FIXED (Capsule 422s otherwise; wire-verified). Recurring deals: pair with `duration`, e.g. durationBasis MONTH + duration 12.",
+      ),
+    duration: z
+      .number()
+      .int()
+      .positive()
+      .nullable()
+      .optional()
+      .describe(
+        "How many durationBasis units the contract runs (e.g. 12 with MONTH). Must be null/omitted when durationBasis is FIXED. Wire-verified: POST stores it, PUT changes it, and PUT duration:null with durationBasis:FIXED clears it.",
+      ),
+    expectedCloseOn: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional(),
+    probability: z
+      .number()
+      .int()
+      .min(0)
+      .max(100)
+      .optional()
+      .describe(
+        "Win probability 0–100. On an open milestone this overrides the milestone's default probability. CANNOT be set in the same call as a closing milestone (Won/Lost) — Capsule processes the milestone change first, the opportunity becomes closed, then the probability update is rejected as edit-on-closed-opp with 422 'probability can be updated only for open opportunity'. To close an opportunity, leave probability out of the call: it auto-snaps to 100% (Won) or 0% (Lost).",
+      ),
+    lostReasonId: positiveId
+      .optional()
+      .describe(
+        "Reason the opportunity was lost. Only meaningful when transitioning to a Lost milestone — Capsule silently drops it for other milestones. Without this set, a connector-driven Lost-close leaves `lostReason: null`. Discover IDs via list_lost_reasons.",
+      ),
+    ownerId: positiveId
+      .nullable()
+      .optional()
+      .describe(
+        "Reassign owner: pass a user ID to set, or `null` to unassign (verified empirically in v1.6.5 wire-trace — Capsule accepts `owner: null` on PUT /opportunities/:id, mirroring the v1.6.4 finding on /parties; brings update_opportunity into parity with update_party and update_project). " +
+          "When you supply `ownerId` and omit `teamId`, the connector fetches the opportunity's current team and includes it in the PUT body to preserve it across the owner change. Without this defensive read, Capsule's PUT would clear the existing team (see NOTES-ON-CAPSULE-API.md §27 — same asymmetric semantic as project updates). Supply `teamId` explicitly on the same call to change the team instead. " +
+          "Combine `ownerId: null` + `teamId: <T>` in one call to transfer an opportunity to team-ownership with no specific user (verified empirically in v1.6.5; the owner-clears-team semantic doesn't fire when owner is being cleared to null).",
+      ),
+    teamId: positiveId
+      .nullable()
+      .optional()
+      .describe(
+        "Reassign team: pass a team ID (discover via list_teams) to set, or `null` to unassign. " +
+          "Capsule preserves the existing owner across a team change (server-side), so `update_opportunity { teamId }` alone is safe — the owner is carried through. " +
+          "Owner must be a member of the new team or Capsule returns 422 'owner is not a member of the team'. " +
+          "Independent from `ownerId` — setting `teamId` does NOT clear the owner.",
+      ),
+    fields: z
+      .array(CustomFieldWriteSchema)
+      .optional()
+      .describe(fieldsArrayDescriptor("get_opportunity")),
+  })
+  .superRefine(validateDuration);
 
 export async function updateOpportunity(input: z.infer<typeof updateOpportunitySchema>) {
   const { id, partyId, milestoneId, ownerId, teamId, lostReasonId, fields, ...rest } = input;

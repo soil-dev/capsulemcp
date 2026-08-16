@@ -103,6 +103,26 @@ export const createTaskSchema = z.object({
   projectId: positiveId
     .optional()
     .describe("Link task to a project (mutually exclusive with partyId/opportunityId)"),
+  repeat: z
+    .object({
+      frequency: z.enum(["YEARLY", "MONTHLY", "WEEKLY"]).describe("How often the task recurs."),
+      interval: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe("Every N frequency units (e.g. 2 with WEEKLY = every two weeks)."),
+      on: z
+        .string()
+        .optional()
+        .describe(
+          "Day the task repeats on (day-of-week/month depending on frequency; -1 = last day of the month). Derived from dueOn when omitted — Capsule fills it in (wire-verified: repeat {WEEKLY, interval 2} echoes back with `on` populated).",
+        ),
+    })
+    .optional()
+    .describe(
+      "Make this a repeating task. Wire-verified on POST /tasks. Recurrence on EXISTING tasks isn't exposed by update_task (unverified on PUT) — recreate the task to change it.",
+    ),
 });
 
 export async function createTask(input: z.infer<typeof createTaskSchema>) {
