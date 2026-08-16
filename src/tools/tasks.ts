@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { assertSingleParentRef, setNullableRef, setRef } from "./body-helpers.js";
 import { defineDelete } from "./define-delete.js";
-import { positiveId, paginationFields } from "./shared-schemas.js";
+import { positiveId, paginationFields, embedParam, TASK_EMBEDS } from "./shared-schemas.js";
 import { capsuleGet, capsulePost, capsulePut, capsuleGetList } from "../capsule/client.js";
 import { type BatchOpts, batchExecute } from "../capsule/batch.js";
 import { chunkedMultiGet } from "../capsule/multi-get.js";
@@ -22,6 +22,7 @@ export const listTasksSchema = z.object({
       "Defaults to OPEN when omitted. Pass COMPLETED to filter to completed tasks, or 'OPEN' explicitly.",
     ),
   ownerId: positiveId.optional().describe("Filter to tasks owned by this user ID"),
+  embed: embedParam(TASK_EMBEDS),
   ...paginationFields,
 });
 
@@ -32,6 +33,7 @@ export async function listTasks(input: z.infer<typeof listTasksSchema>) {
     status: input.status ?? "OPEN",
     // Capsule's owner filter is the bare query param `owner`, not `ownerId`/`assignedToUserId`.
     owner: input.ownerId,
+    embed: input.embed,
     page: input.page,
     perPage: input.perPage,
   });
@@ -41,10 +43,13 @@ export async function listTasks(input: z.infer<typeof listTasksSchema>) {
 
 export const getTaskSchema = z.object({
   id: positiveId.describe("Task ID"),
+  embed: embedParam(TASK_EMBEDS),
 });
 
 export async function getTask(input: z.infer<typeof getTaskSchema>) {
-  const { data } = await capsuleGet<{ task: unknown }>(`/tasks/${input.id}`);
+  const { data } = await capsuleGet<{ task: unknown }>(`/tasks/${input.id}`, {
+    embed: input.embed,
+  });
   return data;
 }
 
@@ -62,10 +67,11 @@ export const getTasksSchema = z.object({
     .describe(
       "Array of task IDs (1–50). Capsule's native batch-fetch endpoint caps at 10 per request; the connector transparently splits larger sets into 10-id chunks and fans out the Capsule calls in parallel.",
     ),
+  embed: embedParam(TASK_EMBEDS),
 });
 
 export async function getTasks(input: z.infer<typeof getTasksSchema>) {
-  return chunkedMultiGet("/tasks", "tasks", input.ids);
+  return chunkedMultiGet("/tasks", "tasks", input.ids, { embed: input.embed });
 }
 
 // ── Write ───────────────────────────────────────────────────────────────────

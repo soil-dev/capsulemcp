@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { paginationFields, embedParam, RECORD_EMBEDS } from "./shared-schemas.js";
+import {
+  paginationFields,
+  embedParam,
+  PARTY_EMBEDS,
+  OPPORTUNITY_EMBEDS,
+  PROJECT_EMBEDS,
+} from "./shared-schemas.js";
 import { capsuleSearch } from "../capsule/client.js";
 
 // ── Shared schema ───────────────────────────────────────────────────────────
@@ -55,18 +61,22 @@ const FilterConditionSchema = z.object({
     ),
 });
 
-const FilterInputSchema = z.object({
-  conditions: z
-    .array(FilterConditionSchema)
-    .min(1)
-    .describe(
-      "Array of filter conditions. All conditions are ANDed together. To get newest records, use a date condition like {field: 'addedOn', operator: 'is within last', value: 7} and pick the highest-id row from the result (Capsule IDs are monotonic).",
-    ),
-  embed: embedParam(RECORD_EMBEDS),
-  ...paginationFields,
-});
+// Per-entity schemas: identical shape except the embed allow-list,
+// which differs per resource (see shared-schemas.ts).
+function makeFilterSchema(embeds: readonly string[]) {
+  return z.object({
+    conditions: z
+      .array(FilterConditionSchema)
+      .min(1)
+      .describe(
+        "Array of filter conditions. All conditions are ANDed together. To get newest records, use a date condition like {field: 'addedOn', operator: 'is within last', value: 7} and pick the highest-id row from the result (Capsule IDs are monotonic).",
+      ),
+    embed: embedParam(embeds),
+    ...paginationFields,
+  });
+}
 
-export type FilterInput = z.infer<typeof FilterInputSchema>;
+export type FilterInput = z.infer<ReturnType<typeof makeFilterSchema>>;
 
 // ── Implementation ──────────────────────────────────────────────────────────
 
@@ -88,7 +98,7 @@ async function runFilter<T extends object>(
 
 // ── Tool exports ────────────────────────────────────────────────────────────
 
-export const filterPartiesSchema = FilterInputSchema;
+export const filterPartiesSchema = makeFilterSchema(PARTY_EMBEDS);
 export async function filterParties(input: FilterInput) {
   // Common patterns:
   //   "Parties contacted in last N days":
@@ -104,7 +114,7 @@ export async function filterParties(input: FilterInput) {
   return runFilter<{ parties: unknown[] }>("parties", input);
 }
 
-export const filterOpportunitiesSchema = FilterInputSchema;
+export const filterOpportunitiesSchema = makeFilterSchema(OPPORTUNITY_EMBEDS);
 export async function filterOpportunities(input: FilterInput) {
   // Common patterns:
   //   "Opportunities won in last N days":
@@ -119,7 +129,7 @@ export async function filterOpportunities(input: FilterInput) {
   return runFilter<{ opportunities: unknown[] }>("opportunities", input);
 }
 
-export const filterProjectsSchema = FilterInputSchema;
+export const filterProjectsSchema = makeFilterSchema(PROJECT_EMBEDS);
 export async function filterProjects(input: FilterInput) {
   // Common patterns:
   //   "Open projects only":
