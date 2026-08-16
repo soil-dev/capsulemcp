@@ -308,6 +308,7 @@ export const updateEntrySchema = z.object({
     ),
   removeAttachmentIds: z
     .array(positiveId)
+    .min(1)
     .optional()
     .describe(
       "Attachment ids to detach from this entry (ids from the entry's attachments array; wire shape {id, _delete: true}, verified live — removal returns the entry with the attachment gone). Other attachments are untouched. Capsule rejects removing the LAST attachment from an entry that has no content. To ADD an attachment to an existing entry, use upload_attachment with entryId.",
@@ -324,7 +325,9 @@ export async function updateEntry(input: z.infer<typeof updateEntrySchema>) {
   }
 
   if (Object.keys(body).length === 0) {
-    throw new Error("update_entry: provide at least one field to update (content or subject)");
+    throw new Error(
+      "update_entry: provide at least one field to update (content, subject, or removeAttachmentIds)",
+    );
   }
 
   return capsulePut<{ entry: unknown }>(`/entries/${id}`, { entry: body });

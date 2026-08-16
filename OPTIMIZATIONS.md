@@ -578,7 +578,7 @@ Two reducers for the per-session token cost of the tool catalog:
 
 ### Why
 
-The full 89-tool catalog measures roughly **~155 KB** of `tools/list` JSON
+The full 92-tool catalog measures roughly **~155 KB** of `tools/list` JSON
 (baseline measured against the built v1.8.0 server over stdio: 155,645 bytes —
 36.9 KB top-level descriptions, 104.6 KB inputSchema, of which 65 KB
 is schema-embedded `.describe()` text). For clients that inject the
@@ -592,7 +592,7 @@ the way down for deployments that opt in.
 
 ### How to verify
 
-`tests/tier.test.ts` pins the tier counts (89 full / 26 core / 15
+`tests/tier.test.ts` pins the tier counts (92 full / 26 core / 15
 core∩read-only), the strip's validation-equivalence (including a
 nested `superRefine` surviving), and a per-tool serialized-size
 ceiling on every batch schema.

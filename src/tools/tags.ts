@@ -35,7 +35,7 @@ import { defineBatch } from "./define-batch.js";
 import { ENTITY_PATH, positiveId, paginationFieldsNoDefaults } from "./shared-schemas.js";
 import { capsuleDelete, capsuleGetCachedList, capsulePut } from "../capsule/client.js";
 import { invalidateByPrefix } from "../capsule/cache.js";
-import { idempotent, idempotentWithResult, isCapsuleTagNotFound } from "../capsule/idempotent.js";
+import { idempotentWithResult, isCapsuleTagNotFound } from "../capsule/idempotent.js";
 
 const TAG_LIST_PATH = {
   parties: "/parties/tags",
@@ -169,9 +169,15 @@ export async function deleteTagDefinition(input: z.infer<typeof deleteTagDefinit
   if (confirm !== true) {
     throw new Error("delete_tag_definition requires confirm: true");
   }
-  const result = await idempotent(
+  const result = await idempotentWithResult(
     () => capsuleDelete(`/${ENTITY_PATH[entity]}/tags/${tagId}`),
-    () => ({ deleted: true as const, alreadyDeleted: false, entity, tagId }),
+    (r) => ({
+      deleted: true as const,
+      alreadyDeleted: false,
+      ...(r.scheduled ? { scheduled: true as const } : {}),
+      entity,
+      tagId,
+    }),
     () => ({ deleted: true as const, alreadyDeleted: true, entity, tagId }),
   );
   // The definition just left the tenant-global list for this entity

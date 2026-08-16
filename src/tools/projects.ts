@@ -3,7 +3,13 @@ import { setNullableRef, setRef } from "./body-helpers.js";
 import { defineBatch } from "./define-batch.js";
 import { defineDelete } from "./define-delete.js";
 import { readEntityRefs } from "./preserve-refs.js";
-import { positiveId, paginationFields, embedParam, PROJECT_EMBEDS } from "./shared-schemas.js";
+import {
+  positiveId,
+  paginationFields,
+  embedParam,
+  PROJECT_EMBEDS,
+  rejectSinceWithQ,
+} from "./shared-schemas.js";
 import { TRACKS_AT_CREATE_DESCRIPTION } from "./parties.js";
 import { capsuleGet, capsulePost, capsulePut, capsuleGetList } from "../capsule/client.js";
 import { chunkedMultiGet } from "../capsule/multi-get.js";
@@ -15,17 +21,19 @@ import {
 
 // ── Read ────────────────────────────────────────────────────────────────────
 
-export const searchProjectsSchema = z.object({
-  since: z
-    .string()
-    .optional()
-    .describe(
-      "Only records CHANGED on/after this ISO-8601 timestamp (incremental sync; pairs with the list_deleted_* audit tools). Wire-verified on the plain list endpoints. Ignored by Capsule when q triggers the /search sub-resource — omit q when using since.",
-    ),
-  q: z.string().optional().describe("Free-text search query"),
-  embed: embedParam(PROJECT_EMBEDS),
-  ...paginationFields,
-});
+export const searchProjectsSchema = z
+  .object({
+    since: z
+      .string()
+      .optional()
+      .describe(
+        "Only records CHANGED on/after this ISO-8601 timestamp (incremental sync; pairs with the list_deleted_* audit tools). Wire-verified on the plain list endpoints. Ignored by Capsule when q triggers the /search sub-resource — omit q when using since.",
+      ),
+    q: z.string().optional().describe("Free-text search query"),
+    embed: embedParam(PROJECT_EMBEDS),
+    ...paginationFields,
+  })
+  .superRefine(rejectSinceWithQ);
 
 export async function searchProjects(input: z.infer<typeof searchProjectsSchema>) {
   // GET /kases ignores `q`; the search sub-resource is required for filtering.

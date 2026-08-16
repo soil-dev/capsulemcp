@@ -194,3 +194,45 @@ describe("DELETE 202 Accepted (long-running deletion)", () => {
     expect("scheduled" in r).toBe(false);
   });
 });
+
+describe("audit follow-ups", () => {
+  it("since forwarded by search_opportunities and search_projects", async () => {
+    mockFetch(200, { opportunities: [] });
+    const { searchOpportunities } = await import("../src/tools/opportunities.js");
+    await searchOpportunities({ since: "2026-08-01T00:00:00Z", page: 1, perPage: 25 });
+    expect(String(vi.mocked(fetch).mock.calls[0]![0])).toContain("since=2026-08-01");
+
+    mockFetch(200, { kases: [] });
+    const { searchProjects } = await import("../src/tools/projects.js");
+    await searchProjects({ since: "2026-08-01T00:00:00Z", page: 1, perPage: 25 });
+    expect(String(vi.mocked(fetch).mock.calls[1]![0])).toContain("since=2026-08-01");
+  });
+
+  it("q + since is rejected pre-flight on all three search tools (since is ignored on /search)", async () => {
+    const { searchPartiesSchema } = await import("../src/tools/parties.js");
+    const { searchOpportunitiesSchema } = await import("../src/tools/opportunities.js");
+    const { searchProjectsSchema } = await import("../src/tools/projects.js");
+    for (const schema of [searchPartiesSchema, searchOpportunitiesSchema, searchProjectsSchema]) {
+      expect(schema.safeParse({ q: "acme", since: "2026-08-01T00:00:00Z" }).success).toBe(false);
+      expect(schema.safeParse({ since: "2026-08-01T00:00:00Z" }).success).toBe(true);
+      expect(schema.safeParse({ q: "acme" }).success).toBe(true);
+    }
+  });
+
+  it("delete_tag_definition surfaces scheduled: true on 202", async () => {
+    mockFetch(202, {});
+    const { deleteTagDefinition } = await import("../src/tools/tags.js");
+    const r = (await deleteTagDefinition({
+      entity: "parties",
+      tagId: 7,
+      confirm: true,
+    })) as Record<string, unknown>;
+    expect(r["deleted"]).toBe(true);
+    expect(r["scheduled"]).toBe(true);
+  });
+
+  it("update_entry rejects an empty removeAttachmentIds array", async () => {
+    const { updateEntrySchema } = await import("../src/tools/entries.js");
+    expect(updateEntrySchema.safeParse({ id: 1, removeAttachmentIds: [] }).success).toBe(false);
+  });
+});

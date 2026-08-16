@@ -64,7 +64,7 @@ versions adhere to [Semantic Versioning](https://semver.org).
   cascades) the envelope carries `scheduled: true` so callers don't
   misread an in-flight deletion as a failure. 204 behaviour unchanged.
 - Docs: NOTES corrects its claim that no `/countries` endpoint exists
-  (live: 200 with 250 rows; `list_countries` planned under #112 P2),
+  (live: 200 with 250 rows; now exposed via the new `list_countries`),
   documents the 202 delete path and the undocumented party
   `enrichment` field; DESIGN gains an "exists upstream, adoption
   planned" table (`/activities`, `/countries`, `/currencies`) and
