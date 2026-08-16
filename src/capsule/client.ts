@@ -582,12 +582,30 @@ async function handleResponse<T>(res: Response): Promise<T> {
 
 export type QueryParams = Record<string, string | number | boolean | undefined>;
 
+/**
+ * Caller-facing embed tokens → Capsule wire tokens. The v2 surface
+ * says `project`; Capsule's embed vocabulary uses its legacy `kase`.
+ * Mapping here — at the same client boundary that normalizes `kase`
+ * response keys back to `project` (see capsule/normalize.ts) — means
+ * every call path gets the translation, whether the input went
+ * through a zod schema or a handler was invoked directly.
+ */
+const EMBED_WIRE_TOKENS: Record<string, string> = { project: "kase" };
+
+function mapEmbedValue(value: string): string {
+  return value
+    .split(",")
+    .map((t) => EMBED_WIRE_TOKENS[t.trim()] ?? t.trim())
+    .join(",");
+}
+
 function buildUrl(path: string, params?: QueryParams): string {
   const url = new URL(`${baseUrl()}${path}`);
   if (params) {
     for (const [key, value] of Object.entries(params)) {
       if (value !== undefined) {
-        url.searchParams.set(key, String(value));
+        const wire = key === "embed" && typeof value === "string" ? mapEmbedValue(value) : value;
+        url.searchParams.set(key, String(wire));
       }
     }
   }

@@ -3,7 +3,14 @@ import { setNullableRef, setRef } from "./body-helpers.js";
 import { defineBatch } from "./define-batch.js";
 import { defineDelete } from "./define-delete.js";
 import { readEntityRefs } from "./preserve-refs.js";
-import { positiveId, paginationFields, embedParam, RECORD_EMBEDS } from "./shared-schemas.js";
+import {
+  positiveId,
+  paginationFields,
+  embedParam,
+  PARTY_EMBEDS,
+  OPPORTUNITY_EMBEDS,
+  PROJECT_EMBEDS,
+} from "./shared-schemas.js";
 import { capsuleGet, capsulePost, capsulePut, capsuleGetList } from "../capsule/client.js";
 import { chunkedMultiGet } from "../capsule/multi-get.js";
 import { idempotentWithResult } from "../capsule/idempotent.js";
@@ -141,7 +148,7 @@ const WebsiteSchema = z
 
 export const searchPartiesSchema = z.object({
   q: z.string().optional().describe("Free-text search query"),
-  embed: embedParam(RECORD_EMBEDS),
+  embed: embedParam(PARTY_EMBEDS),
   ...paginationFields,
 });
 
@@ -161,7 +168,7 @@ export async function searchParties(input: z.infer<typeof searchPartiesSchema>) 
 
 export const getPartySchema = z.object({
   id: positiveId.describe("Party ID"),
-  embed: embedParam(RECORD_EMBEDS),
+  embed: embedParam(PARTY_EMBEDS),
 });
 
 export async function getParty(input: z.infer<typeof getPartySchema>) {
@@ -188,7 +195,7 @@ export const getPartiesSchema = z.object({
     .describe(
       "Array of party IDs (1–50). Capsule's native batch-fetch endpoint caps at 10 per request; the connector transparently splits larger sets into 10-id chunks and fans out the Capsule calls in parallel. Result shape is identical regardless of input size.",
     ),
-  embed: embedParam(RECORD_EMBEDS),
+  embed: embedParam(PARTY_EMBEDS),
 });
 
 export async function getParties(input: z.infer<typeof getPartiesSchema>) {
@@ -200,6 +207,7 @@ export async function getParties(input: z.infer<typeof getPartiesSchema>) {
 export const listPartyOpportunitiesSchema = z.object({
   partyId: positiveId,
   ...paginationFields,
+  embed: embedParam(OPPORTUNITY_EMBEDS),
 });
 
 export async function listPartyOpportunities(input: z.infer<typeof listPartyOpportunitiesSchema>) {
@@ -214,6 +222,7 @@ export async function listPartyOpportunities(input: z.infer<typeof listPartyOppo
 export const listPartyProjectsSchema = z.object({
   partyId: positiveId,
   ...paginationFields,
+  embed: embedParam(PROJECT_EMBEDS),
 });
 
 export async function listPartyProjects(input: z.infer<typeof listPartyProjectsSchema>) {

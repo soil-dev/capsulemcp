@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { positiveId, paginationFields, embedParam, RECORD_EMBEDS } from "./shared-schemas.js";
+import { positiveId, paginationFields, embedParam, PARTY_EMBEDS } from "./shared-schemas.js";
 import { capsuleGetList } from "../capsule/client.js";
 
 // Audit & navigation tools that don't fit cleanly under a single entity.
@@ -22,7 +22,7 @@ export const listEmployeesSchema = z.object({
     "The organisation's party id. Returns the people whose `organisation` field links to this party.",
   ),
   ...paginationFields,
-  embed: embedParam(RECORD_EMBEDS),
+  embed: embedParam(PARTY_EMBEDS),
 });
 
 export async function listEmployees(input: z.infer<typeof listEmployeesSchema>) {

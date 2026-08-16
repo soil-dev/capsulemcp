@@ -11,6 +11,26 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Fixed
+
+- The `embed` allow-lists no longer reject valid, documented Capsule
+  embed values (issue #112 P1). v2.0.0's single list
+  (tags/fields/missingImportantFields) came from a probe that diffed
+  top-level row keys — blind to embeds that enrich a *nested* ref.
+  Each resource now carries its documented list, re-verified live
+  (nested-ref key counts measured): opportunities gain `party` and
+  `milestone`; projects gain `party` and `opportunity`; parties gain
+  `organisation`; entries gain `party`, `project`, `opportunity`,
+  `creator`, `activityType`. Task tools (`list_tasks`, `get_task`,
+  `get_tasks`) now expose `embed` for the first time (`party`,
+  `opportunity`, `project`, `owner`, `nextTask`). These remove N+1
+  round-trips (e.g. a project plus its full party in one call).
+  Callers say `project`; the client boundary translates to Capsule's
+  legacy `kase` wire token on the way out — symmetric with the
+  kase→project response-key normalization, and applied in `buildUrl`
+  so it covers every call path. `run_saved_filter` validates embeds
+  cross-field against its `entity` parameter.
+
 ## [2.2.0] — 2026-08-16
 
 Dependency and security maintenance. Every dependency is now at its

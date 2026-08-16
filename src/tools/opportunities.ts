@@ -3,7 +3,7 @@ import { setNullableRef, setRef } from "./body-helpers.js";
 import { defineBatch } from "./define-batch.js";
 import { defineDelete } from "./define-delete.js";
 import { readEntityRefs } from "./preserve-refs.js";
-import { positiveId, paginationFields, embedParam, RECORD_EMBEDS } from "./shared-schemas.js";
+import { positiveId, paginationFields, embedParam, OPPORTUNITY_EMBEDS } from "./shared-schemas.js";
 import { capsuleGet, capsulePost, capsulePut, capsuleGetList } from "../capsule/client.js";
 import { chunkedMultiGet } from "../capsule/multi-get.js";
 import {
@@ -39,7 +39,7 @@ const OpportunityValueSchema = z.object({
 
 export const searchOpportunitiesSchema = z.object({
   q: z.string().optional().describe("Free-text search query"),
-  embed: embedParam(RECORD_EMBEDS),
+  embed: embedParam(OPPORTUNITY_EMBEDS),
   ...paginationFields,
 });
 
@@ -58,7 +58,7 @@ export async function searchOpportunities(input: z.infer<typeof searchOpportunit
 
 export const getOpportunitySchema = z.object({
   id: positiveId,
-  embed: embedParam(RECORD_EMBEDS),
+  embed: embedParam(OPPORTUNITY_EMBEDS),
 });
 
 export async function getOpportunity(input: z.infer<typeof getOpportunitySchema>) {
@@ -83,7 +83,7 @@ export const getOpportunitiesSchema = z.object({
     .describe(
       "Array of opportunity IDs (1–50). Capsule's native batch-fetch endpoint caps at 10 per request; the connector transparently splits larger sets into 10-id chunks and fans out the Capsule calls in parallel.",
     ),
-  embed: embedParam(RECORD_EMBEDS),
+  embed: embedParam(OPPORTUNITY_EMBEDS),
 });
 
 export async function getOpportunities(input: z.infer<typeof getOpportunitiesSchema>) {

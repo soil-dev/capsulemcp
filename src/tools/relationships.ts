@@ -4,7 +4,8 @@ import {
   positiveId,
   paginationFields,
   embedParam,
-  RECORD_EMBEDS,
+  PARTY_EMBEDS,
+  PROJECT_EMBEDS,
 } from "./shared-schemas.js";
 import { confirmFlag } from "./confirm-flag.js";
 import {
@@ -44,7 +45,7 @@ const RelationshipEntity = z
 export const listAdditionalPartiesSchema = z.object({
   entity: RelationshipEntity,
   entityId: positiveId.describe("ID of the opportunity or project."),
-  embed: embedParam(RECORD_EMBEDS),
+  embed: embedParam(PARTY_EMBEDS),
   ...paginationFields,
 });
 
@@ -153,7 +154,7 @@ export async function removeAdditionalParty(input: z.infer<typeof removeAddition
 
 export const listAssociatedProjectsSchema = z.object({
   opportunityId: positiveId,
-  embed: embedParam(RECORD_EMBEDS),
+  embed: embedParam(PROJECT_EMBEDS),
   ...paginationFields,
 });
 

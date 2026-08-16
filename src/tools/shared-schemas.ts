@@ -90,15 +90,23 @@ export type EntityName = keyof typeof ENTITY_PATH;
  * tokens (probed live: `embed=bogus_xyz` returns 200 with the default
  * shape), so a typo'd embed used to "succeed" while returning less
  * data than the caller believed it asked for — the worst failure mode
- * for an LLM caller. From v2 the tokens are validated against the
- * per-surface allow-list; the wire format (comma-joined string) is
- * unchanged.
+ * for an LLM caller. Tokens are validated against the per-resource
+ * allow-list; the wire format (comma-joined string) is unchanged.
  *
- * Allow-lists verified empirically (2026-06-11, live tenant):
- * `tags` / `fields` / `missingImportantFields` are honored on parties,
- * opportunities, and projects; every other candidate (organisation,
- * party, milestone, …) is silently ignored. The entries surface
- * documents `attachments` / `participants`.
+ * HISTORY / METHODOLOGY WARNING: the original v2.0.0 allow-list
+ * (tags / fields / missingImportantFields everywhere) was derived from
+ * a probe that diffed TOP-LEVEL row keys with vs without each embed —
+ * blind to embeds that enrich a NESTED ref instead of adding a key.
+ * Capsule's docs list ref-enriching embeds per resource, re-verified
+ * live 2026-08-16 by diffing the nested object's key count (e.g.
+ * `embed=party` on an opportunity: party ref 4 → 15 keys; `milestone`
+ * 2 → 9; `creator` on entries 5 → 16). See issue #112.
+ *
+ * Vocabulary: callers say `project`; Capsule's wire token for the
+ * project ref is its legacy `kase`. The translation happens at the
+ * client boundary (buildUrl in capsule/client.ts) so it applies on
+ * every call path — schema-parsed MCP calls and direct handler calls
+ * alike — mirroring the kase→project response-key normalization.
  */
 export function embedParam(allowed: readonly string[]) {
   return z
@@ -118,8 +126,50 @@ export function embedParam(allowed: readonly string[]) {
     .optional();
 }
 
-/** `embed` for the record surfaces (parties / opportunities / projects / filters / audit). */
-export const RECORD_EMBEDS = ["tags", "fields", "missingImportantFields"] as const;
+/**
+ * Per-resource embed allow-lists, from Capsule's operations docs and
+ * re-verified live 2026-08-16 (nested-ref enrichment measured for every
+ * ref token). `project` is the caller-facing name for Capsule's `kase`
+ * token (transformed on the wire by `embedParam`).
+ *
+ * `attachments` / `participants` on entries predate the docs' current
+ * five-token list; they are retained for continuity (Capsule tolerates
+ * them, and entry rows carry `attachments` regardless).
+ */
+export const PARTY_EMBEDS = ["tags", "fields", "organisation", "missingImportantFields"] as const;
+export const OPPORTUNITY_EMBEDS = [
+  "tags",
+  "fields",
+  "party",
+  "milestone",
+  "missingImportantFields",
+] as const;
+export const PROJECT_EMBEDS = [
+  "tags",
+  "fields",
+  "party",
+  "opportunity",
+  "missingImportantFields",
+] as const;
+export const ENTRY_EMBEDS = [
+  "attachments",
+  "participants",
+  "party",
+  "project",
+  "opportunity",
+  "creator",
+  "activityType",
+] as const;
+export const TASK_EMBEDS = ["party", "opportunity", "project", "owner", "nextTask"] as const;
 
-/** `embed` for the entries surface. */
-export const ENTRY_EMBEDS = ["attachments", "participants"] as const;
+/**
+ * Entity-keyed embed lists for tools whose target entity is a runtime
+ * parameter (run_saved_filter) — cross-field validation happens in an
+ * object-level superRefine there, since the valid tokens depend on the
+ * `entity` value.
+ */
+export const EMBEDS_BY_ENTITY: Record<EntityName, readonly string[]> = {
+  parties: PARTY_EMBEDS,
+  opportunities: OPPORTUNITY_EMBEDS,
+  projects: PROJECT_EMBEDS,
+};
