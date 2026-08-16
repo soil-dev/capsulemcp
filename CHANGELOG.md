@@ -11,6 +11,43 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [2.2.0] — 2026-08-16
+
+Dependency and security maintenance. Every dependency is now at its
+latest version — including a minor bump of the MCP SDK itself — and
+`npm audit` is back to zero after a batch of new advisories landed
+against the tree. No source change; wire behaviour re-verified against
+the live Capsule API.
+
+### Security
+
+- Cleared all 14 open Dependabot alerts (3 high). Every affected
+  package was transitive with no fix reachable by bumping direct
+  dependencies, so patched versions are pinned via `overrides`:
+  - **fast-uri ^3.1.5** (high) — host confusion via backslash
+    authority introducer, via `@modelcontextprotocol/sdk` → `ajv`.
+    Note the 3.1.4 pin from v2.1.3 fell into the vulnerable range when
+    the advisory was extended.
+  - **ip-address ^10.4.0** (high) — leading-zero octets decoded as
+    decimal while resolvers decode them as octal, and a CIDR suffix
+    suppressing special-use classification, both allowing SSRF /
+    trust-boundary bypass. Arrives via `express-rate-limit`, so it is
+    runtime-relevant: the unauthenticated-path limiter keys on parsed
+    client IPs.
+  - **hono ^4.13.1** — CORS-middleware ReDoS and `memo()` retaining
+    SSR output across requests. Via the SDK's hono adapter, which this
+    connector never imports.
+  - **postcss ^8.5.26**, **nanoid ^3.3.18** — build-time only, via
+    `tsup`.
+
+### Changed
+
+- `@modelcontextprotocol/sdk` 1.29.0 → 1.30.0, `undici` 8.8.0 → 8.10.0,
+  `express-rate-limit` 8.6.0 → 8.6.2 (runtime); `@types/node`
+  26.1.1 → 26.2.0, `@biomejs/biome` 2.5.4 → 2.5.8 (dev). No runtime
+  behaviour change — verified by the full wire-trace suite against the
+  live API, plus both `dist` entries loading cleanly under the new SDK.
+
 ## [2.1.3] — 2026-07-22
 
 Security + dependency maintenance. Resolves a high-severity transitive
