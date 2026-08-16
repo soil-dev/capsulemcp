@@ -161,7 +161,12 @@ import {
   listCategories,
   listGoalsSchema,
   listGoals,
+  listCountriesSchema,
+  listCountries,
+  listCurrenciesSchema,
+  listCurrencies,
 } from "./tools/metadata.js";
+import { listActivitiesSchema, listActivities } from "./tools/activities.js";
 import {
   listEmployeesSchema,
   listEmployees,
@@ -1057,6 +1062,30 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
     "List sales / activity goals configured in the account (per-user or per-team revenue or activity targets). Returns an empty list for accounts that don't use the Goals feature.",
     listGoalsSchema,
     listGoals,
+  );
+
+  registerTool(
+    server,
+    "list_countries",
+    "List Capsule's country dictionary (250 rows: name, alpha2Code, alpha3Code, numericCode, dialCode). The `name` values are the EXACT spellings accepted by party address `country` fields — Capsule rejects anything else with 422 'unknown country' (e.g. accepted: 'Czechia', 'United Kingdom'; rejected: 'Czech Republic', 'UK'). Consult this before add_party_address / update_party address writes when unsure of a spelling. Complete list in one response; cached (reference data).",
+    listCountriesSchema,
+    listCountries,
+  );
+
+  registerTool(
+    server,
+    "list_currencies",
+    "List Capsule's currency dictionary (80 rows: ISO 4217 code, symbol, name). Valid codes for opportunity `value.currency`. Complete list in one response; cached (reference data).",
+    listCurrenciesSchema,
+    listCurrencies,
+  );
+
+  registerTool(
+    server,
+    "list_activities",
+    "Global cross-entity ACTIVITY FEED: everything that happened across the tenant, newest first — typed rows (Note, Task completed, Email sent, Email received, plus custom types) with the acting user, the apiClient that made the change, and refs to the party/opportunity/project/task/entry concerned. Supports `since` (ISO-8601, server-side filter) and pagination. THE tool for 'what happened this week across the book', 'what did <user> touch today', or 'which emails came in' — one call instead of per-record entry fan-outs. No per-entity server-side filter: filter client-side on the returned refs. CAVEAT: undocumented Capsule endpoint (stable in observation; discovered by live probe) — could change without notice.",
+    listActivitiesSchema,
+    listActivities,
   );
 
   registerTool(

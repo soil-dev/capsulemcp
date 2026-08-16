@@ -1,7 +1,7 @@
 /**
  * Tests for MCP tool annotations inference.
  *
- * Annotations are name-inferred at registration time so all 89 tools
+ * Annotations are name-inferred at registration time so all 92 tools
  * get accurate hints without per-call-site annotation declarations.
  * These tests pin three contracts:
  *
@@ -19,7 +19,7 @@
  *      implicit-true even when `readOnlyHint: true` is also set, so
  *      we make every hint explicit and never rely on spec defaults.
  *
- *   3. Aggregate counts match the catalog: 50 read-only-and-not-
+ *   3. Aggregate counts match the catalog: 53 read-only-and-not-
  *      destructive, 8 not-read-and-destructive, 31 not-read-and-not-
  *      destructive (creates / updates / additive writes). Drift in
  *      any direction means a new tool is going to surprise users
@@ -206,7 +206,7 @@ describe("tools/list response carries inferred annotations", () => {
 
     // Aggregate counts — the catalogue invariants we want CI to defend.
     // Three mutually-exclusive buckets:
-    //   - readOnly+nondestructive (reads): 50
+    //   - readOnly+nondestructive (reads): 53
     //   - notRead+destructive (delete_*, remove_track, remove_additional_party): 8
     //   - notRead+notDestructive (creates/updates/additive writes): 31
     let readOnly = 0;
@@ -221,10 +221,10 @@ describe("tools/list response carries inferred annotations", () => {
       // The fourth combo (readOnly + destructive) is nonsensical;
       // any tool landing there means inferAnnotations regressed.
     }
-    expect(readOnly).toBe(50);
+    expect(readOnly).toBe(53);
     expect(destructive).toBe(8);
     expect(routineWrite).toBe(31);
     expect(readOnly + destructive + routineWrite).toBe(result.tools.length);
-    expect(result.tools.length).toBe(89);
+    expect(result.tools.length).toBe(92);
   });
 });

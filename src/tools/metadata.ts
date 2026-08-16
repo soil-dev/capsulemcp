@@ -120,3 +120,32 @@ export async function listGoals(input: z.infer<typeof listGoalsSchema>) {
     perPage: input.perPage ?? 100,
   });
 }
+
+// ── Countries (address dictionary) ──────────────────────────────────────────
+//
+// GET /countries — 250 rows: name, alpha2Code, alpha3Code, numericCode,
+// dialCode. Returned complete in one response (no pagination; verified
+// live 2026-08-16). The `name` values are the exact spellings Capsule's
+// address-country dictionary accepts — the authoritative answer to the
+// 422 'address.country: unknown country' class documented in
+// NOTES-ON-CAPSULE-API.md. This endpoint was previously believed not to
+// exist (see the NOTES correction); discovered in the issue #112 sweep.
+
+export const listCountriesSchema = z.object({});
+
+export async function listCountries() {
+  const { data } = await capsuleGetCached<{ countries: unknown[] }>("/countries");
+  return data;
+}
+
+// ── Currencies (dictionary) ─────────────────────────────────────────────────
+//
+// GET /currencies — 80 rows: code (ISO 4217), symbol, name, pluralName
+// (names null for some minor currencies). Complete in one response.
+
+export const listCurrenciesSchema = z.object({});
+
+export async function listCurrencies() {
+  const { data } = await capsuleGetCached<{ currencies: unknown[] }>("/currencies");
+  return data;
+}

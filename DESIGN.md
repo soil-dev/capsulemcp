@@ -522,6 +522,9 @@ listed below. Specifically:
 - Additional-party links (read + write) for opportunities and projects
 - Associated projects on an opportunity
 - "Employees" of an organisation (`/parties/{id}/people`)
+- Country and currency dictionaries (`/countries`, `/currencies`) and
+  the global activity feed (`/activities` — undocumented upstream,
+  discovered by live probe; see the caveat on `list_activities`)
 
 ### Deliberately skipped — admin operations
 
@@ -557,14 +560,6 @@ tools.
 | `/restHooks` (REST Hook CRUD) | Server-to-server webhook configuration. An interactive MCP isn't where you'd configure them, and the lifecycle (subscribe, receive, unsubscribe) doesn't fit the request-response tool model. |
 | `/i18n` (Internationalization) | UI metadata for the Capsule web app; nothing for Claude to do with it. |
 | `/customtitles` | UI metadata. |
-
-### Exists upstream, adoption planned (issue #112)
-
-| Endpoint | Status |
-|---|---|
-| `GET /activities` | Live 200 (undocumented) — global cross-entity activity feed (typed rows, `since`, pagination). Planned: `list_activities`. |
-| `GET /countries` | Live 200 — 250-row country dictionary (accepted spellings for `address.country`). Planned: `list_countries`. |
-| `GET /currencies` | Live 200 — 80-row currency dictionary. Planned: `list_currencies`. |
 
 ### Genuinely not in Capsule v2
 
