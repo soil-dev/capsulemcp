@@ -53,12 +53,12 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.8",
+    "@biomejs/biome": "2.5.9",
     "@types/express": "^5.0.6",
     "@types/node": "^26.2.0",
     "tsup": "^8.3.0",
     "typescript": "^7.0.2",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   },
   "overrides": {
     "@hono/node-server": "^2.0.5",
