@@ -50,12 +50,12 @@
     "express": "^5.2.1",
     "express-rate-limit": "^8.7.0",
     "undici": "^8.10.2",
-    "zod": "^4.5.4"
+    "zod": "^4.6.2"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.12",
+    "@biomejs/biome": "2.5.13",
     "@types/express": "^5.0.6",
-    "@types/node": "^26.5.0",
+    "@types/node": "^26.5.1",
     "tsup": "^8.3.0",
     "typescript": "^7.0.2",
     "vitest": "^5.0.0"
