@@ -11,6 +11,17 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [2.3.2] — 2026-10-02
+
+Dependency maintenance. Clears five moderate transitive advisories
+published 2026-09-28/29 (four in `ip-address`, which both HTTP rate
+limiters depend on for client-IP parsing; one in `fast-uri`) and takes
+every dependency to latest, including MCP SDK 1.31.0. No tool-surface
+or wire-shape change — verified by the full suite (623 tests) and both
+`dist` entries loading under the new SDK; the identical dependency set
+has been serving production since the master deploy earlier today.
+92 tools (53 read-only).
+
 ### Security
 
 - Cleared the moderate advisories published 2026-09-28/29 against
