@@ -46,26 +46,26 @@
     "url": "git+https://github.com/soil-dev/capsulemcp.git"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/sdk": "^1.31.0",
     "express": "^5.2.1",
     "express-rate-limit": "^8.7.0",
-    "undici": "^8.10.2",
-    "zod": "^4.5.4"
+    "undici": "^8.11.2",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.12",
+    "@biomejs/biome": "2.5.15",
     "@types/express": "^5.0.6",
-    "@types/node": "^26.5.0",
+    "@types/node": "^26.6.4",
     "tsup": "^8.3.0",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.0"
+    "vitest": "^5.0.3"
   },
   "overrides": {
     "@hono/node-server": "^2.0.5",
     "esbuild": "^0.28.1",
-    "fast-uri": "^3.1.6",
+    "fast-uri": "^3.1.8",
     "hono": "^4.13.5",
-    "ip-address": "^10.4.0",
+    "ip-address": "^10.7.1",
     "nanoid": "^3.3.18",
     "postcss": "^8.5.26",
     "qs": "^6.16.0"

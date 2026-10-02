@@ -11,6 +11,35 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Security
+
+- Cleared the moderate advisories published 2026-09-28/29 against
+  two transitive packages; `npm audit` back to 0 at all levels. Both
+  floors are pinned via `overrides`:
+  - **ip-address ^10.7.1** (4 moderate: `isLinkLocal()` matching
+    fe80::/64 instead of /10, the NAT64 local-use range 64:ff9b:1::/48
+    unclassified, cross-family `isInSubnet()` allowlist bypass, and an
+    unbounded parse diagnostic that can stall the process on one long
+    input — GHSA-rpw4-54j3-4h4q, GHSA-2vr4-cq9g-pvrc,
+    GHSA-j6r3-76f7-8jcv, GHSA-h3mg-xc3c-68pw). Via
+    `express-rate-limit`, so runtime-relevant: both the `/mcp` and
+    `/token` limiters key on parsed client IPs.
+  - **fast-uri ^3.1.8** (moderate: inconsistent host-case
+    normalization via percent-encoded octets, GHSA-hrr3-gc8f-f4qj).
+    Via `@modelcontextprotocol/sdk` → `ajv`.
+
+### Changed
+
+- Dependencies to latest: `@modelcontextprotocol/sdk` 1.30.0 → 1.31.0
+  (1.30.1 adds server-side request-body size limits and a JSON-RPC
+  batch-length bound; 1.31.0 binds client-side stored OAuth
+  credentials to their issuer — client-only, this server is
+  unaffected), `undici` 8.10.2 → 8.11.2, `zod` 4.5.4 → 4.6.5
+  (runtime); `@types/node` 26.5.0 → 26.6.4, `@biomejs/biome`
+  2.5.12 → 2.5.15, `vitest` 5.0.0 → 5.0.3 (dev). No tool-surface or
+  wire-shape change; both `dist` entries verified loading under the
+  new SDK.
+
 ## [2.3.1] — 2026-09-09
 
 Post-release hardening: an independent external audit of v2.3.0
