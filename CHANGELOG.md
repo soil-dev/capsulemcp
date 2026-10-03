@@ -11,6 +11,18 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [2.4.0] — 2026-10-03
+
+Operational release: hosted deployments can now be monitored for the
+one failure that used to go unnoticed — a revoked or expired Capsule
+token. An unauthenticated `GET /health` page actively probes the
+token and a forced `capsule.auth` log event reports every verdict
+change, so an uptime check plus a log-based alert catch a dead token in
+minutes. No tool-surface or Capsule wire-shape change; the probe's
+live behaviour (valid token → `valid`, garbage token → Capsule 401 →
+`rejected`) is pinned by `scripts/wire-trace-v240.ts`. 92 tools
+(53 read-only), 650 tests.
+
 ### Added
 
 - **Token-health monitoring for hosted deployments.** The HTTP entry
@@ -44,6 +56,12 @@ versions adhere to [Semantic Versioning](https://semver.org).
 - The connector version string moved to `src/version.ts` so MCP
   `serverInfo` and `/health` can never disagree; `tests/version.test.ts`
   pins it to `package.json`.
+- `@modelcontextprotocol/sdk` 1.31.0 → 1.32.0 (client transports follow
+  redirects only within the endpoint's origin; new opt-in server
+  options `maxToolInputElements` / `expectedResource`, both off; the
+  in-memory task store keeps tasks within their session — this
+  connector already scopes tasks per client). No behaviour change for
+  this server; full suite and both `dist` entries verified.
 
 ## [2.3.2] — 2026-10-02
 

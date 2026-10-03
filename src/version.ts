@@ -4,4 +4,4 @@
  * never disagree; mirrors `package.json` and is bumped with it at
  * release time.
  */
-export const VERSION = "2.3.2";
+export const VERSION = "2.4.0";
