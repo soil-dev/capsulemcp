@@ -501,13 +501,15 @@ the LLM actually hits before adding tool-catalogue surface for them.
 Three **forced** (always-on, regardless of `CAPSULE_MCP_LOG_VERBOSE`)
 single-line JSON events that fingerprint an outbound Capsule call that
 did *not* complete normally — the paths that throw before the
-`capsule.request` emit and would otherwise leave no trace:
+`capsule.request` emit and would otherwise leave no trace — plus a
+fourth for the token-health probe (see DEPLOY.md *Health check*):
 
 | Event | Fires when | Fields |
 |---|---|---|
 | `capsule.timeout` | the 60s `AbortController` fires — waiting for headers (fetch stage) **or** mid-body (`res.json()` / stream read) | `method`, `path` (redacted), `elapsedMs`, `timeoutMs` |
 | `capsule.error` | the fetch rejects before headers (connection refused/reset/DNS) | `method`, `path`, `elapsedMs`, `code?` (e.g. `ECONNRESET`, `UND_ERR_CONNECT_TIMEOUT`) |
 | `capsule.ratelimit` | the single 429 retry is also throttled (after up to 60s of backoff) | `method`, `path`, `elapsedMs`, `status: 429` |
+| `capsule.auth` | the token-health probe (`GET /users/current`, 8 s deadline, cached 60 s) produces its first verdict or the verdict changes — at startup and on every `/health` re-probe | `token_status` (`valid` \| `rejected` \| `unreachable`), `reason?` (closed vocabulary: `unauthorized`, `forbidden`, `http_<status>`, `timeout`, `network_error`, `config_error`) |
 
 All three also increment `tool.chain.capsuleCalls`, so a `/mcp` request
 whose latency ballooned on a hang or backoff is explained rather than

@@ -40,7 +40,9 @@
  *                invisible). timeout covers BOTH the fetch stage and a
  *                mid-body stall; ratelimit fires when the single 429
  *                retry is also throttled. All three feed
- *                `tool.chain.capsuleCalls`.
+ *                `tool.chain.capsuleCalls`. auth (forced/always-on):
+ *                the token-health probe's verdict, emitted at startup
+ *                and whenever it changes — see src/capsule/health.ts.
  *
  * Adding new areas follows the same shape: pick a verb, populate the
  * relevant fields, call logEvent. **Privacy invariant**: events MUST

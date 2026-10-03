@@ -612,6 +612,36 @@ function buildUrl(path: string, params?: QueryParams): string {
   return url.toString();
 }
 
+/**
+ * Minimal authenticated GET for the token-health probe (see
+ * capsule/health.ts): returns the HTTP status only, under the caller's
+ * own deadline rather than `REQUEST_TIMEOUT_MS`, with no 429 retry and
+ * no `capsule.request` / `capsule.timeout` / `capsule.error` events — the
+ * probe reports its verdict through its own forced `capsule.auth`
+ * event, and a once-a-minute probe must not colour the per-tool
+ * telemetry or burn up to 60 s in rate-limit back-off. The body is
+ * cancelled unread so the connection returns to the pool. Throws
+ * `CapsuleAuthError` when no token is configured and
+ * `CapsuleTimeoutError` when the deadline fires; transport errors
+ * propagate as thrown by undici.
+ */
+export async function capsuleProbe(path: string, timeoutMs: number): Promise<{ status: number }> {
+  const token = getToken();
+  const url = buildUrl(path);
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      headers: baseHeaders(token),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (err) {
+    if (isTimeoutAbort(err)) throw new CapsuleTimeoutError();
+    throw err;
+  }
+  await drainBody(res);
+  return { status: res.status };
+}
+
 export async function capsuleGet<T>(path: string, params?: QueryParams): Promise<PagedResult<T>> {
   const token = getToken();
   const url = buildUrl(path, params);

@@ -21,6 +21,12 @@
  * If neither is configured, the server refuses to start with a clear
  * error message — the secure mode is the path of least resistance.
  *
+ * Endpoints besides the OAuth set and POST /mcp:
+ *   GET /health           Unauthenticated token-health check — 200 when
+ *                         the Capsule token is accepted, 503 otherwise.
+ *                         Point an uptime checker at it (DEPLOY.md).
+ *                         Path override: CAPSULE_MCP_HEALTH_PATH.
+ *
  * Required env in all modes:
  *   CAPSULE_API_TOKEN     Capsule Personal Access Token (read-scoped)
  *   PUBLIC_BASE_URL       Public origin where this server is reachable
@@ -62,6 +68,7 @@
  */
 
 import { isReadOnly } from "./capsule/client.js";
+import { checkCapsuleHealth, tokenRejectedWarning } from "./capsule/health.js";
 import { OAuthProvider, InMemoryClientsStore, FixedClientStore } from "./auth/provider.js";
 import { resolveBaseConfig, selectMode } from "./http/config.js";
 import { createApp } from "./http/app.js";
@@ -131,4 +138,29 @@ app.listen(port, () => {
         "For public deployments, set MCP_OAUTH_CLIENT_ID and MCP_OAUTH_CLIENT_SECRET.",
     );
   }
+
+  // Probe the Capsule token once we are listening — non-blocking, and
+  // the server keeps serving whatever the verdict. A rejected token must
+  // be LOUD at startup (the most common silent-failure mode: revoked or
+  // expired under us) but not fatal: /health and per-call 401s stay
+  // diagnosable, whereas a crash-looping container tells the operator
+  // nothing. A transient network error at boot likewise must not take
+  // the server down. The probe also emits the forced `capsule.auth`
+  // event and caches its result for /health.
+  checkCapsuleHealth()
+    .then((health) => {
+      console.log(`[capsulemcp] Capsule token_status=${health.token_status}`);
+      if (health.token_status === "rejected") {
+        console.warn(`[capsulemcp] WARNING: ${tokenRejectedWarning(health)}`);
+      } else if (health.token_status === "unreachable") {
+        console.warn(
+          `[capsulemcp] WARNING: could not verify the Capsule token at startup: ${health.detail ?? "unknown error"}. ` +
+            "Serving anyway; GET /health re-probes (cached 60 s).",
+        );
+      }
+    })
+    .catch((err: unknown) => {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(`[capsulemcp] WARNING: token-health probe failed at startup: ${message}`);
+    });
 });
