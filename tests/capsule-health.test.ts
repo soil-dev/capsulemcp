@@ -144,8 +144,37 @@ describe("verdicts", () => {
     expect(health).toMatchObject({ token_status: "unreachable", reason: "timeout" });
   });
 
-  it("the production deadline is 8 s — well under an uptime checker's ~10 s", () => {
+  it("uses the 8 s probe deadline by default — not the client's 60 s — and asks for no redirects", async () => {
+    const timeoutSpy = vi.spyOn(AbortSignal, "timeout");
+    respond(200);
+    await checkCapsuleHealth({ force: true });
+    expect(timeoutSpy).toHaveBeenCalledWith(HEALTH_PROBE_TIMEOUT_MS);
     expect(HEALTH_PROBE_TIMEOUT_MS).toBe(8_000);
+    const init = vi.mocked(fetch).mock.calls[0]![1] as { redirect?: string };
+    expect(init.redirect).toBe("manual");
+    timeoutSpy.mockRestore();
+  });
+
+  it("a 3xx is reported as unreachable / http_3xx rather than followed", async () => {
+    respond(302);
+    expect(await checkCapsuleHealth({ force: true })).toMatchObject({
+      token_status: "unreachable",
+      reason: "http_302",
+    });
+  });
+
+  it("timeout detail names the probe deadline, not the tool calls' 60 s", async () => {
+    vi.mocked(fetch).mockImplementation(
+      (_url, init) =>
+        new Promise((_resolve, reject) => {
+          (init as { signal?: AbortSignal }).signal?.addEventListener("abort", () =>
+            reject(new DOMException("aborted", "TimeoutError")),
+          );
+        }),
+    );
+    const health = await checkCapsuleHealth({ force: true, timeoutMs: 30 });
+    expect(health.detail).toMatch(/within 30 ms/);
+    expect(health.detail).not.toMatch(/60/);
   });
 });
 
@@ -203,6 +232,39 @@ describe("forced capsule.auth event", () => {
     expect(event).toBeDefined();
     expect(event!["detail"]).toBeUndefined();
     expect(JSON.stringify(event)).not.toContain(TOKEN);
-    expect(Object.keys(event!).sort()).toEqual(["event", "reason", "timestamp", "token_status"]);
+    expect(Object.keys(event!).sort()).toEqual([
+      "event",
+      "reason",
+      "severity",
+      "timestamp",
+      "token_status",
+    ]);
+    expect(event!["severity"]).toBe("ERROR");
+  });
+
+  it("carries a severity per verdict: INFO valid, WARNING unreachable, ERROR rejected", async () => {
+    respond(200);
+    await checkCapsuleHealth({ force: true });
+    respond(503);
+    await checkCapsuleHealth({ force: true });
+    respond(401);
+    await checkCapsuleHealth({ force: true });
+    const sev = stderrEvents()
+      .filter((e) => e["event"] === "capsule.auth")
+      .map((e) => e["severity"]);
+    expect(sev).toEqual(["INFO", "WARNING", "ERROR"]);
+  });
+
+  it("emits no per-call telemetry (capsule.request / timeout / error / ratelimit) — only capsule.auth", async () => {
+    process.env["CAPSULE_MCP_LOG_VERBOSE"] = "1";
+    respond(200);
+    await checkCapsuleHealth({ force: true });
+    respond(503);
+    await checkCapsuleHealth({ force: true });
+    vi.mocked(fetch).mockRejectedValue(new TypeError("fetch failed"));
+    await checkCapsuleHealth({ force: true });
+    const others = stderrEvents().filter((e) => e["event"] !== "capsule.auth");
+    expect(others).toEqual([]);
+    delete process.env["CAPSULE_MCP_LOG_VERBOSE"];
   });
 });

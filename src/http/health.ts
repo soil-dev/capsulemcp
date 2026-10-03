@@ -1,5 +1,8 @@
 /**
- * GET /health — the connector's liveness-plus-upstream-credential check.
+ * GET /health — the connector's upstream-credential check: an alerting
+ * target for an external uptime checker, NOT a container liveness probe
+ * (a platform that restarted the container on 503 would take the
+ * service down for exactly the condition this page exists to report).
  *
  * Unauthenticated on purpose: it exists so an external uptime checker
  * (Cloud Monitoring, a cron with curl, …) can tell within minutes that
@@ -41,6 +44,22 @@ import { createIpRateLimit } from "./rate-limit.js";
 export const DEFAULT_HEALTH_PATH = "/health";
 
 /**
+ * Prefixes an override may not claim: the page is mounted ahead of the
+ * OAuth router and the MCP endpoint, so a colliding path would silently
+ * shadow them instead of failing loudly.
+ */
+const RESERVED_PATH_PREFIXES = [
+  "/mcp",
+  "/authorize",
+  "/token",
+  "/register",
+  "/revoke",
+  "/.well-known",
+  "/icon.svg",
+  "/favicon.ico",
+];
+
+/**
  * The route the health page is mounted on. Read at mount time (not
  * module load) so tests can set the env per case. An override must be
  * an absolute path with no query string; anything else is refused
@@ -55,6 +74,13 @@ export function resolveHealthPath(): string {
     throw new Error(
       "CAPSULE_MCP_HEALTH_PATH must be an absolute path such as /health or /-/health " +
         "(segments of letters, digits, . _ ~ -; no query string, no empty segments).",
+    );
+  }
+  const lower = override.toLowerCase();
+  if (RESERVED_PATH_PREFIXES.some((p) => lower === p || lower.startsWith(`${p}/`))) {
+    throw new Error(
+      `CAPSULE_MCP_HEALTH_PATH may not be ${override}: that path belongs to the OAuth or MCP ` +
+        `surface (reserved: ${RESERVED_PATH_PREFIXES.join(", ")}).`,
     );
   }
   return override;

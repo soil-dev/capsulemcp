@@ -35,16 +35,22 @@
  * The result is cached for 60 s (`HEALTH_CACHE_TTL_MS`) and concurrent
  * callers share one in-flight probe, so a flood of unauthenticated
  * `/health` hits costs Capsule at most one request per minute.
- * `force: true` bypasses the cache (startup, tests).
+ * `force: true` bypasses the cache (tests; the startup probe needs no
+ * force — the cache is empty at boot, and a `/health` request arriving
+ * during that probe shares the in-flight promise).
  *
  * Events. Every CHANGE of `token_status` — including the first result —
  * emits a forced `capsule.auth` event (bypasses the verbose gate) so an
  * operator sees "valid → rejected" without turning verbose logging on.
- * It carries `token_status` and a closed-vocabulary `reason`
- * (`HealthReason`) — NOT the free-text `detail`, which may quote an
- * upstream error message and would break the "no request / response
- * bodies, ever" logging invariant on the one event operators cannot
- * switch off. `detail` stays on the result for the startup warning.
+ * Status changes only: consecutive `unreachable` verdicts with
+ * different reasons do not re-emit. It carries `token_status`, a
+ * closed-vocabulary `reason` (`HealthReason`) and a `severity` (INFO
+ * for valid, WARNING for unreachable, ERROR for rejected — so log
+ * viewers that honour the field file a healthy boot as noise, not as
+ * an error) — NOT the free-text `detail`, which may quote an upstream
+ * error message and would break the "no request / response bodies,
+ * ever" logging invariant on the one event operators cannot switch
+ * off. `detail` stays on the result for the startup warning.
  *
  * Never logs or returns the token.
  */
@@ -153,6 +159,7 @@ async function runProbe(timeoutMs: number): Promise<CapsuleHealth> {
     logEvent(
       "capsule.auth",
       {
+        severity: EVENT_SEVERITY[health.token_status],
         token_status: health.token_status,
         ...(health.reason ? { reason: health.reason } : {}),
       },
@@ -163,6 +170,13 @@ async function runProbe(timeoutMs: number): Promise<CapsuleHealth> {
 }
 
 type TokenVerdict = Pick<CapsuleHealth, "token_status" | "reason" | "detail">;
+
+/** Cloud Logging-style severity carried on the forced event, keyed by verdict. */
+const EVENT_SEVERITY: Record<CapsuleHealth["token_status"], "INFO" | "WARNING" | "ERROR"> = {
+  valid: "INFO",
+  unreachable: "WARNING",
+  rejected: "ERROR",
+};
 
 function reasonForThrow(err: unknown): HealthReason {
   if (err instanceof CapsuleAuthError) return "config_error";
@@ -177,10 +191,17 @@ async function probeToken(timeoutMs: number): Promise<TokenVerdict> {
   } catch (err) {
     // Network error, timeout, missing CAPSULE_API_TOKEN, invalid base
     // URL — none of these say anything about the token itself.
+    const reason = reasonForThrow(err);
     return {
       token_status: "unreachable",
-      reason: reasonForThrow(err),
-      detail: `GET ${HEALTH_PROBE_PATH} failed: ${err instanceof Error ? err.message : String(err)}`,
+      reason,
+      detail:
+        reason === "timeout"
+          ? // Not err.message: CapsuleTimeoutError's text describes the
+            // tool calls' 60 s deadline and write-retry advice, neither
+            // of which applies to the probe.
+            `GET ${HEALTH_PROBE_PATH} did not answer within ${timeoutMs} ms`
+          : `GET ${HEALTH_PROBE_PATH} failed: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
   if (status >= 200 && status < 300) return { token_status: "valid" };

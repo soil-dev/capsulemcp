@@ -122,6 +122,23 @@ describe("resolveHealthPath", () => {
       expect(() => resolveHealthPath(), bad).toThrow(/CAPSULE_MCP_HEALTH_PATH/);
     }
   });
+
+  it("refuses paths that would shadow the OAuth or MCP surface", () => {
+    for (const bad of [
+      "/mcp",
+      "/MCP",
+      "/token",
+      "/authorize/x",
+      "/.well-known/oauth-authorization-server",
+      "/icon.svg",
+    ]) {
+      process.env["CAPSULE_MCP_HEALTH_PATH"] = bad;
+      expect(() => resolveHealthPath(), bad).toThrow(/reserved/);
+    }
+    // A sibling of a reserved prefix is fine — only the exact path or its subtree is blocked.
+    process.env["CAPSULE_MCP_HEALTH_PATH"] = "/mcp-health";
+    expect(resolveHealthPath()).toBe("/mcp-health");
+  });
 });
 
 describe("mounted on a bare Express app", () => {

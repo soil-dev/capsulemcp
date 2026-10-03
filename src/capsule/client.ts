@@ -633,6 +633,9 @@ export async function capsuleProbe(path: string, timeoutMs: number): Promise<{ s
     res = await fetch(url, {
       headers: baseHeaders(token),
       signal: AbortSignal.timeout(timeoutMs),
+      // A 3xx must surface as its own status (→ `unreachable`), not be
+      // followed to whatever 2xx a proxy or captive portal serves.
+      redirect: "manual",
     });
   } catch (err) {
     if (isTimeoutAbort(err)) throw new CapsuleTimeoutError();

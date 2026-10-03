@@ -11,7 +11,7 @@ npm install
 npm test
 ```
 
-644 tests, all mocked — no Capsule API calls happen, no token needed. The suite has three layers:
+650 tests, all mocked — no Capsule API calls happen, no token needed. The suite has three layers:
 
 - **Per-tool unit tests** (e.g. `tests/parties.test.ts`): import the tool function, mock `undici.fetch`, assert on the URL, method, body, and response handling. Most tests live here.
 - **MCP-protocol integration tests** (`tests/mcp-integration.test.ts`): drive a real `McpServer` through the wire protocol via the SDK's in-memory transport pair, with `undici.fetch` still mocked. Catches the layer between "tool function works" and "MCP correctly registers and dispatches the tool". Includes the `get_attachment` content-type routing logic (which lives in `server.ts`, not the tool function).
@@ -46,7 +46,7 @@ for the contributor-facing summary.
 npm run build
 ```
 
-Produces `dist/index.js` (stdio entry, ~184 KB, with `#!/usr/bin/env node` shebang and the executable bit set) and `dist/http.js` (HTTP entry, ~217 KB, no shebang). Each is fully self-contained — tsup runs as two separate configs so the stdio entry can be invoked directly via npx while the HTTP entry isn't a CLI. tsup target is Node 22 (undici 8 requires Node 22+ for the `webidl.util.markAsUncloneable` runtime API).
+Produces `dist/index.js` (stdio entry, ~184 KB, with `#!/usr/bin/env node` shebang and the executable bit set) and `dist/http.js` (HTTP entry, ~218 KB, no shebang). Each is fully self-contained — tsup runs as two separate configs so the stdio entry can be invoked directly via npx while the HTTP entry isn't a CLI. tsup target is Node 22 (undici 8 requires Node 22+ for the `webidl.util.markAsUncloneable` runtime API).
 
 `npm run build` also chains `npm run build:icon` (`scripts/build-icon.mjs`), which regenerates `src/icon.ts` from the canonical `assets/icon.svg`. The TypeScript file is committed (so typecheck works without a build step) but is **generated** — edit the SVG, then run the build. A drift-guard test (`tests/icon-source.test.ts`) fails CI if the two ever fall out of sync.
 
@@ -226,7 +226,7 @@ Run `npm test` and `npm run build` to confirm it integrates cleanly. Commit, pus
 ```sh
 # 1. Bump version in THREE places — all must match or release metadata drifts:
 #    - package.json                    (top-level "version")
-#    - src/server.ts                   (McpServer name+version block)
+#    - src/version.ts                  (VERSION — feeds MCP serverInfo and GET /health)
 #    - package-lock.json               (root version + packages[""].version)
 #      The lockfile is easiest to keep honest by running:
 npm install --package-lock-only --ignore-scripts
@@ -270,8 +270,8 @@ discovers a regression.
 
 - [ ] **(CI)** `npm run typecheck && npm run lint && npm run format:check && npm run build && npm test` all pass on the commit you're about to tag.
 - [ ] `npm publish --dry-run --tag latest` (for stable), `--tag beta` (for beta), or `--tag next` (for release candidates) runs clean — verifies the tarball contents, package.json shape, and that `bin` / `files` resolve. Catches publish-time regressions before they hit npm.
-- [ ] **`package-lock.json` root version matches `package.json`.** Bumping the two source-of-truth files (package.json + server.ts) doesn't touch the lockfile root — it drifts silently. `npm install --package-lock-only --ignore-scripts` after the bump keeps it honest.
-- [ ] **Three places all match**: `package.json`, `src/server.ts`, `package-lock.json` (root + `packages[""]`).
+- [ ] **`package-lock.json` root version matches `package.json`.** Bumping the two source-of-truth files (package.json + src/version.ts) doesn't touch the lockfile root — it drifts silently. `npm install --package-lock-only --ignore-scripts` after the bump keeps it honest.
+- [ ] **Three places all match**: `package.json`, `src/version.ts`, `package-lock.json` (root + `packages[""]`). `tests/version.test.ts` fails CI if the first two drift.
 - [ ] **`#vX.Y.Z` pins in `README.md` and `INSTALL.md`** point to the new tag. Three locations in each file (the JSON snippet, the `claude mcp add` line, the export-then-add line in INSTALL).
 - [ ] **CHANGELOG `[Unreleased]` is empty** after the cut — its content should now live under `[vX.Y.Z]`.
 - [ ] **HOWTO test count and bundle sizes** reflect reality (greppable: `npm test 2>&1 | tail -3` and `npm run build 2>&1 | tail -5`).
