@@ -20,10 +20,14 @@ import {
 import { requireBearerAuth } from "@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js";
 import { SUPPORTED_PROTOCOL_VERSIONS } from "@modelcontextprotocol/sdk/types.js";
 import type { OAuthProvider } from "../auth/provider.js";
-import { readPositiveInt } from "../env.js";
 import { createCapsuleMcpServer } from "../server.js";
 import { ICON_SVG } from "../icon.js";
 import { withRequestContext } from "../log.js";
+import { mountHealth } from "./health.js";
+import { resolveMcpRateLimitConfig } from "./rate-limit.js";
+
+// Re-exported so existing importers (tests) keep one module to reach for.
+export { resolveMcpRateLimitConfig } from "./rate-limit.js";
 
 export interface AppOptions {
   oauthProvider: OAuthProvider;
@@ -58,30 +62,6 @@ function timingSafeSecretEqual(provided: string, expected: string): boolean {
   return timingSafeEqual(secretDigest(provided), secretDigest(expected));
 }
 
-const DEFAULT_MCP_RATE_LIMIT_WINDOW_MS = 60_000;
-const DEFAULT_MCP_RATE_LIMIT_MAX = 600;
-const MAX_MEMORY_STORE_WINDOW_MS = 2 ** 31 - 1;
-
-export function resolveMcpRateLimitConfig(): {
-  windowMs: number;
-  limit: number;
-  disabled: boolean;
-} {
-  // express-rate-limit's default MemoryStore backs `windowMs` with
-  // setInterval, so over-large or negative values get coerced by Node
-  // timers after only a logged validation error. Parse defensively here
-  // so operator typos fall back or clamp before they reach the store.
-  const windowMs = Math.min(
-    readPositiveInt("MCP_HTTP_RATE_LIMIT_WINDOW_MS", DEFAULT_MCP_RATE_LIMIT_WINDOW_MS),
-    MAX_MEMORY_STORE_WINDOW_MS,
-  );
-  return {
-    windowMs,
-    limit: readPositiveInt("MCP_HTTP_RATE_LIMIT_MAX", DEFAULT_MCP_RATE_LIMIT_MAX),
-    disabled: process.env["MCP_HTTP_RATE_LIMIT_DISABLED"] === "1",
-  };
-}
-
 export function createApp(opts: AppOptions): express.Express {
   const { oauthProvider, issuerUrl, jsonLimit, allowedOrigins } = opts;
   const resourceName = opts.resourceName ?? "Capsule CRM MCP";
@@ -99,6 +79,11 @@ export function createApp(opts: AppOptions): express.Express {
   // MUST be set before mcpAuthRouter so the rate-limit middleware
   // inside the SDK's auth router sees the configured trust setting.
   app.set("trust proxy", trustProxy);
+
+  // Unauthenticated, per-IP rate-limited; exposes only health fields.
+  // Mounted before the OAuth router so its unscoped `app.use` can never
+  // shadow the page. See ./health.ts.
+  mountHealth(app);
 
   // Charge every token attempt before credential checks can return early.
   // Replace the SDK's downstream limiter (disabled below), retaining its

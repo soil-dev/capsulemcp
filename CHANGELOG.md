@@ -11,6 +11,40 @@ versions adhere to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Added
+
+- **Token-health monitoring for hosted deployments.** The HTTP entry
+  now serves an unauthenticated **`GET /health`** that actively probes
+  the Capsule token (`GET /users/current` under an 8 s deadline, cached
+  60 s, one request in flight) and answers **200** with
+  `"token_status":"valid"` or **503** with `rejected` (Capsule said
+  401/403 — rotate the token) or `unreachable` (Capsule down, slow, or
+  misconfiguration). The body carries the connector version, the
+  verdict and the probe time — never the token, upstream text, or
+  tenant data — with `Cache-Control: no-store` and its own per-IP rate
+  limit. Point an uptime checker at it: "HTTP 200 and body contains
+  `"token_status":"valid"`" is the whole alert rule. A new **forced**
+  `capsule.auth` log event (emitted regardless of
+  `CAPSULE_MCP_LOG_VERBOSE`) reports the verdict at startup and on
+  every `token_status` change with a closed-vocabulary `reason` and a
+  `severity`, so a log-based alert pages on the first cold start with
+  a dead token. A startup log line states the verdict; a rejected token
+  warns loudly but does not crash the process. `CAPSULE_MCP_HEALTH_PATH`
+  moves the page for platforms that reserve `/health` (the default is
+  deliberately not `/healthz`, which Cloud Run's frontend intercepts;
+  paths that would shadow the OAuth or MCP surface are refused at
+  startup). The page is an alerting target, not a container liveness
+  probe — DEPLOY.md says so explicitly. Why: a connector
+  that sees traffic a few times a day can stay silently broken for
+  weeks after a token revocation — no error-rate alert ever has enough
+  samples. See DEPLOY.md *Health check*.
+
+### Changed
+
+- The connector version string moved to `src/version.ts` so MCP
+  `serverInfo` and `/health` can never disagree; `tests/version.test.ts`
+  pins it to `package.json`.
+
 ## [2.3.2] — 2026-10-02
 
 Dependency maintenance. Clears five moderate transitive advisories

@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { isReadOnly } from "./capsule/client.js";
 import { ICONS } from "./icon.js";
+import { VERSION } from "./version.js";
 import { registerTool, registerToolTask } from "./server/register-tool.js";
 import { shouldRegister } from "./server/tier.js";
 import { getTasksConfig } from "./tasks/config.js";
@@ -260,7 +261,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
   const server = new McpServer(
     {
       name: "capsulemcp",
-      version: "2.3.2",
+      version: VERSION,
       description:
         "Read and (optionally) modify Capsule CRM data — parties, opportunities, projects, tasks, timeline entries, pipelines, tags.",
       websiteUrl: "https://github.com/soil-dev/capsulemcp",
