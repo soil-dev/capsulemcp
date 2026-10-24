@@ -71,6 +71,8 @@
  *                                  src/capsule/batch.ts.
  */
 
+import type { Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { isReadOnly } from "./capsule/client.js";
 import { checkCapsuleHealth, tokenRejectedWarning } from "./capsule/health.js";
 import { OAuthProvider, InMemoryClientsStore, FixedClientStore } from "./auth/provider.js";
@@ -132,12 +134,9 @@ const app = createApp({
   trustProxy,
 });
 
-const bound =
-  listenHost === undefined
-    ? `*:${port} (all interfaces)`
-    : listenHost.includes(":")
-      ? `[${listenHost}]:${port}`
-      : `${listenHost}:${port}`;
+const formatAddress = (host: string, p: number) =>
+  host.includes(":") ? `[${host}]:${p}` : `${host}:${p}`;
+const requested = formatAddress(listenHost ?? "*", port);
 
 // Express 5 passes a bind failure (EADDRINUSE, EADDRNOTAVAIL for an
 // address this host doesn't have, EACCES) to this same callback.
@@ -145,7 +144,13 @@ const bound =
 // the token probe, and exit 0 — so a supervisor's restart-on-failure
 // would never fire.
 const onListening = (err?: Error) => {
-  if (err) fatal(`cannot listen on ${bound}: ${err.message}`);
+  if (err) fatal(`cannot listen on ${requested}: ${err.message}`);
+  // Report what the socket actually bound, not what was configured.
+  const addr = server.address() as AddressInfo;
+  const bound =
+    listenHost === undefined
+      ? `${formatAddress(addr.address, addr.port)} (all interfaces)`
+      : formatAddress(addr.address, addr.port);
   const readMode = isReadOnly() ? "read-only" : "read-write";
   const authLabel = mode.kind === "static-client" ? "static-client" : "INSECURE_AUTO_APPROVE";
   console.log(
@@ -186,5 +191,7 @@ const onListening = (err?: Error) => {
     });
 };
 
-if (listenHost === undefined) app.listen(port, onListening);
-else app.listen(port, listenHost, onListening);
+const server: Server =
+  listenHost === undefined
+    ? app.listen(port, onListening)
+    : app.listen(port, listenHost, onListening);

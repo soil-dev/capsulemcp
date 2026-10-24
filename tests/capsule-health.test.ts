@@ -178,6 +178,28 @@ describe("verdicts", () => {
   });
 });
 
+describe("rate-limit window", () => {
+  it("a 2xx probe closes a remembered window (Capsule is serving this token again)", async () => {
+    const { openRateLimitWindow, rateLimitWindowLeft } = await import(
+      "../src/capsule/rate-limit-window.js"
+    );
+    openRateLimitWindow(Date.now() + 30 * 60_000);
+    respond(200);
+    await checkCapsuleHealth({ force: true });
+    expect(rateLimitWindowLeft()).toBeLessThanOrEqual(0);
+  });
+
+  it("a non-2xx probe leaves the window alone", async () => {
+    const { openRateLimitWindow, rateLimitWindowLeft } = await import(
+      "../src/capsule/rate-limit-window.js"
+    );
+    openRateLimitWindow(Date.now() + 30 * 60_000);
+    respond(429);
+    await checkCapsuleHealth({ force: true });
+    expect(rateLimitWindowLeft()).toBeGreaterThan(29 * 60_000);
+  });
+});
+
 describe("cache", () => {
   it("serves the cached verdict within the TTL and re-probes after it", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });

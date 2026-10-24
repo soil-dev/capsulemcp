@@ -1,5 +1,7 @@
-# Publishes a tagged release to npm with a provenance attestation, using
-# npm Trusted Publishing (OIDC) — no npm token is stored anywhere.
+# Stages a tagged release on npm with a provenance attestation, using
+# npm Trusted Publishing (OIDC) — no npm token is stored anywhere — and
+# npm staged publishing: the version only goes live when a maintainer
+# approves it with 2FA (`npm stage approve <stage-id>`).
 #
 # Run it ON THE RELEASE TAG:
 #
@@ -7,37 +9,37 @@
 #
 # The run's ref is what npm writes into the provenance (source ref and
 # commit), so dispatching on the tag makes the attestation name the tag
-# and its commit. Dispatching on a branch is refused.
+# and its commit. Any other ref fails the first step.
 #
-# Manually dispatched, deliberately NOT triggered by tag pushes:
-# publishing stays an explicit human decision, but the package is built,
-# tested and signed here instead of on a workstation.
+# Why staged: with plain trusted publishing, anyone who can push a `v*`
+# tag and dispatch this workflow could publish. Staging means the
+# workflow can only upload; making a version public still needs a human
+# with the package's npm 2FA.
 #
-# Two jobs on purpose. `build` installs dependencies, runs the test suite
-# and records the package's integrity WITHOUT the OIDC permission;
-# `publish` holds `id-token: write`, installs nothing and runs no
-# dependency code, re-packs the same tag with the tested `dist/`, refuses
-# to continue unless the integrity matches, and publishes. A compromised
-# dependency's install script or a hostile test therefore never runs next
-# to the token that publishes.
+# Two jobs. `build` installs dependencies, runs the test suite and packs
+# the tarball WITHOUT the OIDC permission; `stage` holds `id-token:
+# write`, installs nothing and runs no repository code, and stages
+# exactly the tarball `build` produced and tested.
 #
-# One-time setup (repository + npmjs.com), in this order:
-#   1. GitHub → Settings → Environments → New environment `npm`:
+# One-time setup (repository + npm), in this order:
+#   1. Tag protection — Settings → Rules → Rulesets → New tag ruleset,
+#      target `v*`, restrict creations, updates and deletions, bypass for
+#      repository admins only.
+#   2. Environment — Settings → Environments → New environment `npm`:
 #      Deployment branches and tags → "Selected" → add tag rule `v*`.
-#      Optionally add required reviewers (with self-review prevented)
-#      for a second key-turn.
-#   2. npmjs.com → package capsulemcp → Settings → Trusted Publisher →
-#      GitHub Actions: organization/user `soil-dev`, repository
-#      `capsulemcp`, workflow filename `publish.yml`, environment `npm`.
+#   3. npm trusted publisher, staging only (prompts for 2FA):
+#        npm trust github capsulemcp --repo soil-dev/capsulemcp \
+#          --file publish.yml --env npm --allow-stage-publish
 #      npm expires a new trusted-publisher entry that hasn't published
 #      within 2 days, so do this right before the first release.
-#   3. npmjs.com → same Settings → Publishing access → "Require
-#      two-factor authentication and disallow tokens".
+#   4. npmjs.com → package capsulemcp → Settings → Publishing access →
+#      "Require two-factor authentication and disallow tokens".
 #
 # publishConfig.provenance in package.json only guards against an
 # accidental workstation publish (`--provenance=false` overrides it); the
-# real control is that consumers check the attestation's identity —
-# repository, workflow path and tag — as INSTALL.md describes.
+# controls that matter are 2FA approval and consumers checking the
+# attestation's identity — repository, workflow and tag — as INSTALL.md
+# describes.
 
 name: Publish to npm
 
@@ -61,27 +63,31 @@ concurrency:
 jobs:
   build:
     name: build + test ${{ github.ref_name }}
-    if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read
     steps:
-      - name: Release tag and dist-tag agree
+      - name: Dispatched on a release tag, with a matching dist-tag
         env:
+          REF_TYPE: ${{ github.ref_type }}
           TAG: ${{ github.ref_name }}
           DIST_TAG: ${{ inputs.dist-tag }}
         run: |
-          case "$TAG" in
-            v[0-9]*.[0-9]*.[0-9]*-beta.[0-9]*) want=beta ;;
-            v[0-9]*.[0-9]*.[0-9]*-rc.[0-9]*) want=next ;;
-            v[0-9]*.[0-9]*.[0-9]*) want=latest ;;
-            *) echo "::error::'$TAG' is not a release tag (vX.Y.Z, vX.Y.Z-beta.N, vX.Y.Z-rc.N)"; exit 1 ;;
-          esac
-          if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-(beta|rc)\.[0-9]+)?$'; then
-            echo "::error::'$TAG' is not a release tag (vX.Y.Z, vX.Y.Z-beta.N, vX.Y.Z-rc.N)"
+          if [ "$REF_TYPE" != "tag" ]; then
+            echo "::error::dispatch this workflow on the release tag: gh workflow run publish.yml --ref vX.Y.Z (got $REF_TYPE '$TAG')"
             exit 1
           fi
+          n='(0|[1-9][0-9]*)'
+          if ! printf '%s' "$TAG" | grep -Eq "^v$n\.$n\.$n(-(beta|rc)\.$n)?\$"; then
+            echo "::error::'$TAG' is not a release tag (vX.Y.Z, vX.Y.Z-beta.N, vX.Y.Z-rc.N; no leading zeros)"
+            exit 1
+          fi
+          case "$TAG" in
+            *-beta.*) want=beta ;;
+            *-rc.*) want=next ;;
+            *) want=latest ;;
+          esac
           if [ "$DIST_TAG" != "$want" ]; then
             echo "::error::$TAG must be published with dist-tag '$want', not '$DIST_TAG'"
             exit 1
@@ -113,36 +119,52 @@ jobs:
             exit 1
           fi
 
+      # Only the latest release line is supported (SECURITY.md), so a
+      # stable release must never move `latest` backwards for every
+      # unpinned `npx -y capsulemcp` user.
+      - name: latest only moves forwards
+        if: inputs.dist-tag == 'latest'
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          current=$(npm view capsulemcp dist-tags.latest 2>/dev/null || true)
+          node -e '
+            const [mine, cur] = [process.argv[1].replace(/^v/, ""), process.argv[2]];
+            if (!cur) process.exit(0);
+            const a = mine.split(".").map(Number), b = cur.split(".").map(Number);
+            for (let i = 0; i < 3; i++) {
+              if (a[i] > b[i]) process.exit(0);
+              if (a[i] < b[i]) break;
+            }
+            console.error("refusing to move latest from " + cur + " to " + mine);
+            process.exit(1);
+          ' "$TAG" "$current"
+
       # --ignore-scripts: no dependency lifecycle script runs in the
-      # release pipeline (the Dockerfile builds the same way).
+      # release pipeline (the Dockerfile and CI install the same way).
       - run: npm ci --ignore-scripts
       - run: npm run typecheck
       - run: npm run build
       - run: npm test
       # Runtime dependencies only: a dev-only advisory must not block an
-      # urgent security release (and tempt a workstation publish).
+      # urgent security release.
       - run: npm audit --audit-level=high --omit=dev
 
-      - name: Record the package integrity
+      - name: Pack
         run: |
-          npm pack --ignore-scripts --dry-run --json \
-            | node -e 'let s="";process.stdin.on("data",(d)=>{s+=d}).on("end",()=>{process.stdout.write(JSON.parse(s)[0].integrity)})' \
-            > package-integrity.txt
-          echo "integrity: $(cat package-integrity.txt)"
+          npm pack --ignore-scripts --json \
+            | node -e 'let s="";process.stdin.on("data",(d)=>{s+=d}).on("end",()=>{const p=JSON.parse(s)[0];console.log(p.filename+" "+p.integrity)})'
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: release-build
-          path: |
-            dist/
-            package-integrity.txt
+          name: npm-tarball
+          path: capsulemcp-*.tgz
           if-no-files-found: error
           retention-days: 7
 
-  publish:
-    name: publish ${{ github.ref_name }} → npm (${{ inputs.dist-tag }})
+  stage:
+    name: stage ${{ github.ref_name }} on npm (${{ inputs.dist-tag }})
     needs: build
-    if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # The npm Trusted Publisher is bound to this environment, and the
@@ -152,52 +174,38 @@ jobs:
       contents: read
       id-token: write # OIDC → npm trusted publishing + provenance
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Checkout is the tagged commit
-        run: |
-          if [ "$(git rev-parse HEAD)" != "$GITHUB_SHA" ]; then
-            echo "::error::checked-out commit $(git rev-parse HEAD) is not the run's commit $GITHUB_SHA"
-            exit 1
-          fi
-
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
           package-manager-cache: false
 
-      - name: npm supports trusted publishing (>= 11.5.1)
+      - name: npm supports staged trusted publishing (>= 11.15.0)
         run: |
           node -e '
             const v = process.argv[1];
-            const [a, b, c] = v.split(".").map(Number);
-            if (a < 11 || (a === 11 && (b < 5 || (b === 5 && c < 1)))) {
-              console.error("npm " + v + " is too old for trusted publishing (need >= 11.5.1)");
+            const [a, b] = v.split(".").map(Number);
+            if (a < 11 || (a === 11 && b < 15)) {
+              console.error("npm " + v + " is too old for staged publishing (need >= 11.15.0)");
               process.exit(1);
             }
           ' "$(npm --version)"
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: release-build
+          name: npm-tarball
 
-      - name: Package is byte-identical to the one the build job tested
-        run: |
-          got=$(npm pack --ignore-scripts --dry-run --json \
-            | node -e 'let s="";process.stdin.on("data",(d)=>{s+=d}).on("end",()=>{process.stdout.write(JSON.parse(s)[0].integrity)})')
-          want=$(cat package-integrity.txt)
-          if [ "$got" != "$want" ]; then
-            echo "::error::package integrity $got does not match the tested build ($want)"
-            exit 1
-          fi
-          rm package-integrity.txt
-
-      # From the tag's own checkout (not a tarball), so the registry
-      # metadata keeps gitHead alongside the provenance.
-      - name: Publish
+      - name: Stage
         env:
           DIST_TAG: ${{ inputs.dist-tag }}
-        run: npm publish --ignore-scripts --provenance --access public --tag "$DIST_TAG"
+        run: |
+          npm stage publish ./capsulemcp-*.tgz --provenance --access public --tag "$DIST_TAG" | tee stage.log
+          {
+            echo "### Staged — awaiting 2FA approval"
+            echo
+            echo '```'
+            cat stage.log
+            echo '```'
+            echo
+            echo "Approve with \`npm stage list capsulemcp\` and \`npm stage approve <stage-id>\` (prompts for 2FA)."
+          } >> "$GITHUB_STEP_SUMMARY"

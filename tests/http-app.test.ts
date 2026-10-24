@@ -865,6 +865,31 @@ describe("body-parser failures never log or echo the request body", () => {
     }
   });
 
+  it("/MCP and /mcp/ (Express routes them to /mcp) get the JSON-RPC error shape too", async () => {
+    const token = await mintToken();
+    const { provider, localServer, local } = await productionApp();
+    const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      for (const path of ["/MCP", "/mcp/"]) {
+        const res = await fetch(`${local}${path}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json, text/event-stream",
+            Authorization: `Bearer ${token}`,
+          },
+          body: "{not json",
+        });
+        expect(res.status, path).toBe(400);
+        expect(await res.json(), path).toMatchObject({ jsonrpc: "2.0", error: { code: -32700 } });
+      }
+    } finally {
+      spy.mockRestore();
+      provider.shutdown();
+      await new Promise<void>((resolve) => localServer.close(() => resolve()));
+    }
+  });
+
   it("over-limit /token form: OAuth error JSON, client_secret absent from logs and response", async () => {
     const { provider, localServer, local } = await productionApp();
     const logged: string[] = [];
@@ -893,6 +918,9 @@ describe("body-parser failures never log or echo the request body", () => {
       expect(text).not.toContain("VICTIM-LIKE-SECRET");
       expect(logged.join("\n")).not.toContain("VICTIM-LIKE-SECRET");
       expect(text).not.toMatch(/<html|at .*\.js:\d+/i);
+      // Same CORS policy as the SDK's own OAuth responses; never cached.
+      expect(res.headers.get("access-control-allow-origin")).toBe("*");
+      expect(res.headers.get("cache-control")).toBe("no-store");
     } finally {
       spy.mockRestore();
       provider.shutdown();

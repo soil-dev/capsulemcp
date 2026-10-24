@@ -11,7 +11,7 @@ npm install
 npm test
 ```
 
-681 tests, all mocked — no Capsule API calls happen, no token needed. The suite has three layers:
+695 tests, all mocked — no Capsule API calls happen, no token needed. The suite has three layers:
 
 - **Per-tool unit tests** (e.g. `tests/parties.test.ts`): import the tool function, mock `undici.fetch`, assert on the URL, method, body, and response handling. Most tests live here.
 - **MCP-protocol integration tests** (`tests/mcp-integration.test.ts`): drive a real `McpServer` through the wire protocol via the SDK's in-memory transport pair, with `undici.fetch` still mocked. Catches the layer between "tool function works" and "MCP correctly registers and dispatches the tool". Includes the `get_attachment` content-type routing logic (which lives in `server.ts`, not the tool function).
@@ -46,7 +46,7 @@ for the contributor-facing summary.
 npm run build
 ```
 
-Produces `dist/index.js` (stdio entry, ~186 KB, with `#!/usr/bin/env node` shebang and the executable bit set) and `dist/http.js` (HTTP entry, ~224 KB, no shebang). Each is fully self-contained — tsup runs as two separate configs so the stdio entry can be invoked directly via npx while the HTTP entry isn't a CLI. tsup target is Node 22 (undici 8 requires Node 22+ for the `webidl.util.markAsUncloneable` runtime API).
+Produces `dist/index.js` (stdio entry, ~188 KB, with `#!/usr/bin/env node` shebang and the executable bit set) and `dist/http.js` (HTTP entry, ~226 KB, no shebang). Each is fully self-contained — tsup runs as two separate configs so the stdio entry can be invoked directly via npx while the HTTP entry isn't a CLI. tsup target is Node 22 (undici 8 requires Node 22+ for the `webidl.util.markAsUncloneable` runtime API).
 
 `npm run build` also chains `npm run build:icon` (`scripts/build-icon.mjs`), which regenerates `src/icon.ts` from the canonical `assets/icon.svg`. The TypeScript file is committed (so typecheck works without a build step) but is **generated** — edit the SVG, then run the build. A drift-guard test (`tests/icon-source.test.ts`) fails CI if the two ever fall out of sync.
 
@@ -248,23 +248,24 @@ git push origin vX.Y.Z
 # 5. GitHub Release with notes — pass --latest for stable releases, omit it for pre-releases
 gh release create vX.Y.Z --latest --title "vX.Y.Z — title" --notes "<release notes>"
 
-# 6. npm publish — via the publish workflow, dispatched ON THE TAG (the run's ref is
-#    what npm records in the provenance). It builds and tests the tag in one job, then
-#    publishes the same package from a second job via npm Trusted Publishing (OIDC).
-#    Tag first, npm second, so the GitHub tag is canonical.
-gh workflow run publish.yml --ref vX.Y.Z -f dist-tag=latest   # stable (X.Y.Z)
+# 6. npm publish — staged by the publish workflow, approved by you with 2FA.
+#    Dispatch it ON THE TAG (the run's ref is what npm records in the provenance):
+#    it builds, tests and packs the tag, then stages that exact tarball via npm
+#    Trusted Publishing (OIDC). Nothing is public until you approve.
+url=$(gh workflow run publish.yml --ref vX.Y.Z -f dist-tag=latest) && gh run watch "${url##*/}" --exit-status
 #    dist-tag=beta for vX.Y.Z-beta.N, dist-tag=next for vX.Y.Z-rc.N (the workflow
-#    refuses a mismatch, and refuses any ref that is not a release tag)
-sleep 5; gh run watch "$(gh run list --workflow=publish.yml --branch vX.Y.Z --limit 1 --json databaseId --jq '.[0].databaseId')" --exit-status
+#    refuses a mismatch, any ref that is not a release tag, and moving latest backwards)
+npm stage list capsulemcp            # the run's summary also shows the stage id
+npm stage approve <stage-id>         # prompts for 2FA — this is the moment it goes public
 
 # 7. Verify the attestation's identity, not just its presence — must print
 #    https://github.com/soil-dev/capsulemcp .github/workflows/publish.yml refs/tags/vX.Y.Z
 curl -fsS https://registry.npmjs.org/-/npm/v1/attestations/capsulemcp@X.Y.Z | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const a=s&&JSON.parse(s).attestations.find(x=>x.predicateType==="https://slsa.dev/provenance/v1");if(!a){console.log("NO PROVENANCE - do not install");process.exit(1)}const w=JSON.parse(Buffer.from(a.bundle.dsseEnvelope.payload,"base64")).predicate.buildDefinition.externalParameters.workflow;console.log(w.repository,w.path,w.ref)})'
 ```
 
-`package.json` sets `publishConfig.provenance: true`, so a stray `npm publish` from a workstation fails ("Automatic provenance generation not supported for provider: null") instead of shipping an unattested tarball. That is an accident guard only — `npm publish --provenance=false` overrides it; the consumer-side identity check above is the real control. One-time setup for the workflow — the `npm` environment limited to `v*` tags, the npm Trusted Publisher binding, and "require 2FA, disallow tokens" — is described at the top of [`.github/workflows/publish.yml`](.github/workflows/publish.yml).
+`package.json` sets `publishConfig.provenance: true`, so a stray `npm publish` from a workstation fails ("Automatic provenance generation not supported for provider: null") instead of shipping an unattested tarball. That is an accident guard only — `npm publish --provenance=false` overrides it; the consumer-side identity check above is the real control. One-time setup — a tag ruleset protecting `v*`, the `npm` environment limited to `v*` tags, the npm trusted publisher with staging permission only, and "require 2FA, disallow tokens" — is described at the top of [`.github/workflows/publish.yml`](.github/workflows/publish.yml).
 
-After step 6 lands, `npx capsulemcp@X.Y.Z` (or unpinned `npx capsulemcp`) picks up the new version from the npm registry immediately. The GitHub-ref install (`npx -y github:soil-dev/capsulemcp#vX.Y.Z`) also works and is documented as the fallback / development path for users tracking a fork or unreleased branch.
+Once you approve the staged version (step 6), `npx capsulemcp@X.Y.Z` (or unpinned `npx capsulemcp`) picks it up from the npm registry immediately. The GitHub-ref install (`npx -y github:soil-dev/capsulemcp#vX.Y.Z`) also works and is documented as the fallback / development path for users tracking a fork or unreleased branch.
 
 If you also publish a container image and deploy from it, do the image-build + IaC-apply *after* the tag is on GitHub — the tag is the authoritative ref the image build clones from. See [DEPLOY.md](DEPLOY.md) for one worked example (Cloud Run from source) and adapt to your platform.
 

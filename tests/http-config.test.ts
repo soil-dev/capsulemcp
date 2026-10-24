@@ -526,3 +526,23 @@ describe("resolveBaseConfig — http://[::1]", () => {
     if ("error" in result) expect(result.error).toMatch(/http:\/\/localhost/);
   });
 });
+
+describe("resolveBaseConfig — issuer shape", () => {
+  it("refuses a PUBLIC_BASE_URL with a query string or fragment (the OAuth layer would crash)", () => {
+    for (const url of ["https://mcp.example.com/?a=1", "https://mcp.example.com/#frag"]) {
+      const result = resolveBaseConfig({
+        PUBLIC_BASE_URL: url,
+        MCP_OAUTH_SIGNING_KEY: "x".repeat(32),
+      });
+      expect("error" in result, url).toBe(true);
+    }
+  });
+});
+
+describe("resolveListenHost — https://[::1]", () => {
+  it("binds the IPv6 loopback for an https://[::1] issuer (e.g. behind a local TLS proxy)", () => {
+    expect(resolveListenHost({}, { kind: "insecure-auto-approve" }, "https://[::1]:8443")).toEqual({
+      ok: "::1",
+    });
+  });
+});

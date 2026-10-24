@@ -65,8 +65,10 @@ is the supported path.
 
 Releases after v2.4.0 are published to npm only from this repository's
 [`publish.yml`](.github/workflows/publish.yml) GitHub Actions workflow,
-dispatched on the release tag, through npm Trusted Publishing. Each
-carries an npm provenance attestation whose identity is
+dispatched on the release tag, through npm Trusted Publishing with
+staged publishing: the workflow can only stage a version, and it goes
+public when a maintainer approves it with 2FA. Each carries an npm
+provenance attestation whose identity is
 `https://github.com/soil-dev/capsulemcp`, workflow
 `.github/workflows/publish.yml`, ref `refs/tags/vX.Y.Z`.
 [INSTALL.md → Release integrity](INSTALL.md#release-integrity) shows a

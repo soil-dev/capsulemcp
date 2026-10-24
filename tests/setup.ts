@@ -3,7 +3,8 @@
  *
  * Clears per-process state between tests: the reference-data cache
  * (src/capsule/cache.ts) and the remembered rate-limit window
- * (src/capsule/client.ts). Without it, a cache
+ * (src/capsule/rate-limit-window.ts — shared via globalThis, so this
+ * reset also reaches module copies loaded after vi.resetModules()). Without it, a cache
  * write from one test would survive into the next and cause
  * "expected 1 fetch call, got 0" failures because the second test
  * was served by the cache.

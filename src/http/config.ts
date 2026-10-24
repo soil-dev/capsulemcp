@@ -53,7 +53,7 @@ export type SelectModeResult = { ok: Mode } | { error: string };
  * gate insecure-auto-approve mode against non-loopback hostnames —
  * accidentally deploying that mode to the public internet would let
  * anyone register a client and use the shared Capsule token. The mode
- * must be either pointed at localhost / 127.0.0.1 / ::1, OR explicitly
+ * must be either pointed at a loopback address, OR explicitly
  * confirmed via `MCP_OAUTH_I_KNOW_WHAT_IM_DOING=yes`.
  */
 export function selectMode(
@@ -116,7 +116,7 @@ export function selectMode(
           "MCP_OAUTH_INSECURE_AUTO_APPROVE is set but PUBLIC_BASE_URL is not a localhost address. " +
           "This mode lets anyone who can reach the URL register an OAuth client and use the shared " +
           "Capsule token; it must not be exposed publicly. Either:\n" +
-          "  - Point PUBLIC_BASE_URL at http://localhost / 127.0.0.1 / ::1 (recommended), or\n" +
+          "  - Point PUBLIC_BASE_URL at http://localhost or http://127.0.0.1 (recommended), or\n" +
           "  - Set MCP_OAUTH_I_KNOW_WHAT_IM_DOING=yes to acknowledge the risk (only do this on a private network).",
       };
     }
@@ -159,9 +159,9 @@ export type ListenHostResult = { ok: string | undefined } | { error: string };
  *     `MCP_OAUTH_I_KNOW_WHAT_IM_DOING=yes` — the same acknowledgement
  *     the mode needs for a non-loopback URL.
  *   - insecure-auto-approve with a loopback `PUBLIC_BASE_URL` → bind
- *     `127.0.0.1`. (`resolveBaseConfig` has already ruled out
- *     `http://[::1]`, and clients connecting to `http://localhost` fall
- *     back from `::1` to `127.0.0.1`.) A loopback URL means the
+ *     loopback: `::1` for `https://[::1]` (`resolveBaseConfig` refuses
+ *     `http://[::1]`), else `127.0.0.1` — clients connecting to
+ *     `http://localhost` fall back from `::1` to it. A loopback URL means the
  *     operator intends local-only access, so the socket now matches.
  *     Containers that publish the port need an explicit
  *     `MCP_HTTP_HOST=0.0.0.0` plus the acknowledgement.
@@ -193,7 +193,9 @@ export function resolveListenHost(
     return { ok: explicit };
   }
   if (mode.kind === "insecure-auto-approve" && isLocalhostUrl(publicBaseUrl)) {
-    return { ok: "127.0.0.1" };
+    // https://[::1] (e.g. behind a local TLS proxy) needs the IPv6
+    // loopback; every other loopback URL is served on 127.0.0.1.
+    return { ok: new URL(publicBaseUrl).hostname === "[::1]" ? "::1" : "127.0.0.1" };
   }
   return { ok: undefined };
 }
@@ -276,6 +278,12 @@ export function resolveBaseConfig(env: NodeJS.ProcessEnv = process.env): BaseCon
   // The MCP SDK's auth router only exempts `localhost` and `127.0.0.1`
   // from its https-issuer rule; an http://[::1] issuer would pass this
   // validation and then crash startup with an uncaught stack trace.
+  if (parsedBaseUrl.search || parsedBaseUrl.hash) {
+    return {
+      error:
+        "PUBLIC_BASE_URL must not contain a query string or fragment — it is the OAuth issuer, and the OAuth layer refuses one that does.",
+    };
+  }
   if (parsedBaseUrl.protocol === "http:" && parsedBaseUrl.hostname === "[::1]") {
     return {
       error:

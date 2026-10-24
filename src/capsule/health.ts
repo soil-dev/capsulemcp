@@ -57,6 +57,7 @@
 
 import { logEvent } from "../log.js";
 import { CapsuleAuthError, CapsuleTimeoutError, capsuleProbe } from "./client.js";
+import { closeRateLimitWindow } from "./rate-limit-window.js";
 
 /** The probe target. See the module comment for why this endpoint. */
 export const HEALTH_PROBE_PATH = "/users/current";
@@ -204,7 +205,13 @@ async function probeToken(timeoutMs: number): Promise<TokenVerdict> {
           : `GET ${HEALTH_PROBE_PATH} failed: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
-  if (status >= 200 && status < 300) return { token_status: "valid" };
+  if (status >= 200 && status < 300) {
+    // Capsule just served a request for this token: any rate-limit
+    // window remembered from an earlier 429 is over (it may have lifted
+    // early, or the local clock may run behind Capsule's).
+    closeRateLimitWindow();
+    return { token_status: "valid" };
+  }
   if (status === 401) {
     return {
       token_status: "rejected",

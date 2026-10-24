@@ -452,7 +452,11 @@ a{color:#1e3a8a}
         req.socket.destroy();
         return;
       }
-      if (req.path === "/mcp") {
+      res.set("Cache-Control", "no-store");
+      // Express matches routes case-insensitively and ignores a trailing
+      // slash, so /MCP and /mcp/ reach the MCP handler too.
+      const route = req.path.toLowerCase().replace(/\/+$/, "");
+      if (route === "/mcp") {
         res.status(status).json({
           jsonrpc: "2.0",
           error: {
@@ -462,6 +466,11 @@ a{color:#1e3a8a}
           id: null,
         });
         return;
+      }
+      // Same public CORS policy the SDK applies to its OAuth endpoints, so
+      // browser clients can read the error.
+      if (/^\/(token|register|revoke)(\/|$)/.test(route)) {
+        res.set("Access-Control-Allow-Origin", "*");
       }
       res.status(status).json(
         status >= 500

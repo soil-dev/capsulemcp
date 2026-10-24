@@ -316,6 +316,61 @@ describe("doFetch retry-on-429", () => {
     expect(err.message).not.toMatch(/Infinity|NaN/);
   });
 
+  it("in the window's last minute a call waits it out and goes ahead", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+      const { openRateLimitWindow } = await import("../src/capsule/rate-limit-window.js");
+      openRateLimitWindow(Date.now() + 30_000);
+      vi.mocked(fetch).mockResolvedValueOnce(makeResponse(200, { ok: true }));
+      const { capsuleGet } = await import("../src/capsule/client.js");
+      const promise = capsuleGet<{ ok: boolean }>("/parties");
+      await vi.advanceTimersByTimeAsync(29_000);
+      expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1_100);
+      expect((await promise).data).toEqual({ ok: true });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a short back-off does not retry once a concurrent call has learnt of a long window", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(fetch).mockResolvedValueOnce(makeResponse(429, {}, { "Retry-After": "30" }));
+      const { capsuleGet } = await import("../src/capsule/client.js");
+      const { openRateLimitWindow } = await import("../src/capsule/rate-limit-window.js");
+      const promise = capsuleGet("/parties").catch((e: unknown) => e as Error);
+      await vi.advanceTimersByTimeAsync(10_000);
+      openRateLimitWindow(Date.now() + 40 * 60_000); // learnt by another call meanwhile
+      await vi.advanceTimersByTimeAsync(21_000);
+      const err = await promise;
+      expect((err as Error).message).toMatch(/resets in about 40 min/);
+      expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a wall-clock step backwards cannot stretch the window past the one-hour cap", async () => {
+    const { openRateLimitWindow, rateLimitWindowLeft } = await import(
+      "../src/capsule/rate-limit-window.js"
+    );
+    const now = Date.now();
+    openRateLimitWindow(now + 10 * 60_000);
+    expect(rateLimitWindowLeft(now - 2 * 60 * 60_000)).toBe(61 * 60_000);
+  });
+
+  it("the window is shared by module copies loaded after vi.resetModules()", async () => {
+    const first = await import("../src/capsule/rate-limit-window.js");
+    first.openRateLimitWindow(Date.now() + 50 * 60_000);
+    vi.resetModules();
+    const second = await import("../src/capsule/rate-limit-window.js");
+    expect(second.rateLimitWindowLeft()).toBeGreaterThan(49 * 60_000);
+    second._resetRateLimitStateForTests();
+    expect(first.rateLimitWindowLeft()).toBeLessThanOrEqual(0);
+  });
+
   it("remembers the announced window: later calls fail fast WITHOUT a request until the reset", async () => {
     vi.useFakeTimers();
     try {

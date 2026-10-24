@@ -1,4 +1,8 @@
-import { openRateLimitWindow, rateLimitWindowLeft } from "./rate-limit-window.js";
+import {
+  openRateLimitWindow,
+  RATE_LIMIT_WINDOW_CAP_MS,
+  rateLimitWindowLeft,
+} from "./rate-limit-window.js";
 import { fetch, type Response } from "undici";
 import { readBool } from "../env.js";
 import { logEvent, logVerbose, redactPath } from "../log.js";
@@ -151,16 +155,11 @@ function parseNextPage(linkHeader: string | null): number | undefined {
  * 5-second default if neither is present or parseable.
  */
 const RATE_LIMIT_MAX_WAIT_MS = 60_000;
-/**
- * Capsule's quota window is one hour, so no honest reset is further out
- * than that. Caps an absurd or non-finite header (e.g. `1e306`) so the
- * remembered window and the caller-facing message stay sane.
- */
-const RATE_LIMIT_WINDOW_CAP_MS = 61 * 60_000;
-
 type RateLimitPlan = { waitMs: number } | { resetInMs: number };
 
 function planFromDelay(delayMs: number): RateLimitPlan {
+  // Capsule's window is one hour: cap an absurd or non-finite header
+  // (e.g. `1e306`) so the remembered window and the message stay sane.
   const capped = Math.min(delayMs, RATE_LIMIT_WINDOW_CAP_MS);
   return capped > RATE_LIMIT_MAX_WAIT_MS ? { resetInMs: capped } : { waitMs: capped };
 }
@@ -377,9 +376,12 @@ async function doFetch(url: string, options: Parameters<typeof fetch>[1]): Promi
   const method = options?.method ?? "GET";
 
   // Inside a window Capsule already announced: no request, no event —
-  // the 429 that opened the window was logged once.
+  // the 429 that opened the window was logged once. In the window's
+  // last minute, wait it out instead, exactly as a fresh 429 with a
+  // reset that close would have.
   const windowLeft = rateLimitWindowLeft(startedAt);
-  if (windowLeft > 0) throw rateLimitExhaustedError(windowLeft);
+  if (windowLeft > RATE_LIMIT_MAX_WAIT_MS) throw rateLimitExhaustedError(windowLeft);
+  if (windowLeft > 0) await new Promise((resolve) => setTimeout(resolve, windowLeft));
 
   const first = await fetchWithTimeout(url, options);
 
@@ -402,6 +404,10 @@ async function doFetch(url: string, options: Parameters<typeof fetch>[1]): Promi
       throw rateLimitExhaustedError(plan.resetInMs);
     }
     await new Promise((resolve) => setTimeout(resolve, plan.waitMs));
+    // A concurrent call may have learnt of a long window while we slept:
+    // don't spend the retry on a request Capsule has already refused.
+    const leftAfterWait = rateLimitWindowLeft();
+    if (leftAfterWait > RATE_LIMIT_MAX_WAIT_MS) throw rateLimitExhaustedError(leftAfterWait);
 
     const retried = await fetchWithTimeout(url, options);
     if (retried.status === 429) {

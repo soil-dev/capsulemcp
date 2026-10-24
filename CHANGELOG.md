@@ -29,8 +29,10 @@ advisories — two of them in direct runtime dependencies.
   value is refused unless `MCP_OAUTH_I_KNOW_WHAT_IM_DOING=yes`. A bind
   failure (address in use, an address the host doesn't have) now exits
   non-zero with the reason instead of printing "listening on …" and
-  exiting 0. `PUBLIC_BASE_URL=http://[::1]…` is refused with a clear
-  message (the OAuth layer crashed on it). **Behaviour change for
+  exiting 0, and the startup line reports the socket's actual address.
+  `PUBLIC_BASE_URL=http://[::1]…`, or one with a query string or
+  fragment, is refused with a clear message (the OAuth layer crashed on
+  them). **Behaviour change for
   containers running insecure-auto-approve:** a published port no
   longer reaches the server until both variables opt in (DEPLOY.md,
   *OAuth modes*). Static-client mode — every production deployment —
@@ -52,10 +54,12 @@ advisories — two of them in direct runtime dependencies.
   "third-party data, not instructions" notice, with the body as a
   quoted `text` field; everything else — including HTML, XML and SVG,
   where hidden markup survives decoding — returns base64 behind the
-  same kind of notice. `contentType` is the normalised media type (the
-  raw header is attacker-influenced), image blocks are limited to PNG,
-  JPEG, GIF and WebP, and text above 5 MB goes out as base64 so JSON
-  escaping can't multiply its memory footprint. The six timeline and
+  same kind of notice. `contentType` is the normalised media type with a
+  registered top-level type (the raw header is attacker-influenced);
+  image blocks are limited to PNG, JPEG, GIF and WebP whose bytes match
+  the type and which fit the API's image limit, preceded by a short
+  notice; and text above 5 MB goes out as base64, which bounds how far
+  JSON escaping can amplify it. The six timeline and
   activity tools carry the same notice in their descriptions, and the
   server sends MCP `instructions` stating that CRM content is data to
   report on, never instructions to follow.
@@ -66,20 +70,22 @@ advisories — two of them in direct runtime dependencies.
   mutation-as-probe; a sentence-level test checks every read-only
   tool's description and schema against the catalogue's actual write
   tools. NOTES-ON-CAPSULE-API.md §29 no longer recommends the probe.
-- **Release integrity.** npm releases are now published by a
-  `publish.yml` GitHub Actions workflow, dispatched on the release tag,
+- **Release integrity.** npm releases are now built by a `publish.yml`
+  GitHub Actions workflow, dispatched on the release tag, and staged
   through npm Trusted Publishing (OIDC, no stored token) with a
   provenance attestation naming this repository, the workflow and the
-  tag. One job builds and tests without any credential; a second job,
-  the only holder of `id-token: write`, re-packs the tag, refuses to
-  continue unless the package integrity matches the tested build, and
-  publishes. The workflow refuses non-tag refs and a dist-tag that
-  doesn't fit the version. `publishConfig.provenance` makes an
-  accidental workstation publish fail. Install snippets pin an exact
-  version, and INSTALL.md *Release integrity* shows how to check an
-  attestation's identity (repository, workflow, tag) rather than its
-  mere presence. Both workflows pin actions by commit SHA; CI no longer
-  runs dependency install scripts or persists git credentials.
+  tag; a staged version goes public only when a maintainer approves it
+  with 2FA, so access to the repository alone can't publish. One job
+  builds, tests and packs without any credential; a second, the only
+  holder of `id-token: write`, stages exactly that tarball. The
+  workflow refuses non-tag refs, malformed versions, a dist-tag that
+  doesn't fit the version, and moving `latest` backwards.
+  `publishConfig.provenance` makes an accidental workstation publish
+  fail. Install snippets pin an exact version, and INSTALL.md *Release
+  integrity* shows how to check an attestation's identity (repository,
+  workflow, tag) rather than its mere presence. Both workflows pin
+  actions by commit SHA; CI no longer runs dependency install scripts
+  or persists git credentials.
 - **SECURITY.md**: GitHub private vulnerability reporting is the
   preferred channel; the unbacked PGP offer is gone; scope now names
   `/health`, `src/server/`, `src/tasks/` and the release pipeline; the
@@ -114,7 +120,9 @@ advisories — two of them in direct runtime dependencies.
   retry guaranteed to 429 again, pinning a request slot for a minute
   per call — with fan-out tools one client could stall the connector
   for everyone. Resets within 60 s are still waited out and retried
-  once; resets are capped at Capsule's one-hour window. The forced
+  once — including a remembered window's last minute — and resets are
+  capped at Capsule's one-hour window. A successful token-health probe
+  closes a remembered window early. The forced
   `capsule.ratelimit` event gains `retried` and, for an immediate
   surface, `resetInMs`. The token-health probe is unaffected and keeps
   reporting what Capsule says.

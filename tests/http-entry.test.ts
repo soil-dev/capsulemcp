@@ -134,24 +134,34 @@ describe("dist/http.js bind address", () => {
         MCP_OAUTH_CLIENT_SECRET: "client-secret-of-sufficient-length",
       }),
     );
-    expect(started.line, started.stderr).toContain(`*:${port} (all interfaces)`);
+    // The line reports the socket's real address: the dual-stack wildcard.
+    expect(started.line, started.stderr).toMatch(
+      new RegExp(`(\\[::\\]|0\\.0\\.0\\.0):${port} \\(all interfaces\\)`),
+    );
     if (lanAddress) expect(await tryConnect(lanAddress, port)).toBe("connected");
   }, 20_000);
 
   it("a bind failure exits non-zero and says why, instead of claiming to listen", async () => {
-    const port = await freePort();
-    const started = await start(
-      cleanEnv({
-        PORT: String(port),
-        PUBLIC_BASE_URL: "https://mcp.example.com",
-        MCP_OAUTH_CLIENT_ID: "client-id",
-        MCP_OAUTH_CLIENT_SECRET: "client-secret-of-sufficient-length",
-        // RFC 5737 documentation address — never assigned to this host.
-        MCP_HTTP_HOST: "192.0.2.1",
-      }),
-    );
-    expect(started.line).toBeUndefined();
-    expect(started.exitCode).toBe(1);
-    expect(started.stderr).toMatch(/cannot listen on 192\.0\.2\.1:\d+/);
+    // Hold the port so the child's bind fails with EADDRINUSE — the
+    // same on every OS, unlike binding an address the host lacks.
+    const holder = createServer();
+    await new Promise<void>((resolve) => holder.listen(0, "127.0.0.1", () => resolve()));
+    const { port } = holder.address() as { port: number };
+    try {
+      const started = await start(
+        cleanEnv({
+          PORT: String(port),
+          PUBLIC_BASE_URL: `http://localhost:${port}`,
+          MCP_OAUTH_INSECURE_AUTO_APPROVE: "1",
+        }),
+      );
+      expect(started.line).toBeUndefined();
+      expect(started.exitCode).toBe(1);
+      expect(started.stderr).toMatch(
+        new RegExp(`cannot listen on 127\\.0\\.0\\.1:${port}: .*EADDRINUSE`),
+      );
+    } finally {
+      await new Promise<void>((resolve) => holder.close(() => resolve()));
+    }
   }, 20_000);
 });
