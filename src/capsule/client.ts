@@ -376,12 +376,12 @@ async function doFetch(url: string, options: Parameters<typeof fetch>[1]): Promi
   const method = options?.method ?? "GET";
 
   // Inside a window Capsule already announced: no request, no event —
-  // the 429 that opened the window was logged once. In the window's
-  // last minute, wait it out instead, exactly as a fresh 429 with a
-  // reset that close would have.
+  // the 429 that opened the window was logged once. Fail fast even in
+  // the window's last minute: a hidden sleep here would hold the call
+  // past an MCP client's own timeout, and a write could then land after
+  // the caller had given up (and retried).
   const windowLeft = rateLimitWindowLeft(startedAt);
-  if (windowLeft > RATE_LIMIT_MAX_WAIT_MS) throw rateLimitExhaustedError(windowLeft);
-  if (windowLeft > 0) await new Promise((resolve) => setTimeout(resolve, windowLeft));
+  if (windowLeft > 0) throw rateLimitExhaustedError(windowLeft);
 
   const first = await fetchWithTimeout(url, options);
 
@@ -407,7 +407,7 @@ async function doFetch(url: string, options: Parameters<typeof fetch>[1]): Promi
     // A concurrent call may have learnt of a long window while we slept:
     // don't spend the retry on a request Capsule has already refused.
     const leftAfterWait = rateLimitWindowLeft();
-    if (leftAfterWait > RATE_LIMIT_MAX_WAIT_MS) throw rateLimitExhaustedError(leftAfterWait);
+    if (leftAfterWait > 0) throw rateLimitExhaustedError(leftAfterWait);
 
     const retried = await fetchWithTimeout(url, options);
     if (retried.status === 429) {

@@ -245,15 +245,22 @@ const PROBE_WORDING =
   /\b(probe|probing|determine (whether|if)|verify (whether|if)|check (whether|if)|see (whether|if)|find out|test (whether|if)|discover (whether|if)|as a (membership )?test|read the (response|422|error))\b/i;
 const ARBITRARY_RECORD =
   /\bon (any|a|an|some)( [a-z-]+)? (project|opportunity|party|record|entity|deal)s?\b/i;
+// A prohibition excuses only the clause it governs — up to the next `;`,
+// `:` or dash — so "Don't use the web UI; probe via update_project" is
+// still caught.
 const NEGATED_MUTATION =
-  /\b(do not|don't|never)\s+(update|modify|change|write|mutate|edit|create|delete|call|use|probe)\b/i;
+  /\b(do not|don't|never)\s+(update|modify|change|write|mutate|edit|create|delete|call|use|probe)\b[^;:\u2014\u2013]*/gi;
 
 function findProbeAdvice(text: string, writeTools: string[]): string[] {
-  const writeName = new RegExp(`\\b(${writeTools.join("|")})\\b`);
-  return text
-    .split(/(?<=[.!?])\s+|\n/)
-    .filter((sentence) => PROBE_WORDING.test(sentence) && !NEGATED_MUTATION.test(sentence))
-    .filter((sentence) => writeName.test(sentence) || ARBITRARY_RECORD.test(sentence));
+  const names = writeTools.join("|");
+  const writeName = new RegExp(`\\b(${names})\\b`);
+  // Read-first advice ("check whether it exists before calling
+  // update_party") names a write tool without advising it as a probe.
+  const readFirst = new RegExp(`\\bbefore (calling |using )?\`?(${names})\\b\`?`, "g");
+  return text.split(/(?<=[.!?])\s+|\n/).filter((sentence) => {
+    const live = sentence.replace(NEGATED_MUTATION, " ").replace(readFirst, " ");
+    return PROBE_WORDING.test(live) && (writeName.test(live) || ARBITRARY_RECORD.test(live));
+  });
 }
 
 describe("read-only tool descriptions do not advise writes as probes", () => {
@@ -318,9 +325,19 @@ describe("read-only tool descriptions do not advise writes as probes", () => {
       "To see whether U is in T, set the team on a test project and read the error.",
       "Find out membership by assigning the owner on any existing project.",
       "Use `batch_update_opportunity` as a membership test.",
+      // A prohibition elsewhere in the sentence does not excuse the advice.
+      "Don't use the web UI; probe via `update_project` and read the response.",
+      "Do not use the web UI \u2014 check whether the user is in the team by calling update_project.",
     ]) {
       expect(findProbeAdvice(mutation, writeTools), mutation).not.toEqual([]);
     }
+    // Read-first advice is not a probe.
+    expect(
+      findProbeAdvice(
+        "Check whether the party exists with get_party before calling `update_party`.",
+        writeTools,
+      ),
+    ).toEqual([]);
     // ...while the shipped warning itself is not flagged.
     expect(
       findProbeAdvice(

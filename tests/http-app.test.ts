@@ -269,6 +269,9 @@ describe("/authorize and /token", () => {
       body: body.toString(),
     });
     expect(res.status).toBeGreaterThanOrEqual(400);
+    // Same headers the SDK's token handler sets: readable cross-origin, never cached.
+    expect(res.headers.get("access-control-allow-origin")).toBe("*");
+    expect(res.headers.get("cache-control")).toBe("no-store");
     const json = (await res.json()) as Record<string, unknown>;
     expect(json["error"]).toBe("invalid_client");
   });

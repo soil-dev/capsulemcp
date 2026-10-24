@@ -861,21 +861,31 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
   // a mislabelled file (HTML labelled image/png) become an image block
   // the API rejects — and a rejected block can stay in a client's
   // history and break every later turn.
-  const ATTACHMENT_IMAGE_SIGNATURES: Record<string, (b: Buffer) => boolean> = {
-    "image/png": (b) =>
-      b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
-    "image/jpeg": (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
-    "image/gif": (b) =>
-      b.subarray(0, 6).toString("latin1") === "GIF87a" ||
-      b.subarray(0, 6).toString("latin1") === "GIF89a",
-    "image/webp": (b) =>
-      b.subarray(0, 4).toString("latin1") === "RIFF" &&
-      b.subarray(8, 12).toString("latin1") === "WEBP",
-  };
-  const IMAGE_TYPE_ALIASES: Record<string, string> = {
-    "image/jpg": "image/jpeg",
-    "image/pjpeg": "image/jpeg",
-  };
+  // Maps, not object literals: the keys come from an attacker-influenced
+  // header, and a lookup must never land on an Object.prototype member.
+  const ATTACHMENT_IMAGE_SIGNATURES = new Map<string, (b: Buffer) => boolean>([
+    [
+      "image/png",
+      (b) => b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
+    ],
+    ["image/jpeg", (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff],
+    [
+      "image/gif",
+      (b) =>
+        b.subarray(0, 6).toString("latin1") === "GIF87a" ||
+        b.subarray(0, 6).toString("latin1") === "GIF89a",
+    ],
+    [
+      "image/webp",
+      (b) =>
+        b.subarray(0, 4).toString("latin1") === "RIFF" &&
+        b.subarray(8, 12).toString("latin1") === "WEBP",
+    ],
+  ]);
+  const IMAGE_TYPE_ALIASES = new Map([
+    ["image/jpg", "image/jpeg"],
+    ["image/pjpeg", "image/jpeg"],
+  ]);
   // The API refuses image blocks over 5 MB of base64, i.e. ~3.75 MB raw.
   const MAX_IMAGE_BYTES = 3.75 * 1024 * 1024;
   const DECODED_ATTACHMENT_TYPES = new Set([
@@ -908,7 +918,7 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
   const MEDIA_TOP_LEVEL = /^(application|audio|font|image|message|model|multipart|text|video)\//;
   const normaliseContentType = (raw: string): string => {
     const base = raw.split(";")[0]!.trim().toLowerCase();
-    const aliased = IMAGE_TYPE_ALIASES[base] ?? base;
+    const aliased = IMAGE_TYPE_ALIASES.get(base) ?? base;
     return aliased.length <= 100 &&
       MEDIA_TOP_LEVEL.test(aliased) &&
       /^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*$/.test(aliased)
@@ -949,7 +959,8 @@ export function createCapsuleMcpServer(opts?: { clientId?: string }): McpServer 
           });
         }
 
-        const looksLikeImage = ATTACHMENT_IMAGE_SIGNATURES[contentType]?.(result.buffer) ?? false;
+        const looksLikeImage =
+          ATTACHMENT_IMAGE_SIGNATURES.get(contentType)?.(result.buffer) ?? false;
         if (looksLikeImage && result.sizeBytes <= MAX_IMAGE_BYTES) {
           return {
             content: [

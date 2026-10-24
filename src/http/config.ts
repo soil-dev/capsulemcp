@@ -159,12 +159,13 @@ export type ListenHostResult = { ok: string | undefined } | { error: string };
  *     `MCP_OAUTH_I_KNOW_WHAT_IM_DOING=yes` — the same acknowledgement
  *     the mode needs for a non-loopback URL.
  *   - insecure-auto-approve with a loopback `PUBLIC_BASE_URL` → bind
- *     loopback: `::1` for `https://[::1]` (`resolveBaseConfig` refuses
- *     `http://[::1]`), else `127.0.0.1` — clients connecting to
- *     `http://localhost` fall back from `::1` to it. A loopback URL means the
- *     operator intends local-only access, so the socket now matches.
- *     Containers that publish the port need an explicit
- *     `MCP_HTTP_HOST=0.0.0.0` plus the acknowledgement.
+ *     `127.0.0.1`; clients connecting to `http://localhost` fall back
+ *     from `::1` to it. A loopback URL means the operator intends
+ *     local-only access, so the socket now matches. (An `https://`
+ *     loopback URL means a local TLS proxy sits in front; one whose
+ *     upstream is `[::1]` needs `MCP_HTTP_HOST=::1`.) Containers that
+ *     publish the port need an explicit `MCP_HTTP_HOST=0.0.0.0` plus
+ *     the acknowledgement.
  *   - everything else (static-client mode, or insecure mode already
  *     acknowledged for a non-loopback URL) → every interface, as
  *     before; a container platform such as Cloud Run needs that.
@@ -193,9 +194,7 @@ export function resolveListenHost(
     return { ok: explicit };
   }
   if (mode.kind === "insecure-auto-approve" && isLocalhostUrl(publicBaseUrl)) {
-    // https://[::1] (e.g. behind a local TLS proxy) needs the IPv6
-    // loopback; every other loopback URL is served on 127.0.0.1.
-    return { ok: new URL(publicBaseUrl).hostname === "[::1]" ? "::1" : "127.0.0.1" };
+    return { ok: "127.0.0.1" };
   }
   return { ok: undefined };
 }
@@ -275,15 +274,19 @@ export function resolveBaseConfig(env: NodeJS.ProcessEnv = process.env): BaseCon
       error: `PUBLIC_BASE_URL must be https://… (or http://localhost for development); got ${parsedBaseUrl.protocol}//${parsedBaseUrl.hostname}.`,
     };
   }
-  // The MCP SDK's auth router only exempts `localhost` and `127.0.0.1`
-  // from its https-issuer rule; an http://[::1] issuer would pass this
-  // validation and then crash startup with an uncaught stack trace.
-  if (parsedBaseUrl.search || parsedBaseUrl.hash) {
+  // The issuer must not carry a query or fragment (the OAuth layer
+  // crashes on one). Check the raw string too: a bare trailing `?` or
+  // `#` parses to an empty `search`/`hash` yet still ends up in every
+  // URL built from PUBLIC_BASE_URL.
+  if (parsedBaseUrl.search || parsedBaseUrl.hash || /[?#]/.test(publicBaseUrl)) {
     return {
       error:
         "PUBLIC_BASE_URL must not contain a query string or fragment — it is the OAuth issuer, and the OAuth layer refuses one that does.",
     };
   }
+  // The MCP SDK's auth router only exempts `localhost` and `127.0.0.1`
+  // from its https-issuer rule; an http://[::1] issuer would pass this
+  // validation and then crash startup with an uncaught stack trace.
   if (parsedBaseUrl.protocol === "http:" && parsedBaseUrl.hostname === "[::1]") {
     return {
       error:

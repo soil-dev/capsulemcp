@@ -11,7 +11,7 @@ npm install
 npm test
 ```
 
-695 tests, all mocked — no Capsule API calls happen, no token needed. The suite has three layers:
+696 tests, all mocked — no Capsule API calls happen, no token needed. The suite has three layers:
 
 - **Per-tool unit tests** (e.g. `tests/parties.test.ts`): import the tool function, mock `undici.fetch`, assert on the URL, method, body, and response handling. Most tests live here.
 - **MCP-protocol integration tests** (`tests/mcp-integration.test.ts`): drive a real `McpServer` through the wire protocol via the SDK's in-memory transport pair, with `undici.fetch` still mocked. Catches the layer between "tool function works" and "MCP correctly registers and dispatches the tool". Includes the `get_attachment` content-type routing logic (which lives in `server.ts`, not the tool function).
@@ -252,16 +252,27 @@ gh release create vX.Y.Z --latest --title "vX.Y.Z — title" --notes "<release n
 #    Dispatch it ON THE TAG (the run's ref is what npm records in the provenance):
 #    it builds, tests and packs the tag, then stages that exact tarball via npm
 #    Trusted Publishing (OIDC). Nothing is public until you approve.
-url=$(gh workflow run publish.yml --ref vX.Y.Z -f dist-tag=latest) && gh run watch "${url##*/}" --exit-status
+url=$(gh workflow run publish.yml --ref vX.Y.Z -f dist-tag=latest)
+#    gh prints the new run's URL only "if available"; if it printed nothing, take the
+#    newest dispatched run instead of watching an empty id.
+run=${url##*/}; [ -n "$run" ] || run=$(gh run list --workflow publish.yml --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId')
+gh run watch "$run" --exit-status
 #    dist-tag=beta for vX.Y.Z-beta.N, dist-tag=next for vX.Y.Z-rc.N (the workflow
-#    refuses a mismatch, any ref that is not a release tag, and moving latest backwards)
-npm stage list capsulemcp            # the run's summary also shows the stage id
+#    refuses a mismatch, any ref that is not a release tag, and moving latest backwards
+#    — but only against what is live when it runs, so the ordering check below is yours)
+npm stage list capsulemcp            # every pending stage; the run's summary shows this one's id
+npm stage view <stage-id>            # version, dist-tag and integrity must match the run's Pack line
+npm view capsulemcp dist-tags.latest # approve only a version newer than this — and only the newest pending one
 npm stage approve <stage-id>         # prompts for 2FA — this is the moment it goes public
+npm stage reject <older-stage-id>    # any older stage still pending: approving it later would move latest backwards
+#    (`npm stage download <stage-id>` fetches the staged tarball if you want to diff it first.)
 
 # 7. Verify the attestation's identity, not just its presence — must print
 #    https://github.com/soil-dev/capsulemcp .github/workflows/publish.yml refs/tags/vX.Y.Z
 curl -fsS https://registry.npmjs.org/-/npm/v1/attestations/capsulemcp@X.Y.Z | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const a=s&&JSON.parse(s).attestations.find(x=>x.predicateType==="https://slsa.dev/provenance/v1");if(!a){console.log("NO PROVENANCE - do not install");process.exit(1)}const w=JSON.parse(Buffer.from(a.bundle.dsseEnvelope.payload,"base64")).predicate.buildDefinition.externalParameters.workflow;console.log(w.repository,w.path,w.ref)})'
 ```
+
+The published `package.json` has no `gitHead` field (npm adds it only when publishing from a git checkout, and the tarball is staged as a file); the provenance attestation records the exact commit instead — step 7 checks it.
 
 `package.json` sets `publishConfig.provenance: true`, so a stray `npm publish` from a workstation fails ("Automatic provenance generation not supported for provider: null") instead of shipping an unattested tarball. That is an accident guard only — `npm publish --provenance=false` overrides it; the consumer-side identity check above is the real control. One-time setup — a tag ruleset protecting `v*`, the `npm` environment limited to `v*` tags, the npm trusted publisher with staging permission only, and "require 2FA, disallow tokens" — is described at the top of [`.github/workflows/publish.yml`](.github/workflows/publish.yml).
 
@@ -285,7 +296,7 @@ discovers a regression.
 - [ ] **CHANGELOG `[Unreleased]` is empty** after the cut — its content should now live under `[vX.Y.Z]`.
 - [ ] **HOWTO test count and bundle sizes** reflect reality (greppable: `npm test 2>&1 | tail -3` and `npm run build 2>&1 | tail -5`).
 - [ ] **README "N tools / N read-only" counts** still match — bumping a tool count without bumping these numbers silently drifts. The source of truth is `tests/tool-annotations.test.ts`, which asserts the live catalog size (`result.tools.length`, currently 92) and the read-only subset (`readOnly === 53`); run `npm test` and reconcile the README/CHANGELOG numbers with those assertions. (A raw `grep` over `src/server.ts` undercounts — registrations span `registerTool` / `registerBatchTool` / `registerToolTask` / `server.tool`, often multi-line.)
-- [ ] **After npm publish, verify the registry state**: `npm view capsulemcp dist-tags version versions --json` includes the new version and the intended dist-tag (`latest`, `beta`, or `next`). Git tags alone don't make `npx capsulemcp@X.Y.Z` installable.
+- [ ] **After approving the staged version, verify the registry state**: `npm view capsulemcp dist-tags version versions --json` includes the new version and the intended dist-tag (`latest`, `beta`, or `next`), and `npm stage list capsulemcp` shows nothing older left pending. Git tags alone don't make `npx capsulemcp@X.Y.Z` installable.
 - [ ] **Tag exists before triggering downstream builds**: any image-build pipeline that takes a git ref expects the tag to already be on GitHub.
 - [ ] **Verify the image-build workflow's `conclusion`, not just exit status.** Piping `gh run watch --exit-status` through `tail` (or any non-pipefail shell) silently swallows the non-zero exit. Use `gh run view <id> --json conclusion --jq .conclusion` or `gh run list --workflow=... --limit=1 --json conclusion --jq '.[0].conclusion'` after the watch returns, and gate the deploy on the result being `"success"`. The beta.1/beta.2 deploys both shipped because the workflow had `conclusion: failure` but the local `tail` pipe masked the exit code.
 

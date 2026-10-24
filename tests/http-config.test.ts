@@ -529,7 +529,14 @@ describe("resolveBaseConfig — http://[::1]", () => {
 
 describe("resolveBaseConfig — issuer shape", () => {
   it("refuses a PUBLIC_BASE_URL with a query string or fragment (the OAuth layer would crash)", () => {
-    for (const url of ["https://mcp.example.com/?a=1", "https://mcp.example.com/#frag"]) {
+    for (const url of [
+      "https://mcp.example.com/?a=1",
+      "https://mcp.example.com/#frag",
+      // Empty query/fragment: `search`/`hash` parse to "" but the raw
+      // character would still be glued into every derived URL.
+      "https://mcp.example.com/?",
+      "https://mcp.example.com#",
+    ]) {
       const result = resolveBaseConfig({
         PUBLIC_BASE_URL: url,
         MCP_OAUTH_SIGNING_KEY: "x".repeat(32),
@@ -539,10 +546,19 @@ describe("resolveBaseConfig — issuer shape", () => {
   });
 });
 
-describe("resolveListenHost — https://[::1]", () => {
-  it("binds the IPv6 loopback for an https://[::1] issuer (e.g. behind a local TLS proxy)", () => {
-    expect(resolveListenHost({}, { kind: "insecure-auto-approve" }, "https://[::1]:8443")).toEqual({
-      ok: "::1",
-    });
+describe("resolveListenHost — https loopback URLs", () => {
+  it("binds 127.0.0.1 for every loopback issuer; a proxy upstream on [::1] opts in via MCP_HTTP_HOST", () => {
+    for (const url of ["https://[::1]:8443", "https://localhost:8443", "https://127.0.0.1:8443"]) {
+      expect(resolveListenHost({}, { kind: "insecure-auto-approve" }, url), url).toEqual({
+        ok: "127.0.0.1",
+      });
+    }
+    expect(
+      resolveListenHost(
+        { MCP_HTTP_HOST: "::1" },
+        { kind: "insecure-auto-approve" },
+        "https://[::1]:8443",
+      ),
+    ).toEqual({ ok: "::1" });
   });
 });

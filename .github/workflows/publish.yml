@@ -14,7 +14,9 @@
 # Why staged: with plain trusted publishing, anyone who can push a `v*`
 # tag and dispatch this workflow could publish. Staging means the
 # workflow can only upload; making a version public still needs a human
-# with the package's npm 2FA.
+# with the package's npm 2FA. The "latest only moves forwards" check
+# runs against what is live at staging time: approve only the newest
+# pending stage and reject older ones (HOWTO.md, step 6).
 #
 # Two jobs. `build` installs dependencies, runs the test suite and packs
 # the tarball WITHOUT the OIDC permission; `stage` holds `id-token:
@@ -27,11 +29,12 @@
 #      repository admins only.
 #   2. Environment — Settings → Environments → New environment `npm`:
 #      Deployment branches and tags → "Selected" → add tag rule `v*`.
-#   3. npm trusted publisher, staging only (prompts for 2FA):
+#   3. npm trusted publisher, staging only (prompts for 2FA). First
+#      `npm trust list capsulemcp`, and `npm trust revoke capsulemcp
+#      --id=<id>` any existing entry — one with publish permission would
+#      let this workflow skip the approval. Then:
 #        npm trust github capsulemcp --repo soil-dev/capsulemcp \
 #          --file publish.yml --env npm --allow-stage-publish
-#      npm expires a new trusted-publisher entry that hasn't published
-#      within 2 days, so do this right before the first release.
 #   4. npmjs.com → package capsulemcp → Settings → Publishing access →
 #      "Require two-factor authentication and disallow tokens".
 #
@@ -59,6 +62,13 @@ permissions:
 concurrency:
   group: publish-npm
   cancel-in-progress: false
+
+# An explicit `shell: bash` runs steps with `-eo pipefail`; the implicit
+# default is plain `bash -e`, under which `npm stage publish … | tee`
+# would report success even if staging failed.
+defaults:
+  run:
+    shell: bash
 
 jobs:
   build:
@@ -127,10 +137,12 @@ jobs:
         env:
           TAG: ${{ github.ref_name }}
         run: |
-          current=$(npm view capsulemcp dist-tags.latest 2>/dev/null || true)
+          # capsulemcp is already published, so a failed lookup is a
+          # registry/network problem — stop rather than skip the check.
+          current=$(npm view capsulemcp dist-tags.latest)
           node -e '
             const [mine, cur] = [process.argv[1].replace(/^v/, ""), process.argv[2]];
-            if (!cur) process.exit(0);
+            if (!cur) { console.error("could not read the current latest version"); process.exit(1); }
             const a = mine.split(".").map(Number), b = cur.split(".").map(Number);
             for (let i = 0; i < 3; i++) {
               if (a[i] > b[i]) process.exit(0);
@@ -153,7 +165,7 @@ jobs:
       - name: Pack
         run: |
           npm pack --ignore-scripts --json \
-            | node -e 'let s="";process.stdin.on("data",(d)=>{s+=d}).on("end",()=>{const p=JSON.parse(s)[0];console.log(p.filename+" "+p.integrity)})'
+            | node -e 'let s="";process.stdin.on("data",(d)=>{s+=d}).on("end",()=>{const p=JSON.parse(s)[0];console.log(p.filename+" "+p.integrity+" sha1:"+p.shasum)})'
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -207,5 +219,6 @@ jobs:
             cat stage.log
             echo '```'
             echo
-            echo "Approve with \`npm stage list capsulemcp\` and \`npm stage approve <stage-id>\` (prompts for 2FA)."
+            echo "Check it with \`npm stage view <stage-id>\` (integrity must match the build job's Pack line; \`npm stage download <stage-id>\` fetches the tarball),"
+            echo "then approve with \`npm stage approve <stage-id>\` (prompts for 2FA). Approve only the newest pending stage: \`npm stage list capsulemcp\`, and \`npm stage reject\` older ones."
           } >> "$GITHUB_STEP_SUMMARY"

@@ -15,35 +15,49 @@
 export const RATE_LIMIT_WINDOW_CAP_MS = 61 * 60_000;
 
 const STATE_KEY = Symbol.for("capsulemcp.rateLimitWindow");
-type WindowState = { until: number };
+type WindowState = { until: number; openedAt: number };
 
 function state(): WindowState {
   const g = globalThis as typeof globalThis & { [STATE_KEY]?: WindowState };
-  g[STATE_KEY] ??= { until: 0 };
+  g[STATE_KEY] ??= { until: 0, openedAt: 0 };
   return g[STATE_KEY];
 }
 
 /**
  * Milliseconds left in the announced window; 0 or less when none is
- * open. Clamped to the cap on read, so a wall-clock step backwards
- * cannot stretch the window past an hour.
+ * open. If the wall clock has stepped backwards so far that more than
+ * the cap appears to be left, the deadline itself is pulled in — so the
+ * window can never last longer than the cap from now.
  */
 export function rateLimitWindowLeft(now: number = Date.now()): number {
-  return Math.min(state().until - now, RATE_LIMIT_WINDOW_CAP_MS);
+  const s = state();
+  if (s.until - now > RATE_LIMIT_WINDOW_CAP_MS) s.until = now + RATE_LIMIT_WINDOW_CAP_MS;
+  return s.until - now;
 }
 
 /** Record that Capsule rejects this token's requests until `untilMs` (epoch ms). */
-export function openRateLimitWindow(untilMs: number): void {
+export function openRateLimitWindow(untilMs: number, now: number = Date.now()): void {
   const s = state();
-  s.until = Math.max(s.until, untilMs);
+  if (untilMs > s.until) {
+    s.until = untilMs;
+    s.openedAt = now;
+  }
 }
 
-/** Capsule has answered a request successfully: whatever window we remembered is over. */
-export function closeRateLimitWindow(): void {
-  state().until = 0;
+/**
+ * Capsule served a request that was SENT at `sentAt`: a window opened
+ * before then is over. A window opened after the request left (e.g. a
+ * tool call's 429 while a slow health probe was in flight) stays — the
+ * success says nothing about the quota after it was served.
+ */
+export function closeRateLimitWindow(sentAt: number = Number.POSITIVE_INFINITY): void {
+  const s = state();
+  if (s.openedAt <= sentAt) s.until = 0;
 }
 
 /** Test hook: forget a remembered rate-limit window. */
 export function _resetRateLimitStateForTests(): void {
-  closeRateLimitWindow();
+  const s = state();
+  s.until = 0;
+  s.openedAt = 0;
 }

@@ -79,7 +79,9 @@ advisories — two of them in direct runtime dependencies.
   builds, tests and packs without any credential; a second, the only
   holder of `id-token: write`, stages exactly that tarball. The
   workflow refuses non-tag refs, malformed versions, a dist-tag that
-  doesn't fit the version, and moving `latest` backwards.
+  doesn't fit the version, and moving `latest` backwards past what is
+  live when it runs — the maintainer approves only the newest pending
+  stage and rejects older ones (HOWTO.md, step 6).
   `publishConfig.provenance` makes an accidental workstation publish
   fail. Install snippets pin an exact version, and INSTALL.md *Release
   integrity* shows how to check an attestation's identity (repository,
@@ -119,10 +121,13 @@ advisories — two of them in direct runtime dependencies.
   Earlier versions clamped such a reset to a 60 s sleep followed by a
   retry guaranteed to 429 again, pinning a request slot for a minute
   per call — with fan-out tools one client could stall the connector
-  for everyone. Resets within 60 s are still waited out and retried
-  once — including a remembered window's last minute — and resets are
-  capped at Capsule's one-hour window. A successful token-health probe
-  closes a remembered window early. The forced
+  for everyone. A fresh `429` whose reset is within 60 s is still
+  waited out and retried once; a call made inside a remembered window
+  fails at once even in its last minute (a hidden sleep could outlast
+  an MCP client's own timeout, and a write would then land after the
+  client had given up). Resets are capped at Capsule's one-hour window,
+  and a wall-clock step cannot stretch one. A successful token-health
+  probe closes a window that was opened before the probe was sent. The forced
   `capsule.ratelimit` event gains `retried` and, for an immediate
   surface, `resetInMs`. The token-health probe is unaffected and keeps
   reporting what Capsule says.

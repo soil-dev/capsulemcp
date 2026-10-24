@@ -316,19 +316,22 @@ describe("doFetch retry-on-429", () => {
     expect(err.message).not.toMatch(/Infinity|NaN/);
   });
 
-  it("in the window's last minute a call waits it out and goes ahead", async () => {
+  it("in the window's last minute a call still fails fast — no hidden sleep a client could time out on", async () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
       const { openRateLimitWindow } = await import("../src/capsule/rate-limit-window.js");
       openRateLimitWindow(Date.now() + 30_000);
-      vi.mocked(fetch).mockResolvedValueOnce(makeResponse(200, { ok: true }));
-      const { capsuleGet } = await import("../src/capsule/client.js");
-      const promise = capsuleGet<{ ok: boolean }>("/parties");
-      await vi.advanceTimersByTimeAsync(29_000);
+      const { capsulePut } = await import("../src/capsule/client.js");
+      // Rejected at once: a write must never sit in a sleep and land
+      // after the MCP client has given up on the call (and retried it).
+      await expect(capsulePut("/parties/1", { party: {} })).rejects.toThrow(/about 1 min/);
       expect(vi.mocked(fetch)).not.toHaveBeenCalled();
-      await vi.advanceTimersByTimeAsync(1_100);
-      expect((await promise).data).toEqual({ ok: true });
+
+      vi.setSystemTime(new Date("2026-01-01T00:00:30.001Z"));
+      vi.mocked(fetch).mockResolvedValueOnce(makeResponse(200, { ok: true }));
+      expect(await capsulePut<{ ok: boolean }>("/parties/1", { party: {} })).toEqual({ ok: true });
+      expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
     } finally {
       vi.useRealTimers();
     }
@@ -358,7 +361,12 @@ describe("doFetch retry-on-429", () => {
     );
     const now = Date.now();
     openRateLimitWindow(now + 10 * 60_000);
-    expect(rateLimitWindowLeft(now - 2 * 60 * 60_000)).toBe(61 * 60_000);
+    const stepped = now - 2 * 60 * 60_000; // clock jumps two hours back
+    expect(rateLimitWindowLeft(stepped)).toBe(61 * 60_000);
+    // The deadline itself was pulled in, so the window really ENDS 61 min
+    // after the step — not two hours and ten minutes later.
+    expect(rateLimitWindowLeft(stepped + 30 * 60_000)).toBe(31 * 60_000);
+    expect(rateLimitWindowLeft(stepped + 61 * 60_000 + 1)).toBeLessThanOrEqual(0);
   });
 
   it("the window is shared by module copies loaded after vi.resetModules()", async () => {

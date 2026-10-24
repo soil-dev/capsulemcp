@@ -187,6 +187,7 @@ function reasonForThrow(err: unknown): HealthReason {
 
 async function probeToken(timeoutMs: number): Promise<TokenVerdict> {
   let status: number;
+  const sentAt = Date.now();
   try {
     ({ status } = await capsuleProbe(HEALTH_PROBE_PATH, timeoutMs));
   } catch (err) {
@@ -206,10 +207,10 @@ async function probeToken(timeoutMs: number): Promise<TokenVerdict> {
     };
   }
   if (status >= 200 && status < 300) {
-    // Capsule just served a request for this token: any rate-limit
-    // window remembered from an earlier 429 is over (it may have lifted
-    // early, or the local clock may run behind Capsule's).
-    closeRateLimitWindow();
+    // Capsule just served a request for this token: a rate-limit window
+    // remembered from a 429 BEFORE this probe was sent is over (it may
+    // have lifted early, or the local clock may run behind Capsule's).
+    closeRateLimitWindow(sentAt);
     return { token_status: "valid" };
   }
   if (status === 401) {

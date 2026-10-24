@@ -125,6 +125,10 @@ export function createApp(opts: AppOptions): express.Express {
   // its own body parser internally; we need access to req.body here,
   // so we duplicate the small parse. Both parses are idempotent.
   app.post("/token", express.urlencoded({ extended: false }), async (req, res, next) => {
+    // Answered here, before the SDK's token handler, so set what it would:
+    // CORS (a browser-based client must be able to read the error) and
+    // no-store (RFC 6749 §5.1 — token responses are never cached).
+    res.set({ "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store" });
     const sendInvalidClient = (description: string): void => {
       res.status(401).json({
         error: "invalid_client",
