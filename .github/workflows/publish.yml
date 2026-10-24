@@ -1,0 +1,138 @@
+# Publishes a tagged release to npm with a provenance attestation, using
+# npm Trusted Publishing (OIDC) — no npm token is stored anywhere.
+#
+# Manually dispatched by a maintainer, deliberately NOT triggered by tag
+# pushes: publishing stays an explicit human decision, but the tarball is
+# built, tested and signed here from the tagged commit instead of on a
+# workstation. npm then shows which workflow run and commit produced each
+# version, and a version published any other way visibly lacks that.
+#
+# Two jobs on purpose. `build` installs dependencies, runs the test suite
+# and packs the tarball WITHOUT the OIDC permission; `publish` holds
+# `id-token: write`, runs no third-party code beyond setup-node and npm,
+# and publishes exactly the tarball `build` produced. A compromised
+# dependency's install script or a hostile test can therefore never
+# request the token that publishes.
+#
+# One-time setup on npmjs.com (package capsulemcp → Settings):
+#   1. Trusted Publisher → GitHub Actions: organization/user `soil-dev`,
+#      repository `capsulemcp`, workflow filename `publish.yml`,
+#      environment `npm`.
+#   2. Publishing access → "Require two-factor authentication and
+#      disallow tokens", so a leaked or stolen token cannot publish.
+#
+# Run:  gh workflow run publish.yml -R soil-dev/capsulemcp -f tag=vX.Y.Z -f dist-tag=latest
+
+name: Publish to npm
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish (vX.Y.Z or vX.Y.Z-beta.N / -rc.N)"
+        required: true
+        type: string
+      dist-tag:
+        description: "npm dist-tag"
+        required: true
+        default: latest
+        type: choice
+        options: [latest, beta, next]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-npm
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build + test ${{ inputs.tag }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Validate inputs
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$'; then
+            echo "::error::tag must look like vX.Y.Z or vX.Y.Z-beta.N (got '$TAG')"
+            exit 1
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+
+      - name: package.json version matches the tag
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          v=$(node -p 'require("./package.json").version')
+          if [ "v$v" != "$TAG" ]; then
+            echo "::error::package.json version $v does not match tag $TAG"
+            exit 1
+          fi
+
+      # --ignore-scripts: no dependency lifecycle script runs in the
+      # release pipeline (the Dockerfile builds the same way).
+      - run: npm ci --ignore-scripts
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm test
+      - run: npm audit --audit-level=high
+
+      - name: Pack
+        run: npm pack --ignore-scripts
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: npm-tarball
+          path: capsulemcp-*.tgz
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: publish ${{ inputs.tag }} → npm (${{ inputs.dist-tag }})
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Named environment: the npm Trusted Publisher is bound to it, and
+    # GitHub lets you add required reviewers to it for a second key-turn.
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write # OIDC → npm trusted publishing + provenance
+    steps:
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: npm supports trusted publishing (>= 11.5.1)
+        run: |
+          node -e '
+            const v = process.argv[1];
+            const [a, b, c] = v.split(".").map(Number);
+            if (a < 11 || (a === 11 && (b < 5 || (b === 5 && c < 1)))) {
+              console.error("npm " + v + " is too old for trusted publishing (need >= 11.5.1)");
+              process.exit(1);
+            }
+          ' "$(npm --version)"
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: npm-tarball
+
+      - name: Publish
+        env:
+          DIST_TAG: ${{ inputs.dist-tag }}
+        run: npm publish ./capsulemcp-*.tgz --provenance --access public --tag "$DIST_TAG"

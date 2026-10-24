@@ -508,7 +508,7 @@ fourth for the token-health probe (see DEPLOY.md *Health check*):
 |---|---|---|
 | `capsule.timeout` | the 60s `AbortController` fires — waiting for headers (fetch stage) **or** mid-body (`res.json()` / stream read) | `method`, `path` (redacted), `elapsedMs`, `timeoutMs` |
 | `capsule.error` | the fetch rejects before headers (connection refused/reset/DNS) | `method`, `path`, `elapsedMs`, `code?` (e.g. `ECONNRESET`, `UND_ERR_CONNECT_TIMEOUT`) |
-| `capsule.ratelimit` | the single 429 retry is also throttled (after up to 60s of backoff) | `method`, `path`, `elapsedMs`, `status: 429` |
+| `capsule.ratelimit` | a call ends in 429: Capsule's reset is more than 60 s away, so the 429 is surfaced at once with no sleep and no retry (`retried: false`); or the reset was within 60 s, the connector waited, and the single retry was throttled too (`retried: true`) | `method`, `path`, `elapsedMs`, `status: 429`, `retried`, `resetInMs?` |
 | `capsule.auth` | the token-health probe (`GET /users/current`, 8 s deadline, cached 60 s) produces its first verdict or `token_status` changes — at startup and on a `/health` re-probe that flips the verdict | `severity` (`INFO` \| `WARNING` \| `ERROR`), `token_status` (`valid` \| `rejected` \| `unreachable`), `reason?` (closed vocabulary: `unauthorized`, `forbidden`, `http_<status>`, `timeout`, `network_error`, `config_error`) |
 
 The first three also increment `tool.chain.capsuleCalls` (`capsule.auth` does not — the probe never runs inside a `/mcp` request), so a `/mcp` request

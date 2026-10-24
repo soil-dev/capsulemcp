@@ -228,3 +228,31 @@ describe("tools/list response carries inferred annotations", () => {
     expect(result.tools.length).toBe(92);
   });
 });
+
+// Read-only tools must never steer the model into a write to answer a
+// read question. The 2026-10 security review found list_teams telling
+// the model to "probe" team membership via update_project /
+// batch_update_opportunity — real mutations of live records.
+describe("read-only tool descriptions do not advise writes as probes", () => {
+  it("list_teams points at the web UI and forbids mutation-as-probe", async () => {
+    process.env["CAPSULE_API_TOKEN"] = "test-token";
+    vi.resetModules();
+    const { createCapsuleMcpServer } = await import("../src/server.js");
+    const [clientT, serverT] = InMemoryTransport.createLinkedPair();
+    const client = new Client(
+      { name: "descriptions-test", version: "0.0.0" },
+      { capabilities: {} },
+    );
+    await Promise.all([createCapsuleMcpServer().connect(serverT), client.connect(clientT)]);
+    const { tools } = await client.listTools();
+    const description = tools.find((t) => t.name === "list_teams")?.description ?? "";
+    expect(description).not.toMatch(/\b(update|batch_update|create|delete)_[a-z_]+\b/);
+    expect(description).toMatch(/Do NOT update/);
+    for (const t of tools.filter((x) => x.annotations?.readOnlyHint)) {
+      expect(t.description ?? "", t.name).not.toMatch(
+        /\bprobe via `?(update|batch_update|create|delete)_/i,
+      );
+    }
+    delete process.env["CAPSULE_API_TOKEN"];
+  });
+});

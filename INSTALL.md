@@ -22,7 +22,7 @@ Paste this into the file (merge with existing `mcpServers` if you have other con
   "mcpServers": {
     "capsule": {
       "command": "npx",
-      "args": ["-y", "capsulemcp"],
+      "args": ["-y", "capsulemcp@2.4.0"],
       "env": {
         "CAPSULE_API_TOKEN": "<your read-scoped capsule token>",
         "CAPSULE_MCP_READONLY": "1"
@@ -34,7 +34,7 @@ Paste this into the file (merge with existing `mcpServers` if you have other con
 
 Restart Claude Desktop. The Capsule tools appear in the tool picker.
 
-> **Version pinning.** Replace `"capsulemcp"` with `"capsulemcp@2.4.0"` (or any other published version) to pin. By default `npx` resolves to the `latest` tag on npm; for production setups pinning is the safer choice.
+> **Version pinning.** The snippet pins an exact version. Upgrade deliberately by changing it after reading the [release notes](https://github.com/soil-dev/capsulemcp/releases). See [Release integrity](#release-integrity) before switching to the unpinned form.
 >
 > **First launch.** `npx` downloads the pre-built package from npm (a couple of seconds, much faster than the old GitHub-ref flow that had to clone + install + build). Subsequent launches are instant from the npx cache.
 
@@ -51,7 +51,7 @@ Same flags, same env, just installs from a git clone instead of the npm tarball.
 ## Path 2 — Claude Code
 
 ```sh
-claude mcp add capsule --env CAPSULE_API_TOKEN=<your token> -- npx -y capsulemcp
+claude mcp add capsule --env CAPSULE_API_TOKEN=<your token> --env CAPSULE_MCP_READONLY=1 -- npx -y capsulemcp@2.4.0
 ```
 
 This writes the entry to Claude Code's MCP config (`~/.claude.json`). Same `env` model as Claude Desktop's JSON — no shell-export needed.
@@ -60,10 +60,17 @@ If you'd rather not have the token in `~/.claude.json`, omit the `--env` flag an
 
 ```sh
 export CAPSULE_API_TOKEN=<your token>
-claude mcp add capsule -- npx -y capsulemcp
+claude mcp add capsule --env CAPSULE_MCP_READONLY=1 -- npx -y capsulemcp@2.4.0
 ```
 
-To pin a version, replace `capsulemcp` with `capsulemcp@2.4.0`. To install from a GitHub ref instead of npm (development / fork tracking), replace it with `github:soil-dev/capsulemcp#v2.4.0`.
+Drop `CAPSULE_MCP_READONLY=1` only if you want the write tools (and use a write-scoped token for them). To install from a GitHub ref instead of npm (development / fork tracking), replace `capsulemcp@2.4.0` with `github:soil-dev/capsulemcp#v2.4.0`.
+
+## Release integrity
+
+The connector runs on your machine with your Capsule API token in its environment — if you give it a write-scoped token, any code it runs can change or delete CRM data. Two habits keep you in control of *which* code that is:
+
+- **Pin an exact version** (`capsulemcp@X.Y.Z`, as in the snippets above). The unpinned form, `npx -y capsulemcp`, runs whatever npm's `latest` tag points to at the next launch — convenient, and it picks up fixes automatically, but a compromised publish would reach you without any action on your part. Prefer the pinned form, and always with a write-scoped token.
+- **Check provenance before upgrading.** Releases are published from this repository's [`publish.yml`](.github/workflows/publish.yml) GitHub Actions workflow with an npm provenance attestation, which records the exact commit and workflow run that built the tarball. On [npmjs.com/package/capsulemcp](https://www.npmjs.com/package/capsulemcp) the version page shows "Built and signed on GitHub Actions" with a link to that run; from a terminal, `npm view capsulemcp@X.Y.Z dist.attestations` should print an entry whose `provenance.predicateType` is `https://slsa.dev/provenance/v1`. Versions up to and including 2.4.0 predate the workflow and carry none; for anything newer, a missing attestation means the tarball was not built by this repository — don't install it, and please report it (see [SECURITY.md](SECURITY.md)).
 
 ## Path 3 — Manual install (for development)
 

@@ -34,6 +34,10 @@
  *                         across instances)
  *
  * Optional env:
+ *   MCP_HTTP_HOST         Bind address (IP literal or "localhost"). Default:
+ *                         loopback in insecure-auto-approve mode with a
+ *                         loopback PUBLIC_BASE_URL, all interfaces otherwise.
+ *                         See resolveListenHost in src/http/config.ts.
  *   PORT                  Listen port (default 8080; Cloud Run injects)
  *   CAPSULE_MCP_READONLY  Same semantics as the stdio server
  *   MCP_HTTP_JSON_LIMIT   Body size cap for inbound JSON (default 35mb;
@@ -70,7 +74,7 @@
 import { isReadOnly } from "./capsule/client.js";
 import { checkCapsuleHealth, tokenRejectedWarning } from "./capsule/health.js";
 import { OAuthProvider, InMemoryClientsStore, FixedClientStore } from "./auth/provider.js";
-import { resolveBaseConfig, selectMode } from "./http/config.js";
+import { resolveBaseConfig, resolveListenHost, selectMode } from "./http/config.js";
 import { createApp } from "./http/app.js";
 
 // ── Module top-level: wire the pure config helpers into a running server ────
@@ -90,6 +94,10 @@ const { publicBaseUrl, signingKey, port, jsonLimit, trustProxy } = baseResult.ok
 const modeResult = selectMode(process.env, publicBaseUrl);
 if ("error" in modeResult) fatal(modeResult.error);
 const mode = modeResult.ok;
+
+const hostResult = resolveListenHost(process.env, mode, publicBaseUrl);
+if ("error" in hostResult) fatal(hostResult.error);
+const listenHost = hostResult.ok;
 
 const issuerUrl = new URL(publicBaseUrl);
 const mcpResourceUrl = new URL("/mcp", issuerUrl);
@@ -124,11 +132,12 @@ const app = createApp({
   trustProxy,
 });
 
-app.listen(port, () => {
+const onListening = () => {
   const readMode = isReadOnly() ? "read-only" : "read-write";
   const authLabel = mode.kind === "static-client" ? "static-client" : "INSECURE_AUTO_APPROVE";
+  const bound = listenHost === undefined ? `*:${port} (all interfaces)` : `${listenHost}:${port}`;
   console.log(
-    `[capsulemcp] HTTP server listening on :${port} | mode=${readMode} | auth=${authLabel} | issuer=${issuerUrl}`,
+    `[capsulemcp] HTTP server listening on ${bound} | mode=${readMode} | auth=${authLabel} | issuer=${issuerUrl}`,
   );
   if (mode.kind === "insecure-auto-approve") {
     console.warn(
@@ -163,4 +172,7 @@ app.listen(port, () => {
       const message = err instanceof Error ? err.message : String(err);
       console.warn(`[capsulemcp] WARNING: token-health probe failed at startup: ${message}`);
     });
-});
+};
+
+if (listenHost === undefined) app.listen(port, onListening);
+else app.listen(port, listenHost, onListening);

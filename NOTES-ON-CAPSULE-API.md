@@ -477,12 +477,13 @@ proactively before hitting 429.
 
 **Where in our code:** [`src/capsule/client.ts`](src/capsule/client.ts)
 `parseRateLimitDelay()` honours `X-RateLimit-Reset` first, falls
-back to `Retry-After` defensively, then to a 5-second default. The
-delay is clamped at 60 seconds so a far-future reset can't block a
-Cloud Run request indefinitely; if Capsule says "wait 50 minutes" we
-wait the clamped 60 s, retry once, and surface the 429 only if that
-retry is also throttled — we never hold the connection open for the
-full reset window.
+back to `Retry-After` defensively, then to a 5-second default. A
+reset within 60 seconds is waited out and retried once; a reset
+further out than that is surfaced immediately — one request, no
+sleep, no retry — with the time left in the error message, because a
+retry before the reset is guaranteed to 429 again. (Up to v2.4.0 a
+far-future reset was clamped to a 60 s sleep followed by that doomed
+retry, pinning a request slot for a minute per call.)
 
 **Quote** — Capsule's response-handling docs at
 <https://developer.capsulecrm.com/v2/overview/handling-api-responses>:

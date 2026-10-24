@@ -38,8 +38,10 @@
  *                ratelimit (one per failed call — forced/always-on, so a
  *                hung, connection-failed, or rate-limited call is never
  *                invisible). timeout covers BOTH the fetch stage and a
- *                mid-body stall; ratelimit fires when the single 429
- *                retry is also throttled. All three feed
+ *                mid-body stall; ratelimit fires when a call ends in
+ *                429 — surfaced at once when Capsule's reset is more
+ *                than 60 s away, else after one throttled retry. All
+ *                three feed
  *                `tool.chain.capsuleCalls`. auth (forced/always-on):
  *                the token-health probe's verdict, emitted at startup
  *                and whenever it changes — see src/capsule/health.ts.

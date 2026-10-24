@@ -11,7 +11,7 @@ npm install
 npm test
 ```
 
-650 tests, all mocked — no Capsule API calls happen, no token needed. The suite has three layers:
+667 tests, all mocked — no Capsule API calls happen, no token needed. The suite has three layers:
 
 - **Per-tool unit tests** (e.g. `tests/parties.test.ts`): import the tool function, mock `undici.fetch`, assert on the URL, method, body, and response handling. Most tests live here.
 - **MCP-protocol integration tests** (`tests/mcp-integration.test.ts`): drive a real `McpServer` through the wire protocol via the SDK's in-memory transport pair, with `undici.fetch` still mocked. Catches the layer between "tool function works" and "MCP correctly registers and dispatches the tool". Includes the `get_attachment` content-type routing logic (which lives in `server.ts`, not the tool function).
@@ -46,7 +46,7 @@ for the contributor-facing summary.
 npm run build
 ```
 
-Produces `dist/index.js` (stdio entry, ~184 KB, with `#!/usr/bin/env node` shebang and the executable bit set) and `dist/http.js` (HTTP entry, ~218 KB, no shebang). Each is fully self-contained — tsup runs as two separate configs so the stdio entry can be invoked directly via npx while the HTTP entry isn't a CLI. tsup target is Node 22 (undici 8 requires Node 22+ for the `webidl.util.markAsUncloneable` runtime API).
+Produces `dist/index.js` (stdio entry, ~185 KB, with `#!/usr/bin/env node` shebang and the executable bit set) and `dist/http.js` (HTTP entry, ~221 KB, no shebang). Each is fully self-contained — tsup runs as two separate configs so the stdio entry can be invoked directly via npx while the HTTP entry isn't a CLI. tsup target is Node 22 (undici 8 requires Node 22+ for the `webidl.util.markAsUncloneable` runtime API).
 
 `npm run build` also chains `npm run build:icon` (`scripts/build-icon.mjs`), which regenerates `src/icon.ts` from the canonical `assets/icon.svg`. The TypeScript file is committed (so typecheck works without a build step) but is **generated** — edit the SVG, then run the build. A drift-guard test (`tests/icon-source.test.ts`) fails CI if the two ever fall out of sync.
 
@@ -248,15 +248,21 @@ git push origin vX.Y.Z
 # 5. GitHub Release with notes — pass --latest for stable releases, omit it for pre-releases
 gh release create vX.Y.Z --latest --title "vX.Y.Z — title" --notes "<release notes>"
 
-# 6. npm publish — paste-the-tag-first, npm-second so the GitHub tag is canonical
-npm publish --tag latest        # for stable releases (X.Y.Z)
-# or
-npm publish --tag beta          # for beta pre-releases (X.Y.Z-beta.N)
-# or
-npm publish --tag next          # for release candidates (X.Y.Z-rc.N)
+# 6. npm publish — via the publish workflow, NOT from a workstation. It builds,
+#    tests and packs the tag in one job, then publishes that exact tarball from a
+#    second job via npm Trusted Publishing (OIDC) with a provenance attestation.
+#    Tag first, npm second, so the GitHub tag is canonical.
+gh workflow run publish.yml -f tag=vX.Y.Z -f dist-tag=latest   # stable (X.Y.Z)
+#    dist-tag=beta for X.Y.Z-beta.N, dist-tag=next for X.Y.Z-rc.N
+gh run watch "$(gh run list --workflow=publish.yml --limit 1 --json databaseId --jq '.[0].databaseId')" --exit-status
+
+# 7. Verify: the version carries a provenance attestation
+npm view capsulemcp@X.Y.Z dist.attestations   # → provenance.predicateType https://slsa.dev/provenance/v1
 ```
 
-After step 6 lands, `npx capsulemcp` (or `npx capsulemcp@X.Y.Z` to pin) picks up the new version from the npm registry immediately. The GitHub-ref install (`npx -y github:soil-dev/capsulemcp#vX.Y.Z`) also works and is documented as the fallback / development path for users tracking a fork or unreleased branch.
+`package.json` sets `publishConfig.provenance: true`, so a stray `npm publish` from a workstation fails ("provenance generation is not supported") instead of shipping an unattested tarball. One-time setup for the workflow — the npm Trusted Publisher binding and "require 2FA, disallow tokens" — is described at the top of [`.github/workflows/publish.yml`](.github/workflows/publish.yml).
+
+After step 6 lands, `npx capsulemcp@X.Y.Z` (or unpinned `npx capsulemcp`) picks up the new version from the npm registry immediately. The GitHub-ref install (`npx -y github:soil-dev/capsulemcp#vX.Y.Z`) also works and is documented as the fallback / development path for users tracking a fork or unreleased branch.
 
 If you also publish a container image and deploy from it, do the image-build + IaC-apply *after* the tag is on GitHub — the tag is the authoritative ref the image build clones from. See [DEPLOY.md](DEPLOY.md) for one worked example (Cloud Run from source) and adapt to your platform.
 

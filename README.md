@@ -36,7 +36,7 @@ For most individual users the install is a single JSON snippet pasted into Claud
      "mcpServers": {
        "capsule": {
          "command": "npx",
-         "args": ["-y", "capsulemcp"],
+         "args": ["-y", "capsulemcp@2.4.0"],
          "env": {
            "CAPSULE_API_TOKEN": "<paste token here>",
            "CAPSULE_MCP_READONLY": "1"
@@ -48,7 +48,7 @@ For most individual users the install is a single JSON snippet pasted into Claud
 
 3. Restart Claude Desktop. The Capsule tools appear in the tool picker.
 
-That's it. The first launch fetches the package from npm (a few seconds); subsequent launches are instant from the npx cache. To pin a specific version, use `"capsulemcp@2.4.0"` in `args`. If you're tracking a fork or an unreleased branch, use the GitHub-ref form instead: `"github:soil-dev/capsulemcp#v2.4.0"` — same arguments, just installs from a git clone rather than the npm registry. See [INSTALL.md](INSTALL.md) for the Claude Code path, manual install, and troubleshooting.
+That's it. The first launch fetches the package from npm (a few seconds); subsequent launches are instant from the npx cache. The snippet pins an exact version on purpose: the connector runs with your Capsule token in its environment, so you should decide when new code runs with it — upgrade by changing the version after reading the [release notes](https://github.com/soil-dev/capsulemcp/releases). Plain `"capsulemcp"` (unpinned) always runs the newest release instead; see [INSTALL.md](INSTALL.md#release-integrity) for the trade-off and how to verify a release's provenance. If you're tracking a fork or an unreleased branch, use the GitHub-ref form: `"github:soil-dev/capsulemcp#v2.4.0"` — same arguments, installs from a git clone rather than the npm registry. See [INSTALL.md](INSTALL.md) for the Claude Code path, manual install, and troubleshooting.
 
 ## Tools
 

@@ -4,6 +4,8 @@
  * top-level server-startup code in `src/http.ts`.
  */
 
+import { isIP } from "node:net";
+
 // Anthropic's known Custom Connector callback URIs. Used as the default
 // redirect_uris allow-list in static-client mode when the env var is not
 // set. Update as Anthropic publishes new ones.
@@ -126,6 +128,70 @@ export function selectMode(
       "  - Set MCP_OAUTH_CLIENT_ID and MCP_OAUTH_CLIENT_SECRET (recommended for public deployments)\n" +
       "  - Or set MCP_OAUTH_INSECURE_AUTO_APPROVE=1 (only safe for local development or private-network deployments)",
   };
+}
+
+// ── Listen address ──────────────────────────────────────────────────────────
+
+/** True for an address that only accepts connections from this machine. */
+export function isLoopbackAddress(host: string): boolean {
+  if (host === "localhost" || host === "::1") return true;
+  return isIP(host) === 4 && host.startsWith("127.");
+}
+
+export type ListenHostResult = { ok: string | undefined } | { error: string };
+
+/**
+ * The address `app.listen` binds to; `undefined` means every interface.
+ *
+ * Why this exists. `selectMode`'s loopback check only inspects the
+ * `PUBLIC_BASE_URL` string the operator typed — it says nothing about
+ * where the socket listens. Before this, insecure-auto-approve mode
+ * with `PUBLIC_BASE_URL=http://localhost:…` still bound every
+ * interface, so anyone on the same network (office or café Wi-Fi, a
+ * VPN, a `docker run -p` that publishes on all host interfaces) could
+ * POST /register and use the configured Capsule token. Now:
+ *
+ *   - `MCP_HTTP_HOST` set → bind exactly that (an IP literal or
+ *     `localhost`). In insecure-auto-approve mode a non-loopback value
+ *     additionally requires `MCP_OAUTH_I_KNOW_WHAT_IM_DOING=yes` — the
+ *     same acknowledgement the mode needs for a non-loopback URL.
+ *   - insecure-auto-approve with a loopback `PUBLIC_BASE_URL` → bind
+ *     loopback only (`::1` when the URL names it, else `127.0.0.1`).
+ *     A loopback URL means the operator intends local-only access, so
+ *     the socket now matches. Containers that publish the port need an
+ *     explicit `MCP_HTTP_HOST=0.0.0.0` plus the acknowledgement.
+ *   - everything else (static-client mode, or insecure mode already
+ *     acknowledged for a non-loopback URL) → every interface, as
+ *     before; a container platform such as Cloud Run needs that.
+ */
+export function resolveListenHost(
+  env: NodeJS.ProcessEnv,
+  mode: Mode,
+  publicBaseUrl: string,
+): ListenHostResult {
+  const acknowledged = env["MCP_OAUTH_I_KNOW_WHAT_IM_DOING"]?.toLowerCase() === "yes";
+  const explicit = env["MCP_HTTP_HOST"]?.trim();
+  if (explicit) {
+    if (explicit !== "localhost" && isIP(explicit) === 0) {
+      return {
+        error: `MCP_HTTP_HOST must be an IP address (e.g. 127.0.0.1, 0.0.0.0, ::) or "localhost"; got ${JSON.stringify(explicit)}.`,
+      };
+    }
+    if (mode.kind === "insecure-auto-approve" && !isLoopbackAddress(explicit) && !acknowledged) {
+      return {
+        error:
+          `MCP_HTTP_HOST=${explicit} would expose insecure-auto-approve mode beyond this machine: anyone who ` +
+          "can reach that address could register an OAuth client and use the configured Capsule token. Bind a " +
+          "loopback address, or set MCP_OAUTH_I_KNOW_WHAT_IM_DOING=yes to acknowledge the risk (private networks only).",
+      };
+    }
+    return { ok: explicit };
+  }
+  if (mode.kind === "insecure-auto-approve" && isLocalhostUrl(publicBaseUrl)) {
+    const hostname = new URL(publicBaseUrl).hostname;
+    return { ok: hostname === "[::1]" || hostname === "::1" ? "::1" : "127.0.0.1" };
+  }
+  return { ok: undefined };
 }
 
 // ── Base-config validation ──────────────────────────────────────────────────

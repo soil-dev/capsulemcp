@@ -173,11 +173,35 @@ describe("fetch-stage failure events (forced, verbose-independent)", () => {
     expect(rl[0]!["method"]).toBe("GET");
     expect(rl[0]!["path"]).toBe("/api/v2/parties");
     expect(rl[0]!["status"]).toBe(429);
+    expect(rl[0]!["retried"]).toBe(true);
     expect(typeof rl[0]!["elapsedMs"]).toBe("number");
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
     // It is a 429, not a fetch-stage failure.
     expect(events("capsule.timeout")).toHaveLength(0);
     expect(events("capsule.error")).toHaveLength(0);
+  });
+
+  it("a far-future reset emits capsule.ratelimit with retried:false + resetInMs after ONE request", async () => {
+    const r429 = {
+      status: 429,
+      ok: false,
+      headers: new Headers({ "X-RateLimit-Reset": String(Math.floor(Date.now() / 1000) + 3600) }),
+      json: async () => ({ message: "rate limited" }),
+      text: async () => "",
+      statusText: "429",
+      body: { cancel: async () => undefined },
+    } as unknown as Awaited<ReturnType<typeof fetch>>;
+    vi.mocked(fetch).mockResolvedValueOnce(r429);
+
+    const { capsuleGet } = await import("../src/capsule/client.js");
+    await expect(capsuleGet("/parties/123456789")).rejects.toThrow(/Not retried/);
+
+    const rl = events("capsule.ratelimit");
+    expect(rl).toHaveLength(1);
+    expect(rl[0]!["retried"]).toBe(false);
+    expect(rl[0]!["resetInMs"]).toBeGreaterThan(60_000);
+    expect(rl[0]!["path"]).toBe("/api/v2/parties/:id");
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
   });
 
   it("capsule.error falls back to the error name when no code/cause.code is present", async () => {
