@@ -151,15 +151,20 @@ export type ListenHostResult = { ok: string | undefined } | { error: string };
  * VPN, a `docker run -p` that publishes on all host interfaces) could
  * POST /register and use the configured Capsule token. Now:
  *
- *   - `MCP_HTTP_HOST` set → bind exactly that (an IP literal or
- *     `localhost`). In insecure-auto-approve mode a non-loopback value
- *     additionally requires `MCP_OAUTH_I_KNOW_WHAT_IM_DOING=yes` — the
- *     same acknowledgement the mode needs for a non-loopback URL.
+ *   - `MCP_HTTP_HOST` set → bind exactly that IP literal. (Not
+ *     `localhost`: Node binds only the first address it resolves to —
+ *     `::1` on many systems — so `localhost` could leave the advertised
+ *     `127.0.0.1` issuer unreachable.) In insecure-auto-approve mode a
+ *     non-loopback value additionally requires
+ *     `MCP_OAUTH_I_KNOW_WHAT_IM_DOING=yes` — the same acknowledgement
+ *     the mode needs for a non-loopback URL.
  *   - insecure-auto-approve with a loopback `PUBLIC_BASE_URL` → bind
- *     loopback only (`::1` when the URL names it, else `127.0.0.1`).
- *     A loopback URL means the operator intends local-only access, so
- *     the socket now matches. Containers that publish the port need an
- *     explicit `MCP_HTTP_HOST=0.0.0.0` plus the acknowledgement.
+ *     `127.0.0.1`. (`resolveBaseConfig` has already ruled out
+ *     `http://[::1]`, and clients connecting to `http://localhost` fall
+ *     back from `::1` to `127.0.0.1`.) A loopback URL means the
+ *     operator intends local-only access, so the socket now matches.
+ *     Containers that publish the port need an explicit
+ *     `MCP_HTTP_HOST=0.0.0.0` plus the acknowledgement.
  *   - everything else (static-client mode, or insecure mode already
  *     acknowledged for a non-loopback URL) → every interface, as
  *     before; a container platform such as Cloud Run needs that.
@@ -172,9 +177,9 @@ export function resolveListenHost(
   const acknowledged = env["MCP_OAUTH_I_KNOW_WHAT_IM_DOING"]?.toLowerCase() === "yes";
   const explicit = env["MCP_HTTP_HOST"]?.trim();
   if (explicit) {
-    if (explicit !== "localhost" && isIP(explicit) === 0) {
+    if (isIP(explicit) === 0) {
       return {
-        error: `MCP_HTTP_HOST must be an IP address (e.g. 127.0.0.1, 0.0.0.0, ::) or "localhost"; got ${JSON.stringify(explicit)}.`,
+        error: `MCP_HTTP_HOST must be an IP address such as 127.0.0.1, ::1, 0.0.0.0 or ::; got ${JSON.stringify(explicit)}.`,
       };
     }
     if (mode.kind === "insecure-auto-approve" && !isLoopbackAddress(explicit) && !acknowledged) {
@@ -188,8 +193,7 @@ export function resolveListenHost(
     return { ok: explicit };
   }
   if (mode.kind === "insecure-auto-approve" && isLocalhostUrl(publicBaseUrl)) {
-    const hostname = new URL(publicBaseUrl).hostname;
-    return { ok: hostname === "[::1]" || hostname === "::1" ? "::1" : "127.0.0.1" };
+    return { ok: "127.0.0.1" };
   }
   return { ok: undefined };
 }
@@ -267,6 +271,15 @@ export function resolveBaseConfig(env: NodeJS.ProcessEnv = process.env): BaseCon
   if (!isHttps && !isHttpLocal) {
     return {
       error: `PUBLIC_BASE_URL must be https://… (or http://localhost for development); got ${parsedBaseUrl.protocol}//${parsedBaseUrl.hostname}.`,
+    };
+  }
+  // The MCP SDK's auth router only exempts `localhost` and `127.0.0.1`
+  // from its https-issuer rule; an http://[::1] issuer would pass this
+  // validation and then crash startup with an uncaught stack trace.
+  if (parsedBaseUrl.protocol === "http:" && parsedBaseUrl.hostname === "[::1]") {
+    return {
+      error:
+        "PUBLIC_BASE_URL http://[::1] is not supported: the OAuth layer only accepts a plain-http issuer for localhost or 127.0.0.1. Use http://localhost:<port> instead.",
     };
   }
 

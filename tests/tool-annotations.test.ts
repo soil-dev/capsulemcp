@@ -232,9 +232,26 @@ describe("tools/list response carries inferred annotations", () => {
 // Read-only tools must never steer the model into a write to answer a
 // read question. The 2026-10 security review found list_teams telling
 // the model to "probe" team membership via update_project /
-// batch_update_opportunity — real mutations of live records.
+// batch_update_opportunity — real mutations of live records. The check
+// is sentence-level: probe-style wording next to a real write-tool name
+// (taken from tools/list, so new write tools are covered automatically)
+// or next to prose that targets an arbitrary record. Negated sentences
+// ("Do NOT update …") are the warning itself and are exempt.
+const PROBE_WORDING =
+  /\b(probe|probing|determine whether|verify whether|check whether|find out whether|find out if|test whether|read the (response|422|error))\b/i;
+const ARBITRARY_RECORD = /\bon (any|a|an|some) (project|opportunity|party|record|entity|deal)\b/i;
+const NEGATED = /\b(do not|don't|never)\b/i;
+
+function findProbeAdvice(text: string, writeTools: string[]): string[] {
+  const writeName = new RegExp(`\\b(${writeTools.join("|")})\\b`);
+  return text
+    .split(/(?<=[.!?])\s+|\n/)
+    .filter((sentence) => PROBE_WORDING.test(sentence) && !NEGATED.test(sentence))
+    .filter((sentence) => writeName.test(sentence) || ARBITRARY_RECORD.test(sentence));
+}
+
 describe("read-only tool descriptions do not advise writes as probes", () => {
-  it("list_teams points at the web UI and forbids mutation-as-probe", async () => {
+  async function catalog() {
     process.env["CAPSULE_API_TOKEN"] = "test-token";
     vi.resetModules();
     const { createCapsuleMcpServer } = await import("../src/server.js");
@@ -245,14 +262,44 @@ describe("read-only tool descriptions do not advise writes as probes", () => {
     );
     await Promise.all([createCapsuleMcpServer().connect(serverT), client.connect(clientT)]);
     const { tools } = await client.listTools();
-    const description = tools.find((t) => t.name === "list_teams")?.description ?? "";
-    expect(description).not.toMatch(/\b(update|batch_update|create|delete)_[a-z_]+\b/);
-    expect(description).toMatch(/Do NOT update/);
-    for (const t of tools.filter((x) => x.annotations?.readOnlyHint)) {
-      expect(t.description ?? "", t.name).not.toMatch(
-        /\bprobe via `?(update|batch_update|create|delete)_/i,
-      );
-    }
     delete process.env["CAPSULE_API_TOKEN"];
+    const writeTools = tools.filter((t) => !t.annotations?.readOnlyHint).map((t) => t.name);
+    return { tools, writeTools };
+  }
+
+  it("no read-only tool's description or schema advises a write as a probe", async () => {
+    const { tools, writeTools } = await catalog();
+    expect(writeTools.length).toBeGreaterThan(30);
+    for (const t of tools.filter((x) => x.annotations?.readOnlyHint)) {
+      const text = `${t.description ?? ""} ${JSON.stringify(t.inputSchema)}`;
+      expect(findProbeAdvice(text, writeTools), t.name).toEqual([]);
+    }
+  });
+
+  it("list_teams points at the web UI and forbids mutation-as-probe", async () => {
+    const { tools } = await catalog();
+    const description = tools.find((t) => t.name === "list_teams")?.description ?? "";
+    expect(description).toMatch(/web UI/);
+    expect(description).toMatch(/Do NOT update/);
+  });
+
+  it("the check catches the regressions the review demonstrated", async () => {
+    const { writeTools } = await catalog();
+    for (const mutation of [
+      "To determine whether a given user belongs to a given team, either check the web UI, or probe via `update_project { ownerId: U, teamId: T }` and read the response.",
+      "To determine whether a user belongs to a team, call `update_project { id, ownerId: U, teamId: T }` and read the response.",
+      "If unsure, probe using `add_tag` and see whether it sticks.",
+      "Or probe via `apply_track` / `add_tag` and read the response.",
+      "To check whether U is in T, set ownerId and teamId on any project and read the 422.",
+    ]) {
+      expect(findProbeAdvice(mutation, writeTools), mutation).not.toEqual([]);
+    }
+    // ...while the shipped warning itself is not flagged.
+    expect(
+      findProbeAdvice(
+        "Do NOT update a project, opportunity or party to test membership: those are real writes to live records, not probes.",
+        writeTools,
+      ),
+    ).toEqual([]);
   });
 });

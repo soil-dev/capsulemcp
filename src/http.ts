@@ -34,7 +34,7 @@
  *                         across instances)
  *
  * Optional env:
- *   MCP_HTTP_HOST         Bind address (IP literal or "localhost"). Default:
+ *   MCP_HTTP_HOST         Bind address (an IP literal). Default:
  *                         loopback in insecure-auto-approve mode with a
  *                         loopback PUBLIC_BASE_URL, all interfaces otherwise.
  *                         See resolveListenHost in src/http/config.ts.
@@ -132,10 +132,22 @@ const app = createApp({
   trustProxy,
 });
 
-const onListening = () => {
+const bound =
+  listenHost === undefined
+    ? `*:${port} (all interfaces)`
+    : listenHost.includes(":")
+      ? `[${listenHost}]:${port}`
+      : `${listenHost}:${port}`;
+
+// Express 5 passes a bind failure (EADDRINUSE, EADDRNOTAVAIL for an
+// address this host doesn't have, EACCES) to this same callback.
+// Without the check the process would print "listening on …", start
+// the token probe, and exit 0 — so a supervisor's restart-on-failure
+// would never fire.
+const onListening = (err?: Error) => {
+  if (err) fatal(`cannot listen on ${bound}: ${err.message}`);
   const readMode = isReadOnly() ? "read-only" : "read-write";
   const authLabel = mode.kind === "static-client" ? "static-client" : "INSECURE_AUTO_APPROVE";
-  const bound = listenHost === undefined ? `*:${port} (all interfaces)` : `${listenHost}:${port}`;
   console.log(
     `[capsulemcp] HTTP server listening on ${bound} | mode=${readMode} | auth=${authLabel} | issuer=${issuerUrl}`,
   );

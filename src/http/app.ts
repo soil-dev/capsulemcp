@@ -422,5 +422,57 @@ a{color:#1e3a8a}
   app.get("/mcp", ...mcpGuards, methodNotAllowed);
   app.delete("/mcp", ...mcpGuards, methodNotAllowed);
 
+  // ── Terminal error handler ───────────────────────────────────────────────
+  // Errors raised before a route handler runs — body-parser rejecting a
+  // malformed, oversized or wrongly-encoded body on /mcp, /token, or the
+  // SDK's /register and /revoke — would otherwise reach Express's
+  // default handler. Since express 5.3.0 that handler logs the whole
+  // error object, and body-parser attaches the raw request body to it
+  // (`err.body`): tool arguments on /mcp, the client_secret on /token.
+  // Outside production it also answers with an HTML stack trace. This
+  // handler logs only low-cardinality fields and answers with a fixed
+  // shape — never the body, never a stack.
+  app.use(
+    (err: unknown, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+      const e = (err && typeof err === "object" ? err : {}) as Record<string, unknown>;
+      const rawStatus = Number(e["status"] ?? e["statusCode"]);
+      const status =
+        Number.isInteger(rawStatus) && rawStatus >= 400 && rawStatus <= 599 ? rawStatus : 500;
+      const kind = String(
+        typeof e["type"] === "string"
+          ? e["type"]
+          : typeof e["name"] === "string"
+            ? e["name"]
+            : "error",
+      ).slice(0, 64);
+      console.error(
+        `[capsulemcp] ${req.method} ${JSON.stringify(req.path.slice(0, 64))} rejected: ${kind} ${status}`,
+      );
+      if (res.headersSent) {
+        req.socket.destroy();
+        return;
+      }
+      if (req.path === "/mcp") {
+        res.status(status).json({
+          jsonrpc: "2.0",
+          error: {
+            code: kind === "entity.parse.failed" ? -32700 : -32600,
+            message: status >= 500 ? "Internal error" : "Invalid request body",
+          },
+          id: null,
+        });
+        return;
+      }
+      res.status(status).json(
+        status >= 500
+          ? { error: "server_error" }
+          : {
+              error: "invalid_request",
+              error_description: "The request body could not be processed.",
+            },
+      );
+    },
+  );
+
   return app;
 }

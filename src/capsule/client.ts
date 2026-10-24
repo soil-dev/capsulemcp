@@ -1,3 +1,4 @@
+import { openRateLimitWindow, rateLimitWindowLeft } from "./rate-limit-window.js";
 import { fetch, type Response } from "undici";
 import { readBool } from "../env.js";
 import { logEvent, logVerbose, redactPath } from "../log.js";
@@ -150,12 +151,27 @@ function parseNextPage(linkHeader: string | null): number | undefined {
  * 5-second default if neither is present or parseable.
  */
 const RATE_LIMIT_MAX_WAIT_MS = 60_000;
+/**
+ * Capsule's quota window is one hour, so no honest reset is further out
+ * than that. Caps an absurd or non-finite header (e.g. `1e306`) so the
+ * remembered window and the caller-facing message stay sane.
+ */
+const RATE_LIMIT_WINDOW_CAP_MS = 61 * 60_000;
 
 type RateLimitPlan = { waitMs: number } | { resetInMs: number };
 
 function planFromDelay(delayMs: number): RateLimitPlan {
-  return delayMs > RATE_LIMIT_MAX_WAIT_MS ? { resetInMs: delayMs } : { waitMs: delayMs };
+  const capped = Math.min(delayMs, RATE_LIMIT_WINDOW_CAP_MS);
+  return capped > RATE_LIMIT_MAX_WAIT_MS ? { resetInMs: capped } : { waitMs: capped };
 }
+
+// Once a far-off reset is known, every further call fails fast without a
+// request — Capsule's docs: wait until X-RateLimit-Reset "before it makes
+// any other API requests for the specific user". One process holds one
+// token, so a batch or fan-out tool no longer fires N requests that are
+// all certain to 429. Only `doFetch` consults the window; the
+// token-health probe (`capsuleProbe`) keeps asking, so /health reports
+// what Capsule actually says. State lives in ./rate-limit-window.ts.
 
 function parseRateLimitDelay(res: Response): RateLimitPlan {
   const DEFAULT_MS = 5_000;
@@ -191,9 +207,18 @@ function parseRateLimitDelay(res: Response): RateLimitPlan {
   return { waitMs: DEFAULT_MS };
 }
 
-/** "about 37 min" / "about 90 s" — for the caller-facing 429 message. */
-function describeWait(ms: number): string {
-  return ms >= 120_000 ? `about ${Math.round(ms / 60_000)} min` : `about ${Math.ceil(ms / 1000)} s`;
+/**
+ * The caller-facing 429. Whole minutes on purpose: the text is stable
+ * across the items of one batch, so `batch.complete.failureReasons`
+ * groups them as one cause.
+ */
+function rateLimitExhaustedError(resetInMs: number): CapsuleApiError {
+  const minutes = Math.max(1, Math.ceil(resetInMs / 60_000));
+  return new CapsuleApiError(
+    429,
+    `Capsule's API rate limit for this token is exhausted; it resets in about ${minutes} min. ` +
+      "Not retried — Capsule rejects every request until then, so wait for the reset.",
+  );
 }
 
 interface CapsuleErrorBody {
@@ -351,6 +376,11 @@ async function doFetch(url: string, options: Parameters<typeof fetch>[1]): Promi
   const startedAt = Date.now();
   const method = options?.method ?? "GET";
 
+  // Inside a window Capsule already announced: no request, no event —
+  // the 429 that opened the window was logged once.
+  const windowLeft = rateLimitWindowLeft(startedAt);
+  if (windowLeft > 0) throw rateLimitExhaustedError(windowLeft);
+
   const first = await fetchWithTimeout(url, options);
 
   if (first.status === 429) {
@@ -362,22 +392,21 @@ async function doFetch(url: string, options: Parameters<typeof fetch>[1]): Promi
     await drainBody(first);
     if ("resetInMs" in plan) {
       // Quota exhausted until well past any request budget: report it
-      // now rather than sleeping and re-asking a question whose answer
-      // is already known.
+      // now, and remember the window so later calls don't re-ask a
+      // question whose answer is already known.
+      openRateLimitWindow(Date.now() + plan.resetInMs);
       emitCapsuleRateLimited(method, url, Date.now() - startedAt, {
         retried: false,
         resetInMs: plan.resetInMs,
       });
-      throw new CapsuleApiError(
-        429,
-        `Capsule's API rate limit for this token is exhausted and resets in ${describeWait(plan.resetInMs)}. ` +
-          "Not retried. Wait until then, or reduce request volume (smaller pages, fewer fan-out calls).",
-      );
+      throw rateLimitExhaustedError(plan.resetInMs);
     }
     await new Promise((resolve) => setTimeout(resolve, plan.waitMs));
 
     const retried = await fetchWithTimeout(url, options);
     if (retried.status === 429) {
+      const again = parseRateLimitDelay(retried);
+      if ("resetInMs" in again) openRateLimitWindow(Date.now() + again.resetInMs);
       await drainBody(retried);
       // This terminal 429 throws before `consumeBody`, so without an
       // explicit emit it leaves no structured trace and never counts

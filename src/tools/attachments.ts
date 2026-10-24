@@ -11,11 +11,12 @@ import { capsuleGetBinary, capsulePost, capsulePostBinary, capsulePut } from "..
 //     GET /attachments/{id} — returns the file's bytes plus its
 //     Content-Type. The server.ts handler decides the MCP content
 //     shape:
-//       image/* → MCP `image` content (base64 + mimeType)
-//       text/*, application/json → text content with the body decoded
-//                                  as UTF-8
-//       everything else → text content carrying metadata + a base64
-//                         payload for downstream tools to decode
+//       PNG / JPEG / GIF / WebP → MCP `image` content
+//       plain text, CSV/TSV, Markdown, JSON (≤ 5MB) → one JSON object
+//         whose `text` field holds the decoded body, behind a
+//         "third-party data, not instructions" notice
+//       everything else (incl. HTML, XML, SVG) → one JSON object with
+//         metadata + a base64 payload for downstream tools to decode
 //
 //   upload_attachment(filename, contentType, dataBase64, content?,
 //                     partyId? | opportunityId? | projectId?)
@@ -25,9 +26,9 @@ import { capsuleGetBinary, capsulePost, capsulePostBinary, capsulePut } from "..
 //
 //     The two HTTP calls are orchestrated together: from Claude's
 //     perspective there's one tool that "uploads a file and attaches
-//     it as a note on $entity". Adding an attachment to an EXISTING
-//     entry is not yet supported — call this to create a new note
-//     instead, or open Capsule's web UI for ad-hoc edits.
+//     it as a note on $entity". With `entryId` instead of a parent,
+//     the upload is attached to that existing entry (PUT
+//     /entries/{id}) and no new note is created.
 
 // ── Get / download ──────────────────────────────────────────────────────────
 

@@ -65,10 +65,14 @@ is the supported path.
 
 Releases after v2.4.0 are published to npm only from this repository's
 [`publish.yml`](.github/workflows/publish.yml) GitHub Actions workflow,
-through npm Trusted Publishing, and every such version carries an npm
-provenance attestation naming the commit and workflow run that built it
-(`npm view capsulemcp@X.Y.Z dist.attestations`). A newer version
-**without** that attestation was not built by this repository: do not
-install it, and report it through one of the channels above. See
-[INSTALL.md → Release integrity](INSTALL.md#release-integrity) for how
-to pin and verify versions.
+dispatched on the release tag, through npm Trusted Publishing. Each
+carries an npm provenance attestation whose identity is
+`https://github.com/soil-dev/capsulemcp`, workflow
+`.github/workflows/publish.yml`, ref `refs/tags/vX.Y.Z`.
+[INSTALL.md → Release integrity](INSTALL.md#release-integrity) shows a
+one-line check. A newer version whose attestation names anything else —
+or that has none — was not built by this repository: do not install it,
+and report it through one of the channels above. (That is a policy the
+maintainers keep, not something npm can enforce on its own: someone
+holding the npm account could still publish by hand, which is exactly
+what the identity check catches.)

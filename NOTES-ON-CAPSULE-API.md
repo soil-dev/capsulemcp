@@ -1159,19 +1159,25 @@ probing five plausible shapes:
 | `GET /users/{id}` | Returns party info, locale, timezone, status — no `teams` field |
 
 So the team↔user relationship lives in a part of Capsule's
-data model that's only readable by the web UI. The
-`update_project { ownerId, teamId } → 422 owner is not a member
-of the team` validation path (see §27) is the only way to
-determine membership programmatically — by probing each
-(user, team) pair the caller is interested in.
+data model that's only readable by the web UI. Capsule does
+*enforce* it on writes — `update_project { ownerId, teamId }`
+answers 422 "owner is not a member of the team" (see §27) — but
+that is a validation error on a real write, not a lookup: a
+request that passes the check changes a live record. **Do not
+use it to discover membership**, and never advise a model to:
+an LLM following "probe via update_project" mutates whatever
+record it picked. (The connector's `list_teams` description
+said exactly that until the 2026-10 security review; a test now
+keeps such advice out of every read-only tool.)
 
 **Practical effect on connectors:** the `list_teams` tool can
 list teams the API token has visibility into, and `list_users`
 can list users, but neither can describe membership. Workflows
-that need to choose a `(owner, team)` pair compatible with
-Capsule's membership constraint have to either know the rosters
-out-of-band (web UI / operator knowledge) or accept the 422 as
-the discovery mechanism.
+that need a `(owner, team)` pair compatible with Capsule's
+membership constraint must know the rosters out-of-band (web UI
+/ operator knowledge). When a write the *user asked for* fails
+with that 422, report it — the 422 is then the answer, obtained
+without a speculative write.
 
 **Where in our code:** [`src/tools/metadata.ts`](src/tools/metadata.ts)
 `listTeams` wraps `GET /teams` with no embed; nothing higher-

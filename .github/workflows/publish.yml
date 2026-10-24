@@ -1,39 +1,51 @@
 # Publishes a tagged release to npm with a provenance attestation, using
 # npm Trusted Publishing (OIDC) — no npm token is stored anywhere.
 #
-# Manually dispatched by a maintainer, deliberately NOT triggered by tag
-# pushes: publishing stays an explicit human decision, but the tarball is
-# built, tested and signed here from the tagged commit instead of on a
-# workstation. npm then shows which workflow run and commit produced each
-# version, and a version published any other way visibly lacks that.
+# Run it ON THE RELEASE TAG:
+#
+#   gh workflow run publish.yml -R soil-dev/capsulemcp --ref vX.Y.Z -f dist-tag=latest
+#
+# The run's ref is what npm writes into the provenance (source ref and
+# commit), so dispatching on the tag makes the attestation name the tag
+# and its commit. Dispatching on a branch is refused.
+#
+# Manually dispatched, deliberately NOT triggered by tag pushes:
+# publishing stays an explicit human decision, but the package is built,
+# tested and signed here instead of on a workstation.
 #
 # Two jobs on purpose. `build` installs dependencies, runs the test suite
-# and packs the tarball WITHOUT the OIDC permission; `publish` holds
-# `id-token: write`, runs no third-party code beyond setup-node and npm,
-# and publishes exactly the tarball `build` produced. A compromised
-# dependency's install script or a hostile test can therefore never
-# request the token that publishes.
+# and records the package's integrity WITHOUT the OIDC permission;
+# `publish` holds `id-token: write`, installs nothing and runs no
+# dependency code, re-packs the same tag with the tested `dist/`, refuses
+# to continue unless the integrity matches, and publishes. A compromised
+# dependency's install script or a hostile test therefore never runs next
+# to the token that publishes.
 #
-# One-time setup on npmjs.com (package capsulemcp → Settings):
-#   1. Trusted Publisher → GitHub Actions: organization/user `soil-dev`,
-#      repository `capsulemcp`, workflow filename `publish.yml`,
-#      environment `npm`.
-#   2. Publishing access → "Require two-factor authentication and
-#      disallow tokens", so a leaked or stolen token cannot publish.
+# One-time setup (repository + npmjs.com), in this order:
+#   1. GitHub → Settings → Environments → New environment `npm`:
+#      Deployment branches and tags → "Selected" → add tag rule `v*`.
+#      Optionally add required reviewers (with self-review prevented)
+#      for a second key-turn.
+#   2. npmjs.com → package capsulemcp → Settings → Trusted Publisher →
+#      GitHub Actions: organization/user `soil-dev`, repository
+#      `capsulemcp`, workflow filename `publish.yml`, environment `npm`.
+#      npm expires a new trusted-publisher entry that hasn't published
+#      within 2 days, so do this right before the first release.
+#   3. npmjs.com → same Settings → Publishing access → "Require
+#      two-factor authentication and disallow tokens".
 #
-# Run:  gh workflow run publish.yml -R soil-dev/capsulemcp -f tag=vX.Y.Z -f dist-tag=latest
+# publishConfig.provenance in package.json only guards against an
+# accidental workstation publish (`--provenance=false` overrides it); the
+# real control is that consumers check the attestation's identity —
+# repository, workflow path and tag — as INSTALL.md describes.
 
 name: Publish to npm
 
 on:
   workflow_dispatch:
     inputs:
-      tag:
-        description: "Release tag to publish (vX.Y.Z or vX.Y.Z-beta.N / -rc.N)"
-        required: true
-        type: string
       dist-tag:
-        description: "npm dist-tag"
+        description: "npm dist-tag: latest for X.Y.Z, beta for X.Y.Z-beta.N, next for X.Y.Z-rc.N"
         required: true
         default: latest
         type: choice
@@ -48,33 +60,52 @@ concurrency:
 
 jobs:
   build:
-    name: build + test ${{ inputs.tag }}
+    name: build + test ${{ github.ref_name }}
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read
     steps:
-      - name: Validate inputs
+      - name: Release tag and dist-tag agree
         env:
-          TAG: ${{ inputs.tag }}
+          TAG: ${{ github.ref_name }}
+          DIST_TAG: ${{ inputs.dist-tag }}
         run: |
-          if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$'; then
-            echo "::error::tag must look like vX.Y.Z or vX.Y.Z-beta.N (got '$TAG')"
+          case "$TAG" in
+            v[0-9]*.[0-9]*.[0-9]*-beta.[0-9]*) want=beta ;;
+            v[0-9]*.[0-9]*.[0-9]*-rc.[0-9]*) want=next ;;
+            v[0-9]*.[0-9]*.[0-9]*) want=latest ;;
+            *) echo "::error::'$TAG' is not a release tag (vX.Y.Z, vX.Y.Z-beta.N, vX.Y.Z-rc.N)"; exit 1 ;;
+          esac
+          if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-(beta|rc)\.[0-9]+)?$'; then
+            echo "::error::'$TAG' is not a release tag (vX.Y.Z, vX.Y.Z-beta.N, vX.Y.Z-rc.N)"
+            exit 1
+          fi
+          if [ "$DIST_TAG" != "$want" ]; then
+            echo "::error::$TAG must be published with dist-tag '$want', not '$DIST_TAG'"
             exit 1
           fi
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: refs/tags/${{ inputs.tag }}
           persist-credentials: false
+
+      - name: Checkout is the tagged commit
+        run: |
+          if [ "$(git rev-parse HEAD)" != "$GITHUB_SHA" ]; then
+            echo "::error::checked-out commit $(git rev-parse HEAD) is not the run's commit $GITHUB_SHA"
+            exit 1
+          fi
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
+          package-manager-cache: false
 
       - name: package.json version matches the tag
         env:
-          TAG: ${{ inputs.tag }}
+          TAG: ${{ github.ref_name }}
         run: |
           v=$(node -p 'require("./package.json").version')
           if [ "v$v" != "$TAG" ]; then
@@ -88,34 +119,55 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - run: npm test
-      - run: npm audit --audit-level=high
+      # Runtime dependencies only: a dev-only advisory must not block an
+      # urgent security release (and tempt a workstation publish).
+      - run: npm audit --audit-level=high --omit=dev
 
-      - name: Pack
-        run: npm pack --ignore-scripts
+      - name: Record the package integrity
+        run: |
+          npm pack --ignore-scripts --dry-run --json \
+            | node -e 'let s="";process.stdin.on("data",(d)=>{s+=d}).on("end",()=>{process.stdout.write(JSON.parse(s)[0].integrity)})' \
+            > package-integrity.txt
+          echo "integrity: $(cat package-integrity.txt)"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: npm-tarball
-          path: capsulemcp-*.tgz
+          name: release-build
+          path: |
+            dist/
+            package-integrity.txt
           if-no-files-found: error
           retention-days: 7
 
   publish:
-    name: publish ${{ inputs.tag }} → npm (${{ inputs.dist-tag }})
+    name: publish ${{ github.ref_name }} → npm (${{ inputs.dist-tag }})
     needs: build
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Named environment: the npm Trusted Publisher is bound to it, and
-    # GitHub lets you add required reviewers to it for a second key-turn.
+    # The npm Trusted Publisher is bound to this environment, and the
+    # environment is limited to v* tags (see the setup notes above).
     environment: npm
     permissions:
       contents: read
       id-token: write # OIDC → npm trusted publishing + provenance
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Checkout is the tagged commit
+        run: |
+          if [ "$(git rev-parse HEAD)" != "$GITHUB_SHA" ]; then
+            echo "::error::checked-out commit $(git rev-parse HEAD) is not the run's commit $GITHUB_SHA"
+            exit 1
+          fi
+
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
 
       - name: npm supports trusted publishing (>= 11.5.1)
         run: |
@@ -130,9 +182,22 @@ jobs:
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: npm-tarball
+          name: release-build
 
+      - name: Package is byte-identical to the one the build job tested
+        run: |
+          got=$(npm pack --ignore-scripts --dry-run --json \
+            | node -e 'let s="";process.stdin.on("data",(d)=>{s+=d}).on("end",()=>{process.stdout.write(JSON.parse(s)[0].integrity)})')
+          want=$(cat package-integrity.txt)
+          if [ "$got" != "$want" ]; then
+            echo "::error::package integrity $got does not match the tested build ($want)"
+            exit 1
+          fi
+          rm package-integrity.txt
+
+      # From the tag's own checkout (not a tarball), so the registry
+      # metadata keeps gitHead alongside the provenance.
       - name: Publish
         env:
           DIST_TAG: ${{ inputs.dist-tag }}
-        run: npm publish ./capsulemcp-*.tgz --provenance --access public --tag "$DIST_TAG"
+        run: npm publish --ignore-scripts --provenance --access public --tag "$DIST_TAG"

@@ -800,3 +800,103 @@ describe("/token authentication rate limiting", () => {
     }
   });
 });
+
+// express 5.3.0's default error logger prints the whole error object,
+// and body-parser attaches the raw request body to it — so without the
+// terminal handler a malformed /mcp request logged tool arguments and a
+// malformed /token request logged the client_secret. Production env on
+// purpose: Express suppresses its own logger under NODE_ENV=test, which
+// would make this test pass on the vulnerable code.
+describe("body-parser failures never log or echo the request body", () => {
+  async function productionApp() {
+    const provider = new OAuthProvider({
+      clientsStore: new FixedClientStore({
+        clientId: CLIENT_ID,
+        clientSecret: CLIENT_SECRET,
+        redirectUris: [REDIRECT_URI],
+      }),
+      signingKey: SIGNING_KEY,
+      resourceUrl: "http://localhost/mcp",
+      enableAuthCodeGc: false,
+    });
+    const app = createApp({
+      oauthProvider: provider,
+      issuerUrl: new URL("http://localhost"),
+      jsonLimit: "1mb",
+      allowedOrigins: [],
+      trustProxy: false,
+    });
+    app.set("env", "production");
+    const localServer = app.listen(0, "127.0.0.1");
+    await new Promise<void>((resolve) => localServer.once("listening", () => resolve()));
+    const port = (localServer.address() as AddressInfo).port;
+    return { provider, localServer, local: `http://127.0.0.1:${port}` };
+  }
+
+  it("malformed /mcp JSON: JSON-RPC parse error, body absent from logs and response", async () => {
+    const token = await mintToken();
+    const { provider, localServer, local } = await productionApp();
+    const logged: string[] = [];
+    const spy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      logged.push(
+        args.map((a) => (typeof a === "string" ? a : (JSON.stringify(a) ?? String(a)))).join(" "),
+      );
+    });
+    try {
+      const res = await fetch(`${local}/mcp`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json, text/event-stream",
+          Authorization: `Bearer ${token}`,
+        },
+        body: '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search_parties","arguments":{"q":"SECRET-CRM-NAME","limit":NaN}}}',
+      });
+      expect(res.status).toBe(400);
+      const text = await res.text();
+      expect(JSON.parse(text)).toMatchObject({ jsonrpc: "2.0", error: { code: -32700 }, id: null });
+      expect(text).not.toContain("SECRET-CRM-NAME");
+      expect(logged.join("\n")).not.toContain("SECRET-CRM-NAME");
+      expect(logged.join("\n")).toMatch(/rejected: entity\.parse\.failed 400/);
+    } finally {
+      spy.mockRestore();
+      provider.shutdown();
+      await new Promise<void>((resolve) => localServer.close(() => resolve()));
+    }
+  });
+
+  it("over-limit /token form: OAuth error JSON, client_secret absent from logs and response", async () => {
+    const { provider, localServer, local } = await productionApp();
+    const logged: string[] = [];
+    const spy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      logged.push(
+        args.map((a) => (typeof a === "string" ? a : (JSON.stringify(a) ?? String(a)))).join(" "),
+      );
+    });
+    try {
+      const form = new URLSearchParams({
+        client_id: CLIENT_ID,
+        client_secret: "VICTIM-LIKE-SECRET",
+      });
+      for (let i = 0; i < 1001; i++) form.append(`p${i}`, "x");
+      const res = await fetch(`${local}/token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: form.toString(),
+      });
+      expect(res.status).toBe(413);
+      const text = await res.text();
+      expect(JSON.parse(text)).toEqual({
+        error: "invalid_request",
+        error_description: "The request body could not be processed.",
+      });
+      expect(text).not.toContain("VICTIM-LIKE-SECRET");
+      expect(logged.join("\n")).not.toContain("VICTIM-LIKE-SECRET");
+      expect(text).not.toMatch(/<html|at .*\.js:\d+/i);
+    } finally {
+      spy.mockRestore();
+      provider.shutdown();
+      await new Promise<void>((resolve) => localServer.close(() => resolve()));
+    }
+  });
+});
